@@ -1042,6 +1042,15 @@ for f in dataSources.xml dataSources.local.xml; do
   has "ignored: $f .idea 줄" "keep .idea/"
   rm -f "$IG/.idea/$f"
 done
+# WebStorm 에서 사람이 켜는 File Watchers·저장할 때 Prettier·린터 설정도 사람이 본다.
+for f in watcherTasks.xml prettier.xml jsLinters/eslint.xml; do
+  mkdir -p "$IG/.idea/$(dirname "$f")"
+  touch "$IG/.idea/$f"
+  run "$R" "$S/ignored-check.sh" "$IG"
+  check "ignored: $f 가 든 .idea" KEEP
+  has "ignored: $f .idea 줄" "keep .idea/"
+  rm -rf "$IG/.idea/$f" "$IG/.idea/jsLinters"
+done
 # JetBrains IDE 의 HTTP 클라이언트가 자동으로 쌓는 요청 기록은 로컬 상태다 — 이것만 있으면 지워도 된다.
 mkdir -p "$IG/.idea/httpRequests"
 touch "$IG/.idea/httpRequests/http-requests-log.http"

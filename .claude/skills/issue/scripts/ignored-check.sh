@@ -20,15 +20,18 @@
 # 만드는 자리뿐이다:
 #   - 최상위 node_modules 디렉터리(npm ci 가 package-lock.json 대로 통째로 다시 만든다. 개발 서버·Vitest 의 캐시
 #     node_modules/.vite·타입 검사의 node_modules/.tmp 도 그 안이다)
-#   - 최상위 dist 디렉터리(게이트의 npm run build 가 만든다 — vite build 는 빌드마다 dist 를 비우고 다시 쓰므로 사람이
-#     거기 둔 것은 다음 빌드에 어차피 지워진다)
+#   - 최상위 dist 디렉터리(게이트의 npm run build 가 만든다. vite build 는 빌드마다 dist 를 비우고 다시 쓰는 산출물
+#     자리라 사람이 무엇을 둘 곳이 아니다)
+#   이 둘은 게이트가 매번 만들어서, 사람이 보게 하면 머지 정리가 매번 멈춘다. 대신 안에 손으로 둔 것(node_modules 안을
+#   고친 디버깅 패치, dist 에 둔 비교용 파일)은 지켜 주지 않는다 — 남길 패치는 레포에 둔다(patch-package 등).
 #   - .claude/settings.local.json 파일(하네스가 그 워크트리에서 받은 허용 설정을 적는다 — 잃어도 다시 묻는다)
 #   - scratchpad/issue-rounds·scratchpad/issue-rereview-rounds 파일(/issue 셀프 리뷰의 셈 기록 — SKILL.md 4단계 "셈 기록",
 #     round-count.sh. PR 이 머지될 때까지 남겨 두는 파일이라, 사람이 보게 하면 머지 정리가 매번 멈춘다. 지운 워크트리를
 #     다시 붙이면 기록이 없어 SKILL.md 대로 셈을 사람에게 묻는다)
 #   - 최상위 .idea 디렉터리(개발자가 PR 의 코드를 보려고 워크트리를 JetBrains IDE(WebStorm 등)로 열면 생긴다 — IDE 가
 #     다시 만든다). 다만 .idea 안에 팀이 남기려고 만드는 폴더(runConfigurations·inspectionProfiles·
-#     dictionaries·scopes·fileTemplates·codeStyles — 프로젝트 파일로 저장한 실행 구성·설정)나 사람이 만든 작업이
+#     dictionaries·scopes·fileTemplates·codeStyles — 프로젝트 파일로 저장한 실행 구성·설정, WebStorm 에서 사람이 켜는
+#     File Watchers(watcherTasks.xml)·저장할 때 Prettier(prettier.xml)·린터 설정(jsLinters))나 사람이 만든 작업이
 #     남는 자리(shelf — Shelve Changes 로 치워 둔 변경, dataSources 폴더와 DB 연결 설정 파일 dataSources.xml·
 #     dataSources.local.xml)가 하나라도 있으면 사람이 본다.
 #     workspace.xml 등 나머지는 IDE 가 사용자마다 따로 두는 로컬 상태다. httpRequests 는 IDE 의 HTTP 클라이언트가 요청을
@@ -103,7 +106,7 @@ plain_dir() { [ -d "$1" ] && [ ! -L "$1" ]; }
 ide_local_only() {
   local kept
   for kept in runConfigurations inspectionProfiles dictionaries scopes fileTemplates codeStyles shelf dataSources \
-    dataSources.xml dataSources.local.xml; do
+    dataSources.xml dataSources.local.xml watcherTasks.xml prettier.xml jsLinters; do
     if [ -e "$1/$kept" ] || [ -L "$1/$kept" ]; then return 1; fi
   done
   return 0

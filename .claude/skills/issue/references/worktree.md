@@ -513,8 +513,8 @@ bash "<사본>/scripts/inside.sh" "<대상 path>"
 이름만으로 찾으면 IDE 에 딸린 런타임(`Contents/jbr`)으로 도는 보조 프로세스까지 걸려, IDE 를 닫은 뒤에도 묻고
 출력이 매번 달라진다. 앱 이름이 아니라 앱 꾸러미 안의 본체 자리(`<앱>.app/Contents/MacOS/<실행 파일>`)를 보므로
 `WebStorm EAP.app` 같은 판도 잡는다. 실행 파일 이름은 WebStorm 이 `webstorm` 이고, 같은 `.idea/` 를 쓰는 같은
-회사의 다른 IDE IntelliJ IDEA 가 `idea` 다(`webstorm` 은 이 레포에 옮기며 이름만 바꿔 넣었고 실물로 재 보지는
-않았다):
+회사의 다른 IDE IntelliJ IDEA 가 `idea` 다(`webstorm` 은 JetBrains 설치 안내의 `WebStorm.app/Contents/MacOS/webstorm`
+을 따랐고 — WebStorm 을 깔아 재 보지는 않았다 — `idea` 는 깔린 IntelliJ IDEA 꾸러미에서 확인했다):
 
 ```
 pgrep -fl '\.app/Contents/MacOS/(webstorm|idea)( |$)'

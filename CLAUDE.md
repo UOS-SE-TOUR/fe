@@ -18,6 +18,7 @@
 ## 코딩 규칙
 
 - 주석·문서는 한국어로 쓰고, 주석은 최소화한다.
+- 예외: `.claude/skills/` 스크립트는 판정 기준과 그 근거(실측·겪은 사고)를 머리말과 판정 옆 주석에 남긴다.
 - 스타일은 Tailwind 클래스와 shadcn/ui 부품으로만 쓴다. `src/index.css` 밖에 CSS 파일·인라인 `style`을 만들지 않는다.
 - 색은 `bg-primary`·`text-muted-foreground` 같은 테마 이름으로 쓴다. `bg-zinc-900` 같은 색 값은 쓰지 않는다(바꿀 땐 `src/index.css`의 CSS 변수).
 - 서버 오류 본문의 `message`는 그대로 화면에 보여 준다. 화면 문구는 사용자가 읽을 한국어로 쓴다.

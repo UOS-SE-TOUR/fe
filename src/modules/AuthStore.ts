@@ -1,8 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import { pageAccess, type PageName } from '@/lib/pages'
+import { memberTypes, pageAccess, type MemberType, type PageName } from '@/lib/pages'
 import { ApiClient, ApiError, setAuthHandlers, showError } from '@/modules/ApiClient'
-
-export type MemberType = 'CUSTOMER' | 'STAFF'
 
 // members/login·members/me 응답 본문
 export interface Member {
@@ -31,7 +29,7 @@ function setState(next: AuthState) {
 function isMember(value: unknown): value is Member {
   if (typeof value !== 'object' || value === null) return false
   const { memberType, name } = value as Record<string, unknown>
-  return (memberType === 'CUSTOMER' || memberType === 'STAFF') && typeof name === 'string'
+  return (memberTypes as readonly unknown[]).includes(memberType) && typeof name === 'string'
 }
 
 async function readMember(): Promise<void> {

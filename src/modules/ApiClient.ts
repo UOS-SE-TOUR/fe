@@ -1,7 +1,6 @@
 import { toast } from 'sonner'
 import { navigateTo } from '@/lib/navigation'
-import { homePath, pagePaths } from '@/lib/pages'
-import type { MemberType } from '@/modules/AuthStore'
+import { landingPath, pagePaths, type MemberType } from '@/lib/pages'
 
 // 서버 문구({"message"})가 없는 실패의 문구. 504는 서버 앞단 Nginx가 504에 주는 문구와 같다
 export const CONNECTION_FAILED_MESSAGE = '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'
@@ -29,7 +28,7 @@ interface RequestOptions {
   handleAuthErrors?: boolean
 }
 
-// 401·403 때 로그인 상태를 다루는 길. AuthStore가 불러와질 때 등록한다(설계대로 AuthStore → ApiClient 한 방향만 import한다)
+// 401·403 때 로그인 상태를 다루는 길. AuthStore가 불러와질 때 등록한다(설계대로 AuthStore → ApiClient 한 방향만 import하고, ApiClient는 AuthStore를 모른다)
 interface AuthHandlers {
   clear(): void
   // 회원 구분을 다시 읽고 그 값을 돌려준다(로그인하지 않았으면 null)
@@ -73,7 +72,7 @@ export function notifyForbidden(message = FORBIDDEN_MESSAGE) {
 async function handleForbidden(message: string): Promise<never> {
   notifyForbidden(message)
   const memberType = authHandlers ? await authHandlers.restore() : null
-  navigateTo(memberType ? homePath(memberType) : pagePaths.LoginPage)
+  navigateTo(landingPath(memberType))
   throw new ApiError(message, 403, true)
 }
 

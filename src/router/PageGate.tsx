@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { Navigate } from 'react-router'
-import { homePath, pageAccess, pagePaths, type PageName } from '@/lib/pages'
+import { homePath, landingPath, pageAccess, pagePaths, type PageName } from '@/lib/pages'
 import { notifyForbidden } from '@/modules/ApiClient'
 import { AuthStore, useAuthState } from '@/modules/AuthStore'
 
@@ -34,5 +34,5 @@ export function PageGate({ page, children }: { page: PageName; children: ReactNo
 export function GoHome() {
   const { member, restoring } = useAuthState()
   if (restoring && !member) return <Restoring />
-  return <Navigate to={member ? homePath(member.memberType) : pagePaths.LoginPage} replace />
+  return <Navigate to={landingPath(member?.memberType ?? null)} replace />
 }

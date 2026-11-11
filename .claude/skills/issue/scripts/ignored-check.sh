@@ -31,7 +31,8 @@
 #   - 최상위 .idea 디렉터리(개발자가 PR 의 코드를 보려고 워크트리를 JetBrains IDE(WebStorm 등)로 열면 생긴다 — IDE 가
 #     다시 만든다). 다만 .idea 안에 팀이 남기려고 만드는 폴더(runConfigurations·inspectionProfiles·
 #     dictionaries·scopes·fileTemplates·codeStyles — 프로젝트 파일로 저장한 실행 구성·설정, WebStorm 에서 사람이 켜는
-#     File Watchers(watcherTasks.xml)·저장할 때 Prettier(prettier.xml)·린터 설정(jsLinters))나 사람이 만든 작업이
+#     File Watchers(watcherTasks.xml)·저장할 때 Prettier(prettier.xml)·린터 설정(jsLinters) — 이 셋은 WebStorm 을
+#     깔아 재 보지 않았다. 사람이 켜지 않아도 WebStorm 이 스스로 쓰면 정리가 매번 멈추니 그때 목록에서 뺀다)나 사람이 만든 작업이
 #     남는 자리(shelf — Shelve Changes 로 치워 둔 변경, dataSources 폴더와 DB 연결 설정 파일 dataSources.xml·
 #     dataSources.local.xml)가 하나라도 있으면 사람이 본다.
 #     workspace.xml 등 나머지는 IDE 가 사용자마다 따로 두는 로컬 상태다. httpRequests 는 IDE 의 HTTP 클라이언트가 요청을

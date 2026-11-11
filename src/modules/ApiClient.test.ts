@@ -1,0 +1,184 @@
+import { toast } from 'sonner'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setNavigate } from '@/lib/navigation'
+import {
+  ApiClient,
+  ApiError,
+  CONNECTION_FAILED_MESSAGE,
+  GATEWAY_TIMEOUT_MESSAGE,
+  showError,
+} from '@/modules/ApiClient'
+import { AuthStore } from '@/modules/AuthStore'
+import { jsonResponse, stubFetch } from '@/test/http'
+
+let fetchMock: ReturnType<typeof stubFetch>
+const navigate = vi.fn()
+
+beforeEach(() => {
+  fetchMock = stubFetch()
+  setNavigate(navigate)
+  vi.spyOn(toast, 'error').mockImplementation(() => 'toast')
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+  navigate.mockReset()
+  setNavigate(null)
+  AuthStore.clear()
+})
+
+async function caught(promise: Promise<unknown>): Promise<ApiError> {
+  const error = await promise.then(
+    () => null,
+    (reason: unknown) => reason,
+  )
+  if (!(error instanceof ApiError)) throw new Error(`ApiError가 아니다: ${String(error)}`)
+  return error
+}
+
+describe('ApiClient 요청', () => {
+  it('get은 받은 JSON 본문을 돌려준다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, [{ tourId: 1 }]))
+
+    await expect(ApiClient.get('/api/v1/tours?theme=GOLF')).resolves.toEqual([{ tourId: 1 }])
+    const [path, init] = fetchMock.mock.calls[0]
+    expect(path).toBe('/api/v1/tours?theme=GOLF')
+    expect(init?.method).toBe('GET')
+    expect(init?.body).toBeUndefined()
+  })
+
+  it('post는 본문을 JSON으로 보낸다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
+
+    await ApiClient.post('/api/v1/members/login', { loginId: 'hong', password: 'pw' })
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.method).toBe('POST')
+    expect(init?.headers).toMatchObject({ 'Content-Type': 'application/json' })
+    expect(init?.body).toBe(JSON.stringify({ loginId: 'hong', password: 'pw' }))
+  })
+
+  it('본문이 빈 응답(로그아웃의 204)은 undefined로 끝난다', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
+
+    await expect(ApiClient.post('/api/v1/members/logout')).resolves.toBeUndefined()
+  })
+
+  it('/api/v1/로 시작하지 않는 주소는 부르지 않는다', async () => {
+    await expect(ApiClient.get('https://uos-mwt.duckdns.org/api/v1/tours')).rejects.toThrow('/api/v1/')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('성공 응답의 본문이 JSON이 아니면 연결 실패 문구로 던진다', async () => {
+    fetchMock.mockResolvedValue(new Response('<!doctype html>', { status: 200 }))
+
+    const error = await caught(ApiClient.get('/api/v1/tours'))
+    expect(error.message).toBe(CONNECTION_FAILED_MESSAGE)
+  })
+})
+
+describe('ApiClient 오류 문구', () => {
+  it('서버의 message와 상태 코드를 담아 던지고, 알림을 띄우지 않는다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '남은 자리보다 인원이 많습니다.' }))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings/quote', {}))
+    expect(error).toMatchObject({ status: 400, message: '남은 자리보다 인원이 많습니다.', handled: false })
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('연결이 끊기면 상태 코드 없이 연결 실패 문구로 던진다', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const error = await caught(ApiClient.get('/api/v1/tours'))
+    expect(error).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE, handled: false })
+  })
+
+  it.each([
+    ['본문이 빈 실패(be가 꺼져 개발 서버 프록시가 낸 502)', new Response('', { status: 502 })],
+    ['HTML 본문의 실패(호스팅이 낸 502)', new Response('<html>Bad Gateway</html>', { status: 502 })],
+    ['message가 없는 JSON 본문', jsonResponse(503, { error: 'Service Unavailable' })],
+    ['message가 빈 문자열인 본문', jsonResponse(500, { message: ' ' })],
+  ])('%s는 연결 실패 문구로 던진다', async (_, response) => {
+    fetchMock.mockResolvedValue(response)
+
+    const error = await caught(ApiClient.get('/api/v1/tours'))
+    expect(error).toMatchObject({ status: response.status, message: CONNECTION_FAILED_MESSAGE })
+  })
+
+  it('문구 없는 504는 처리됐는지 알 수 없다는 문구로 던진다', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>Gateway Timeout</html>', { status: 504 }))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', {}))
+    expect(error).toMatchObject({ status: 504, message: GATEWAY_TIMEOUT_MESSAGE })
+  })
+
+  it('문구가 있는 504는 그 문구를 쓴다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(504, { message: '서버 응답이 늦었습니다.' }))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', {}))
+    expect(error.message).toBe('서버 응답이 늦었습니다.')
+  })
+})
+
+describe('ApiClient 401·403 처리', () => {
+  it('401이면 로그인 상태를 비우고 로그인 화면으로 보낸 뒤 처리함 표시를 붙여 던진다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    fetchMock.mockResolvedValue(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+
+    const error = await caught(ApiClient.get('/api/v1/tours?theme=GOLF'))
+    expect(error).toMatchObject({ status: 401, handled: true })
+    expect(AuthStore.memberType).toBeNull()
+    expect(navigate).toHaveBeenCalledWith('/login')
+    expect(toast.error).toHaveBeenCalledWith('로그인이 필요합니다.', expect.anything())
+  })
+
+  it('403이면 권한이 없다고 알리고, 회원 구분을 다시 읽어 그 첫 화면으로 보낸다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(403, { message: '권한이 없습니다.' }))
+      .mockResolvedValueOnce(jsonResponse(200, { memberType: 'STAFF', name: '김직원' }))
+
+    const error = await caught(ApiClient.get('/api/v1/tours?theme=GOLF'))
+    expect(error).toMatchObject({ status: 403, handled: true })
+    expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/members/me')
+    expect(AuthStore.memberType).toBe('STAFF')
+    expect(navigate).toHaveBeenCalledWith('/staff')
+  })
+
+  it('403 뒤 다시 읽은 결과가 로그인하지 않음이면 로그인 화면으로 보낸다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(403, { message: '권한이 없습니다.' }))
+      .mockResolvedValueOnce(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+
+    await caught(ApiClient.get('/api/v1/tours?theme=GOLF'))
+    expect(AuthStore.memberType).toBeNull()
+    expect(navigate).toHaveBeenCalledWith('/login')
+  })
+
+  it('handleAuthErrors가 false면 401도 처리하지 않고 던지기만 한다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    fetchMock.mockResolvedValue(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+
+    const error = await caught(ApiClient.get('/api/v1/members/me', { handleAuthErrors: false }))
+    expect(error).toMatchObject({ status: 401, handled: false })
+    expect(AuthStore.memberType).toBe('CUSTOMER')
+    expect(navigate).not.toHaveBeenCalled()
+  })
+})
+
+describe('showError', () => {
+  it('처리하지 않은 오류의 문구를 공용 알림으로 보여 준다', () => {
+    showError(new ApiError(GATEWAY_TIMEOUT_MESSAGE, 504))
+
+    expect(toast.error).toHaveBeenCalledWith(GATEWAY_TIMEOUT_MESSAGE)
+  })
+
+  it('ApiClient가 이미 처리한 오류(401·403)는 다시 보여 주지 않는다', () => {
+    showError(new ApiError('권한이 없습니다.', 403, true))
+
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+})

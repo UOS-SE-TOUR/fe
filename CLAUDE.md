@@ -18,6 +18,7 @@
 ## 코딩 규칙
 
 - 주석·문서는 한국어로 쓰고, 주석은 최소화한다.
+- 예외: `.claude/skills/` 스크립트는 판정 기준과 그 근거(실측·겪은 사고)를 머리말과 판정 옆 주석에 남긴다.
 - 스타일은 Tailwind 클래스와 shadcn/ui 부품으로만 쓴다. `src/index.css` 밖에 CSS 파일·인라인 `style`을 만들지 않는다.
 - 색은 `bg-primary`·`text-muted-foreground` 같은 테마 이름으로 쓴다. `bg-zinc-900` 같은 색 값은 쓰지 않는다(바꿀 땐 `src/index.css`의 CSS 변수).
 - 서버 오류 본문의 `message`는 그대로 화면에 보여 준다. 화면 문구는 사용자가 읽을 한국어로 쓴다.
@@ -27,11 +28,12 @@
 ## 빌드 / 실행
 
 - 실행: `npm ci` → `npm run dev` → Chrome에서 `http://localhost:5173`.
-- AI 기본 게이트: 코드·설정을 고쳤으면 `npm run lint && npm test && npm run build`(빌드에 타입 검사가 들어 있다).
+- AI 기본 게이트: 코드·설정을 고쳤으면 `npm run lint && npm test && npm run build`(빌드에 타입 검사가 들어 있다), `.claude/skills/`·`.gitignore`를 고쳤으면 `bash .claude/skills/issue/tests/run.sh`(스킬 테스트가 `.gitignore`도 본다).
 - 운영 서버에 붙인 화면(`API_PROXY_TARGET`을 바꾼 로컬, Vercel 프리뷰·운영)에서는 읽기(GET)만 시험한다 — 가입·신청은 운영 DB에 남고 실제 문자가 나갈 수 있다.
 ## Git / 협업 규칙
 
 - `main` 직접 push 금지. 흐름: **이슈 먼저** → 최신 `main`에서 `<타입>/<기능>` 브랜치 → PR 본문 첫 줄에 `Closes #<이슈번호>`.
+- 기능 작업은 `/issue <번호> fe`로 한다(`.claude/skills/issue`).
 - **Squash 머지 전용**(머지하면 브랜치 자동 삭제) — PR 제목이 곧 `main`의 커밋 메시지이므로 커밋 컨벤션(`feat: ...`)을 따른다.
 - 커밋 메시지·이슈·PR은 한국어로 쓴다. 커밋·PR 어디에도 AI 관여 표기(Co-Authored-By, Generated with 등)를 넣지 않는다.
 - PR 본문에 머지 조건·머지 담당 문장을 넣지 않는다.

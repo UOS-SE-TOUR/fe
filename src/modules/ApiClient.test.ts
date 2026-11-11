@@ -69,11 +69,18 @@ describe('ApiClient 요청', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('성공 응답의 본문이 JSON이 아니면 연결 실패 문구로 던진다', async () => {
+  it('GET 성공 응답의 본문이 JSON이 아니면 연결 실패 문구로 던진다', async () => {
     fetchMock.mockResolvedValue(new Response('<!doctype html>', { status: 200 }))
 
     const error = await caught(ApiClient.get('/api/v1/tours'))
     expect(error.message).toBe(CONNECTION_FAILED_MESSAGE)
+  })
+
+  it('POST 성공 응답의 본문을 못 받으면 처리됐는지 알 수 없다는 문구로 던진다(다시 보내면 신청이 두 번 될 수 있다)', async () => {
+    fetchMock.mockResolvedValue(new Response('<!doctype html>', { status: 200 }))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }))
+    expect(error).toMatchObject({ status: 200, message: GATEWAY_TIMEOUT_MESSAGE })
   })
 })
 

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { pageAccess, type PageName } from '@/lib/pages'
-import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
+import { ApiClient, ApiError, setAuthHandlers, showError } from '@/modules/ApiClient'
 
 export type MemberType = 'CUSTOMER' | 'STAFF'
 
@@ -28,13 +28,21 @@ function setState(next: AuthState) {
   listeners.forEach((listener) => listener())
 }
 
+function isMember(value: unknown): value is Member {
+  if (typeof value !== 'object' || value === null) return false
+  const { memberType, name } = value as Record<string, unknown>
+  return (memberType === 'CUSTOMER' || memberType === 'STAFF') && typeof name === 'string'
+}
+
 async function readMember(): Promise<void> {
   const current = ++version
   const before = state.member
   setState({ ...state, restoring: true })
   let member: Member | null
   try {
-    member = await ApiClient.get<Member>('/api/v1/members/me', { handleAuthErrors: false })
+    const body = await ApiClient.get('/api/v1/members/me', { handleAuthErrors: false })
+    if (!isMember(body)) throw new Error(`members/me 응답 모양이 다르다: ${JSON.stringify(body)}`)
+    member = body
   } catch (error) {
     if (current !== version) return
     if (error instanceof ApiError && error.status === 401) {
@@ -94,6 +102,14 @@ export const AuthStore = {
     return state
   },
 }
+
+setAuthHandlers({
+  clear: () => AuthStore.clear(),
+  restore: async () => {
+    await AuthStore.restore()
+    return AuthStore.memberType
+  },
+})
 
 export function useAuthState(): AuthState {
   return useSyncExternalStore(AuthStore.subscribe, AuthStore.getState)

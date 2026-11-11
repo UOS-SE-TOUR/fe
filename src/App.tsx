@@ -5,7 +5,9 @@ import { setNavigate } from '@/lib/navigation'
 import { routes } from '@/router/routes'
 
 const router = createBrowserRouter(routes)
+// 이미 그 주소면 옮기지 않는다(첫 화면이 부른 API가 403이면 같은 화면으로 다시 옮겨 그 화면이 또 부르게 된다)
 setNavigate((path) => {
+  if (router.state.location.pathname === path) return
   void router.navigate(path, { replace: true })
 })
 

@@ -106,6 +106,7 @@ describe('새로고침 직후', () => {
     const router = renderAt('/tours')
 
     expect(screen.queryByRole('heading')).not.toBeInTheDocument()
+    expect(screen.getByText('로그인 상태를 확인하는 중입니다.')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/tours')
 
     respond(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))

@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setNavigate } from '@/lib/navigation'
-import type { PageName } from '@/lib/pages'
+import { pagePaths, type PageName } from '@/lib/pages'
 import { CONNECTION_FAILED_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { jsonResponse, stubFetch } from '@/test/http'
@@ -98,6 +98,16 @@ describe('AuthStore.restore', () => {
     expect(AuthStore.memberType).toBeNull()
   })
 
+  it('members/me 응답 모양이 다르면 로그인하지 않은 것으로 두고 알린다', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchMock.mockResolvedValue(jsonResponse(200, { memberType: 'ADMIN', name: '관리자' }))
+
+    await AuthStore.restore()
+    expect(AuthStore.memberType).toBeNull()
+    expect(AuthStore.getState().restoring).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.')
+  })
+
   it('연결이 끊겨도 로그인하지 않은 것으로 두고 연결 실패 문구를 알린다', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
@@ -121,15 +131,7 @@ describe('AuthStore.restore', () => {
 })
 
 describe('AuthStore.canOpen', () => {
-  const pages: PageName[] = [
-    'LoginPage',
-    'SignUpPage',
-    'CustomerMainPage',
-    'TourSelectPage',
-    'StaffMainPage',
-    'TourPlanPage',
-    'WarehousePage',
-  ]
+  const pages = Object.keys(pagePaths) as PageName[]
   const openable = (): PageName[] => pages.filter((page) => AuthStore.canOpen(page))
 
   it('로그인하지 않았으면 로그인·회원가입 화면만 열 수 있다', () => {

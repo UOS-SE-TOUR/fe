@@ -1,7 +1,7 @@
 import { toast } from 'sonner'
 import { navigateTo } from '@/lib/navigation'
 import { homePath, pagePaths } from '@/lib/pages'
-import { AuthStore } from '@/modules/AuthStore'
+import type { MemberType } from '@/modules/AuthStore'
 
 // 서버 문구({"message"})가 없는 실패의 문구. 504는 서버 앞단 Nginx가 504에 주는 문구와 같다
 export const CONNECTION_FAILED_MESSAGE = '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'
@@ -29,6 +29,19 @@ interface RequestOptions {
   handleAuthErrors?: boolean
 }
 
+// 401·403 때 로그인 상태를 다루는 길. AuthStore가 불러와질 때 등록한다(설계대로 AuthStore → ApiClient 한 방향만 import한다)
+interface AuthHandlers {
+  clear(): void
+  // 회원 구분을 다시 읽고 그 값을 돌려준다(로그인하지 않았으면 null)
+  restore(): Promise<MemberType | null>
+}
+
+let authHandlers: AuthHandlers | null = null
+
+export function setAuthHandlers(handlers: AuthHandlers) {
+  authHandlers = handlers
+}
+
 function parseJson(text: string): { value: unknown } | null {
   try {
     return { value: JSON.parse(text) }
@@ -45,7 +58,7 @@ function serverMessage(parsed: { value: unknown } | null): string | null {
 }
 
 function handleUnauthorized(message: string): never {
-  AuthStore.clear()
+  authHandlers?.clear()
   toast.error(message, { id: 'unauthorized' })
   navigateTo(pagePaths.LoginPage)
   throw new ApiError(message, 401, true)
@@ -59,8 +72,7 @@ export function notifyForbidden(message = FORBIDDEN_MESSAGE) {
 // 다른 탭에서 다른 계정으로 로그인했으면 이 탭의 AuthStore가 낡아 있으니 회원 구분을 다시 읽고 그 첫 화면으로 보낸다
 async function handleForbidden(message: string): Promise<never> {
   notifyForbidden(message)
-  await AuthStore.restore()
-  const { memberType } = AuthStore
+  const memberType = authHandlers ? await authHandlers.restore() : null
   navigateTo(memberType ? homePath(memberType) : pagePaths.LoginPage)
   throw new ApiError(message, 403, true)
 }
@@ -94,8 +106,9 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
 
   if (response.ok) {
     if (text === '') return undefined as T
-    if (!parsed) throw new ApiError(CONNECTION_FAILED_MESSAGE, response.status)
-    return parsed.value as T
+    if (parsed) return parsed.value as T
+    // 서버는 처리했는데 본문을 받지 못했다. GET이 아니면(신청 등) 다시 보내라고 하면 두 번 될 수 있다
+    throw new ApiError(method === 'GET' ? CONNECTION_FAILED_MESSAGE : GATEWAY_TIMEOUT_MESSAGE, response.status)
   }
 
   const message = serverMessage(parsed)

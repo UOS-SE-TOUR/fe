@@ -7,6 +7,7 @@ import { jsonResponse, stubFetch } from '@/test/http'
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   AuthStore.clear()
 })
 
@@ -27,5 +28,21 @@ describe('App', () => {
     await act(() => ApiClient.get('/api/v1/bookings/previous').catch(() => undefined))
     expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
     expect(await screen.findByText('로그인이 필요합니다.')).toBeInTheDocument()
+  })
+
+  it('403 뒤 다시 읽은 회원 구분이 그대로이고 이미 그 첫 화면이면 다시 옮기지 않는다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+
+    const replaceState = vi.spyOn(window.history, 'replaceState')
+    stubFetch().mockImplementation(async (path) =>
+      path === '/api/v1/members/me'
+        ? jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' })
+        : jsonResponse(403, { message: '권한이 없습니다.' }),
+    )
+    await act(() => ApiClient.get('/api/v1/bookings/previous').catch(() => undefined))
+    expect(screen.getByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(replaceState).not.toHaveBeenCalled()
   })
 })

@@ -30,14 +30,14 @@
 #     다시 붙이면 기록이 없어 SKILL.md 대로 셈을 사람에게 묻는다)
 #   - 최상위 .idea 디렉터리(개발자가 PR 의 코드를 보려고 워크트리를 JetBrains IDE(WebStorm 등)로 열면 생긴다 — IDE 가
 #     다시 만든다). 다만 .idea 안에 팀이 남기려고 만드는 폴더(runConfigurations·inspectionProfiles·
-#     dictionaries·scopes·fileTemplates·codeStyles — 프로젝트 파일로 저장한 실행 구성·설정, WebStorm 에서 사람이 켜는
-#     File Watchers(watcherTasks.xml)·저장할 때 Prettier(prettier.xml)·린터 설정(jsLinters) — 이 셋은 WebStorm 을
-#     깔아 재 보지 않았다. 사람이 켜지 않아도 WebStorm 이 스스로 쓰면 정리가 매번 멈추니 그때 목록에서 뺀다)나 사람이 만든 작업이
+#     dictionaries·scopes·fileTemplates·codeStyles — 프로젝트 파일로 저장한 실행 구성·설정)나 사람이 만든 작업이
 #     남는 자리(shelf — Shelve Changes 로 치워 둔 변경, dataSources 폴더와 DB 연결 설정 파일 dataSources.xml·
 #     dataSources.local.xml)가 하나라도 있으면 사람이 본다.
 #     workspace.xml 등 나머지는 IDE 가 사용자마다 따로 두는 로컬 상태다. httpRequests 는 IDE 의 HTTP 클라이언트가 요청을
 #     한 번만 돌려도 기록(http-requests-log)을 자동으로 쌓는 자리라 로컬 상태로 친다 — 사람이 보게 하면 머지 정리가
-#     매번 멈춘다. codeStyles 는 사람이 프로젝트 코드 스타일을 바꿨을 때만 생기므로 사람이 본다
+#     매번 멈춘다. codeStyles 는 사람이 프로젝트 코드 스타일을 바꿨을 때만 생기므로 사람이 본다. WebStorm 에서
+#     사람이 켜는 설정(File Watchers 의 watcherTasks.xml, Prettier 의 prettier.xml, 린터의 jsLinters/)은 WebStorm 이
+#     스스로도 쓰는지 재 보지 않아 이 목록에 넣지 않았다 — 넣으면 열기만 해도 정리가 매번 멈출 수 있다
 #   - .DS_Store 파일(링크·디렉터리 제외 — orphan-check.sh 와 같다)
 #   - 빈 디렉터리(하네스가 워크트리 안에 빈 .claude/worktrees/ 를 만든다 — 실측)
 # 그 밖의 무시 대상은 늘 KEEP 으로 나온다 — 비밀 값 .env.local, 편집기 설정 .vscode/, 로그 logs/·*.log, dist-ssr/
@@ -107,7 +107,7 @@ plain_dir() { [ -d "$1" ] && [ ! -L "$1" ]; }
 ide_local_only() {
   local kept
   for kept in runConfigurations inspectionProfiles dictionaries scopes fileTemplates codeStyles shelf dataSources \
-    dataSources.xml dataSources.local.xml watcherTasks.xml prettier.xml jsLinters; do
+    dataSources.xml dataSources.local.xml; do
     if [ -e "$1/$kept" ] || [ -L "$1/$kept" ]; then return 1; fi
   done
   return 0

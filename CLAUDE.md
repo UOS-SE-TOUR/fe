@@ -10,6 +10,7 @@
 ## 구조
 
 - 설계 클래스 하나에 파일 하나: «Page»는 `src/pages/<이름>.tsx`, «Component»는 `src/components/<이름>.tsx`, «Module»은 `src/modules/<이름>.ts`.
+- 설계 클래스가 아닌 공용 코드는 `src/lib/`(화면 주소 `pages.ts`, 테마·등급·상태의 화면 이름 `labels.ts`), 화면 주소와 막기는 `src/router/`에 둔다.
 - `src/components/ui/`·`src/hooks/`·`src/lib/utils.ts`는 shadcn/ui가 만든 파일이다. `npx shadcn add <이름>`으로만 더하고 손으로 고치지 않는다(ESLint·셀프 리뷰 대상도 아니다).
 - 서버는 `ApiClient`로만 부르고, 주소는 `/api/v1/...` 경로만 쓴다. 서버 도메인을 코드·`VITE_` 환경변수에 두지 않는다.
 - 로그인 상태는 `members/login`·`members/me` 응답으로만 판단한다(로그인 쿠키는 HttpOnly라 읽을 수 없다).
@@ -21,7 +22,7 @@
 - 예외: `.claude/skills/` 스크립트는 판정 기준과 그 근거(실측·겪은 사고)를 머리말과 판정 옆 주석에 남긴다.
 - 스타일은 Tailwind 클래스와 shadcn/ui 부품으로만 쓴다. `src/index.css` 밖에 CSS 파일·인라인 `style`을 만들지 않는다.
 - 색은 `bg-primary`·`text-muted-foreground` 같은 테마 이름으로 쓴다. `bg-zinc-900` 같은 색 값은 쓰지 않는다(바꿀 땐 `src/index.css`의 CSS 변수).
-- 서버 오류 본문의 `message`는 그대로 화면에 보여 준다. 화면 문구는 사용자가 읽을 한국어로 쓴다.
+- 서버 오류 본문의 `message`는 그대로 화면에 보여 준다. 화면 이슈가 따로 정하지 않은 실패는 `showError`(공용 알림)로 보여 준다. 화면 문구는 사용자가 읽을 한국어로 쓴다.
 - import는 `@/` 별칭으로 쓴다.
 - 테스트는 Vitest + Testing Library로 쓰고, 화면 요소는 사용자가 보는 문구·역할(`getByRole`·`getByText`)로 찾는다.
 

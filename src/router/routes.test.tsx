@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { toast } from 'sonner'
@@ -112,5 +112,26 @@ describe('새로고침 직후', () => {
     await restoring
     expect(await screen.findByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/tours')
+  })
+})
+
+describe('로그인한 채 다시 읽을 때(403 뒤)', () => {
+  it('응답을 기다리는 동안 지금 화면을 그대로 둔다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    renderAt('/tours')
+    expect(await screen.findByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
+
+    let respond: (response: Response) => void = () => {}
+    fetchMock.mockReturnValue(new Promise((resolve) => (respond = resolve)))
+    let restoring = Promise.resolve()
+    act(() => {
+      restoring = AuthStore.restore()
+    })
+    expect(AuthStore.getState().restoring).toBe(true)
+    expect(screen.getByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
+
+    respond(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
+    await act(() => restoring)
+    expect(screen.getByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
   })
 })

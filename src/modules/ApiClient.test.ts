@@ -147,6 +147,23 @@ describe('ApiClient 401·403 처리', () => {
     expect(navigate).toHaveBeenCalledWith('/staff')
   })
 
+  it('403이 한꺼번에 여럿 오면 한 번만 다시 읽고 모두 새 회원 구분의 첫 화면으로 보낸다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    fetchMock.mockImplementation(async (path) =>
+      path === '/api/v1/members/me'
+        ? jsonResponse(200, { memberType: 'STAFF', name: '김직원' })
+        : jsonResponse(403, { message: '권한이 없습니다.' }),
+    )
+
+    const errors = await Promise.all([
+      caught(ApiClient.get('/api/v1/tours?theme=GOLF')),
+      caught(ApiClient.get('/api/v1/bookings/previous')),
+    ])
+    expect(errors.map((error) => error.handled)).toEqual([true, true])
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/v1/members/me')).toHaveLength(1)
+    expect(navigate.mock.calls).toEqual([['/staff'], ['/staff']])
+  })
+
   it('403 뒤 다시 읽은 결과가 로그인하지 않음이면 로그인 화면으로 보낸다', async () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
     fetchMock

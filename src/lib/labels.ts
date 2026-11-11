@@ -16,6 +16,9 @@ export const tourStatuses = [
   { value: 'RECRUITING', label: '모집 중' },
   { value: 'CONFIRMED', label: '확정' },
   { value: 'FULL', label: '마감' },
+  { value: 'CANCELLED', label: '취소' },
+  { value: 'IN_PROGRESS', label: '진행 중' },
+  { value: 'COMPLETED', label: '완료' },
 ] as const
 
 export type Theme = (typeof themes)[number]['value']

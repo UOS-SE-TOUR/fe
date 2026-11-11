@@ -1,13 +1,13 @@
 import { toast } from 'sonner'
 import { navigateTo } from '@/lib/navigation'
-import { homePage, pagePaths } from '@/lib/pages'
+import { homePath, pagePaths } from '@/lib/pages'
 import { AuthStore } from '@/modules/AuthStore'
 
 // 서버 문구({"message"})가 없는 실패의 문구. 504는 서버 앞단 Nginx가 504에 주는 문구와 같다
 export const CONNECTION_FAILED_MESSAGE = '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'
 export const GATEWAY_TIMEOUT_MESSAGE = '서버 응답이 늦어 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
 const UNAUTHORIZED_MESSAGE = '로그인이 필요합니다.'
-const FORBIDDEN_MESSAGE = '권한이 없습니다.'
+export const FORBIDDEN_MESSAGE = '권한이 없습니다.'
 const UNEXPECTED_MESSAGE = '문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.'
 
 export class ApiError extends Error {
@@ -51,12 +51,17 @@ function handleUnauthorized(message: string): never {
   throw new ApiError(message, 401, true)
 }
 
+// 권한이 없다는 알림. 라우터가 막을 때와 403이 함께 와도 하나만 뜬다
+export function notifyForbidden(message = FORBIDDEN_MESSAGE) {
+  toast.error(message, { id: 'forbidden' })
+}
+
 // 다른 탭에서 다른 계정으로 로그인했으면 이 탭의 AuthStore가 낡아 있으니 회원 구분을 다시 읽고 그 첫 화면으로 보낸다
 async function handleForbidden(message: string): Promise<never> {
-  toast.error(message, { id: 'forbidden' })
+  notifyForbidden(message)
   await AuthStore.restore()
   const { memberType } = AuthStore
-  navigateTo(memberType ? pagePaths[homePage(memberType)] : pagePaths.LoginPage)
+  navigateTo(memberType ? homePath(memberType) : pagePaths.LoginPage)
   throw new ApiError(message, 403, true)
 }
 

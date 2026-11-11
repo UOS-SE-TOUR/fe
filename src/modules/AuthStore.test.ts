@@ -62,14 +62,40 @@ describe('AuthStore.restore', () => {
       '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.',
     ],
     ['be가 꺼짐(개발 서버 프록시의 빈 502)', new Response('', { status: 502 }), CONNECTION_FAILED_MESSAGE],
-  ])('401이 아닌 실패(%s)도 로그인하지 않은 것으로 두고 그 문구를 알린다', async (_, response, message) => {
-    AuthStore.setMember('CUSTOMER', '홍길동')
+  ])('새로고침 직후 401이 아닌 실패(%s)도 로그인하지 않은 것으로 두고 그 문구를 알린다', async (_, response, message) => {
     fetchMock.mockResolvedValue(response)
 
     await AuthStore.restore()
     expect(AuthStore.memberType).toBeNull()
     expect(toast.error).toHaveBeenCalledWith(message)
     expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('이미 로그인한 상태에서 다시 읽다 401이 아닌 실패가 나면 로그인 상태를 그대로 두고 문구를 알린다', async () => {
+    AuthStore.setMember('STAFF', '김직원')
+    fetchMock.mockResolvedValue(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }))
+
+    await AuthStore.restore()
+    expect(AuthStore.memberType).toBe('STAFF')
+    expect(AuthStore.getState().restoring).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.')
+  })
+
+  it('기다리는 중에 다시 부르면 새로 묻지 않고 같은 결과를 기다린다', async () => {
+    let respond: (response: Response) => void = () => {}
+    fetchMock.mockReturnValue(new Promise((resolve) => (respond = resolve)))
+
+    const first = AuthStore.restore()
+    const second = AuthStore.restore()
+    respond(jsonResponse(200, { memberType: 'STAFF', name: '김직원' }))
+    await Promise.all([first, second])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(AuthStore.memberType).toBe('STAFF')
+
+    fetchMock.mockResolvedValue(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+    await AuthStore.restore()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(AuthStore.memberType).toBeNull()
   })
 
   it('연결이 끊겨도 로그인하지 않은 것으로 두고 연결 실패 문구를 알린다', async () => {

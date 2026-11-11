@@ -1,64 +1,24 @@
+import type { ReactNode } from 'react'
 import type { RouteObject } from 'react-router'
-import { pagePaths } from '@/lib/pages'
+import { pagePaths, type PageName } from '@/lib/pages'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PlaceholderPage } from '@/router/PlaceholderPage'
 
+// 화면마다 보여 줄 것. 주소는 pagePaths, 열 수 있는 사람은 pageAccess가 정한다. 화면 이슈(#4~#9)가 자리표시자를 실제 화면으로 바꾼다
+const pageElements: Record<PageName, ReactNode> = {
+  LoginPage: <PlaceholderPage title="로그인" />,
+  SignUpPage: <PlaceholderPage title="회원가입" />,
+  CustomerMainPage: <PlaceholderPage title="고객 첫 화면" />,
+  TourSelectPage: <PlaceholderPage title="여행 상품 선택" />,
+  StaffMainPage: <PlaceholderPage title="직원 첫 화면" />,
+  TourPlanPage: <PlaceholderPage title="상품 기획" />,
+  WarehousePage: <PlaceholderPage title="창고" />,
+}
+
 export const routes: RouteObject[] = [
-  {
-    path: pagePaths.LoginPage,
-    element: (
-      <PageGate page="LoginPage">
-        <PlaceholderPage title="로그인" />
-      </PageGate>
-    ),
-  },
-  {
-    path: pagePaths.SignUpPage,
-    element: (
-      <PageGate page="SignUpPage">
-        <PlaceholderPage title="회원가입" />
-      </PageGate>
-    ),
-  },
-  {
-    path: pagePaths.CustomerMainPage,
-    element: (
-      <PageGate page="CustomerMainPage">
-        <PlaceholderPage title="고객 첫 화면" />
-      </PageGate>
-    ),
-  },
-  {
-    path: pagePaths.TourSelectPage,
-    element: (
-      <PageGate page="TourSelectPage">
-        <PlaceholderPage title="여행 상품 선택" />
-      </PageGate>
-    ),
-  },
-  {
-    path: pagePaths.StaffMainPage,
-    element: (
-      <PageGate page="StaffMainPage">
-        <PlaceholderPage title="직원 첫 화면" />
-      </PageGate>
-    ),
-  },
-  {
-    path: pagePaths.TourPlanPage,
-    element: (
-      <PageGate page="TourPlanPage">
-        <PlaceholderPage title="상품 기획" />
-      </PageGate>
-    ),
-  },
-  {
-    path: pagePaths.WarehousePage,
-    element: (
-      <PageGate page="WarehousePage">
-        <PlaceholderPage title="창고" />
-      </PageGate>
-    ),
-  },
+  ...(Object.keys(pageElements) as PageName[]).map((page) => ({
+    path: pagePaths[page],
+    element: <PageGate page={page}>{pageElements[page]}</PageGate>,
+  })),
   { path: '*', element: <GoHome /> },
 ]

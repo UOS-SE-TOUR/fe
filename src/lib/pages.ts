@@ -31,6 +31,7 @@ export const pageAccess: Record<PageName, 'GUEST' | MemberType> = {
   WarehousePage: 'STAFF',
 }
 
-export function homePage(memberType: MemberType): PageName {
-  return memberType === 'STAFF' ? 'StaffMainPage' : 'CustomerMainPage'
+// 회원 구분마다 로그인하면 처음 보는 화면의 주소
+export function homePath(memberType: MemberType): string {
+  return pagePaths[memberType === 'STAFF' ? 'StaffMainPage' : 'CustomerMainPage']
 }

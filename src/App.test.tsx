@@ -22,7 +22,7 @@ describe('App', () => {
   it('ApiClient가 받은 401로 라우터가 로그인 화면으로 옮긴다', async () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
     render(<App />)
-    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
 
     stubFetch().mockResolvedValue(jsonResponse(401, { message: '로그인이 필요합니다.' }))
     await act(() => ApiClient.get('/api/v1/bookings/previous').catch(() => undefined))
@@ -33,7 +33,7 @@ describe('App', () => {
   it('403 뒤 다시 읽은 회원 구분이 그대로이고 이미 그 첫 화면이면 다시 옮기지 않는다', async () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
     render(<App />)
-    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
 
     const replaceState = vi.spyOn(window.history, 'replaceState')
     stubFetch().mockImplementation(async (path) =>
@@ -42,7 +42,7 @@ describe('App', () => {
         : jsonResponse(403, { message: '권한이 없습니다.' }),
     )
     await act(() => ApiClient.get('/api/v1/bookings/previous').catch(() => undefined))
-    expect(screen.getByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
     expect(replaceState).not.toHaveBeenCalled()
   })
 })

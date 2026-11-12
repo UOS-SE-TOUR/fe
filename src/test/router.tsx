@@ -1,12 +1,14 @@
+import { StrictMode } from 'react'
 import { render } from '@testing-library/react'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { routes } from '@/router/routes'
 
-// 화면 주소와 막기까지 실제 라우터 그대로 띄운다
-export function renderAt(path: string) {
+// 화면 주소와 막기까지 실제 라우터 그대로 띄운다. strict면 개발 서버(main.tsx)처럼 StrictMode로 띄워 effect가 두 번 돈다
+export function renderAt(path: string, { strict = false }: { strict?: boolean } = {}) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
+  const app = <RouterProvider router={router} />
+  render(strict ? <StrictMode>{app}</StrictMode> : app)
   return router
 }
 

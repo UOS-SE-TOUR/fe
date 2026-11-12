@@ -81,6 +81,20 @@ export interface ApplyTourResponse {
   status: TourStatus
 }
 
+export interface PreviousTourResponse {
+  bookingId: number
+  tourId: number
+  title: string
+  // YYYY-MM-DD
+  departureDate: string
+  duration: number
+  level: TourLevel
+  levelName: string
+  headcount: number
+  // 신청할 때 정해진 최종 가격(원, 할인 뒤)
+  finalPrice: number
+}
+
 // 지금 신청할 수 있는 상품인지. 아니면 목록에 상태(마감 등)로 보이고 고를 수 없다
 export function canApply(tour: TourSummary): boolean {
   return (tour.status === 'RECRUITING' || tour.status === 'CONFIRMED') && tour.remainingSeats > 0

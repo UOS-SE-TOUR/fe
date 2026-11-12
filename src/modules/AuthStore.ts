@@ -26,7 +26,7 @@ function setState(next: AuthState) {
   listeners.forEach((listener) => listener())
 }
 
-function isMember(value: unknown): value is Member {
+export function isMember(value: unknown): value is Member {
   if (typeof value !== 'object' || value === null) return false
   const { memberType, name } = value as Record<string, unknown>
   return (memberTypes as readonly unknown[]).includes(memberType) && typeof name === 'string'

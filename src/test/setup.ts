@@ -16,6 +16,15 @@ if (!window.matchMedia) {
   })) as typeof window.matchMedia
 }
 
+// jsdom에는 ResizeObserver도 없다. 라디오 단추(Radix RadioGroup)가 폼 안에서 크기를 볼 때 부른다
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
 // Vitest 전역(globals)을 끈 채라 Testing Library가 테스트마다 화면을 스스로 비우지 않는다
 afterEach(() => {
   cleanup()

@@ -1,12 +1,10 @@
-import { act, render, screen } from '@testing-library/react'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
+import { act, screen } from '@testing-library/react'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
-import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
+import { renderAt } from '@/test/router'
 
 let fetchMock: ReturnType<typeof stubFetch>
 
@@ -20,12 +18,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   AuthStore.clear()
 })
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return router
-}
 
 describe('ApiClient가 받은 401·403 뒤', () => {
   async function respondWith(...responses: Response[]) {

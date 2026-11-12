@@ -1,15 +1,11 @@
-import { StrictMode } from 'react'
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearFromLogin, isFromLogin, markFromLogin } from '@/lib/fromLogin'
 import type { PreviousTourResponse } from '@/lib/tours'
 import { CONNECTION_FAILED_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
-import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
 import { renderAt, sentRequest } from '@/test/router'
 
@@ -55,17 +51,6 @@ afterEach(() => {
 
 function respondPreviousTours(tours: unknown = previousTours) {
   fetchMock.mockImplementation(async () => jsonResponse(200, tours))
-}
-
-// 개발 서버(main.tsx)처럼 StrictMode로 띄운다. effect가 두 번 돈다
-function renderStrictAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(
-    <StrictMode>
-      <RouterProvider router={router} />
-    </StrictMode>,
-  )
-  return router
 }
 
 describe('CustomerMainPage', () => {
@@ -217,7 +202,7 @@ describe('이전 여행 팝업', () => {
   it('StrictMode에서도 이전 여행을 한 번만 부르고 팝업을 띄운다', async () => {
     markFromLogin()
     respondPreviousTours()
-    renderStrictAt('/')
+    renderAt('/', { strict: true })
 
     expect(await screen.findByRole('dialog', { name: '이전 여행' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -231,7 +216,7 @@ describe('이전 여행 팝업', () => {
         ? jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' })
         : jsonResponse(200, previousTours),
     )
-    const router = renderStrictAt('/login')
+    const router = renderAt('/login', { strict: true })
     const user = userEvent.setup()
 
     await user.type(screen.getByLabelText('아이디'), 'hong')

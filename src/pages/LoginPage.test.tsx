@@ -30,8 +30,8 @@ async function logIn(loginId: string, password: string) {
 }
 
 describe('LoginPage', () => {
-  // "로그인 직후" 표시는 고객 첫 화면이 읽자마자 지우므로, 그 화면이 이전 여행을 부른 것으로 본다
-  it('고객으로 로그인하면 고객 첫 화면으로 가고 "로그인 직후" 표시를 켠다', async () => {
+  // 표시는 고객 첫 화면이 읽자마자 지우므로 그 화면이 이전 여행을 부른 것으로 본다(로그인 직후가 아니면 부르지 않는 것은 CustomerMainPage.test)
+  it('고객으로 로그인하면 "로그인 직후" 표시를 켜고 고객 첫 화면으로 가, 그 화면이 이전 여행을 부른다', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
       .mockReturnValueOnce(new Promise(() => {}))

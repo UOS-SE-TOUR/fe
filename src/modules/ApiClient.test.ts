@@ -100,11 +100,34 @@ describe('다시 보내면 두 번 처리되는 요청(unsafeToRetry)', () => {
     expect(error).toMatchObject({ status: response.status, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
   })
 
-  it('서버 문구가 있는 실패는 그 문구로 던지고 처리됐는지 모름 표시를 붙이지 않는다', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(400, { message: '남은 자리보다 인원이 많습니다.' }))
+  it('서버 앞단(Nginx)이 문구를 붙여 준 503도 처리됐는지 알 수 없다고 던진다(서버가 응답 중에 끊겨도 503이 온다)', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }),
+    )
 
     const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }, unsafe))
-    expect(error).toMatchObject({ status: 400, message: '남은 자리보다 인원이 많습니다.', resultUnknown: false })
+    expect(error).toMatchObject({ status: 503, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
+  })
+
+  it.each([
+    ['400', jsonResponse(400, { message: '남은 자리보다 인원이 많습니다.' }), '남은 자리보다 인원이 많습니다.'],
+    [
+      '서버의 500',
+      jsonResponse(500, { message: '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.' }),
+      '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.',
+    ],
+  ])('서버가 문구를 준 실패(%s)는 그 문구로 던지고 처리됐는지 모름 표시를 붙이지 않는다', async (_, response, message) => {
+    fetchMock.mockResolvedValue(response)
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }, unsafe))
+    expect(error).toMatchObject({ status: response.status, message, resultUnknown: false })
+  })
+
+  it('문구 없는 4xx는 앞단이 거절해 처리되지 않았으니 연결 실패 문구로 던진다', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>Request Entity Too Large</html>', { status: 413 }))
+
+    const error = await caught(ApiClient.post('/api/v1/staff/tours', { theme: 'GOLF' }, unsafe))
+    expect(error).toMatchObject({ status: 413, message: CONNECTION_FAILED_MESSAGE, resultUnknown: false })
   })
 
   it('옵션이 없는 POST(가격 계산 등)는 연결이 끊기면 연결 실패 문구로 던진다', async () => {

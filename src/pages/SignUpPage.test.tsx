@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +14,7 @@ beforeEach(() => {
   fetchMock = stubFetch()
   vi.spyOn(toast, 'error').mockImplementation(() => 'toast')
   vi.spyOn(toast, 'success').mockImplementation(() => 'toast')
+  vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
   user = userEvent.setup()
 })
 
@@ -130,6 +131,22 @@ describe('SignUpPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('연락처 칸이 받지 않은 입력으로는 실패 문구를 지우지 않는다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '연락처는 휴대폰 번호로 입력해 주세요(예: 010-1234-5678).' }))
+    renderAt('/signup')
+
+    await fillForm()
+    await submit()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('연락처'), '9')
+    expect(screen.getByLabelText('연락처')).toHaveValue('010-1234-5678')
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('연락처'), '{Backspace}')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('400이 아닌 실패는 공용 알림으로 보인다', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
     const router = renderAt('/signup')
@@ -140,6 +157,133 @@ describe('SignUpPage', () => {
     expect(toast.error).toHaveBeenCalledWith(CONNECTION_FAILED_MESSAGE)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/signup')
+  })
+
+  it('연락처를 숫자만 쳐도 하이픈을 붙여 보이고, 보이는 꼴 그대로 보낸다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { memberId: 4 }))
+    renderAt('/signup')
+
+    await fillForm()
+    const phone = screen.getByLabelText('연락처')
+    await user.clear(phone)
+    await user.type(phone, '010')
+    expect(phone).toHaveValue('010')
+    await user.type(phone, '1')
+    expect(phone).toHaveValue('010-1')
+    await user.type(phone, '2345678')
+    expect(phone).toHaveValue('010-1234-5678')
+    expect(toast.info).not.toHaveBeenCalled()
+    await submit()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(sentRequest(fetchMock).body).toEqual({ ...customer, memberType: 'CUSTOMER' })
+  })
+
+  it('+82 번호를 붙여 넣으면 국내 번호로 바꿔 보인다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText('연락처')
+
+    await user.click(phone)
+    await user.paste('+82 10-1234-5678')
+
+    expect(phone).toHaveValue('010-1234-5678')
+  })
+
+  it('가운데 숫자를 고쳐도 커서가 고친 자리에 남는다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-12|34-5678에서 2를 지우고 9를 친다
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 6, initialSelectionEnd: 6 })
+    expect(phone).toHaveValue('010-1345-678')
+    expect(phone.selectionStart).toBe(5)
+    await user.type(phone, '9', { skipClick: true })
+
+    expect(phone).toHaveValue('010-1934-5678')
+    expect(phone.selectionStart).toBe(6)
+  })
+
+  it('꽉 찬 연락처 가운데에 더 쳐도 값과 커서가 그대로다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-12|34-5678
+    await user.type(phone, '9', { initialSelectionStart: 6, initialSelectionEnd: 6 })
+
+    expect(phone).toHaveValue('010-1234-5678')
+    expect(phone.selectionStart).toBe(6)
+    expect(toast.info).toHaveBeenCalledWith('휴대폰 번호는 11자리까지 입력할 수 있습니다.', {
+      id: 'signup-phone-max-digits',
+    })
+  })
+
+  it('쓰던 번호에 번호 전체를 붙여 넣으면 받지 않고 11자리까지라고 알린다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012')
+
+    await user.paste('01099998888')
+
+    expect(phone).toHaveValue('010-12')
+    expect([phone.selectionStart, phone.selectionEnd]).toEqual([6, 6])
+    expect(toast.info).toHaveBeenCalledWith('휴대폰 번호는 11자리까지 입력할 수 있습니다.', {
+      id: 'signup-phone-max-digits',
+    })
+  })
+
+  it('값이 그대로인 입력 뒤의 자동 완성은 그 앞 입력의 고른 범위를 쓰지 않는다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234-[5]678의 5를 5로 바꿨다. 값이 그대로라 onChange가 오지 않는다
+    await user.type(phone, '5', { initialSelectionStart: 9, initialSelectionEnd: 10 })
+    expect(phone).toHaveValue('010-1234-5678')
+
+    // beforeinput 없이 들어온 11자리 넘는 자동 완성은 받지 않고, 커서는 넣은 글자 수로 되짚은 자리에 둔다
+    fireEvent.input(phone, { target: { value: '010-1234-56789' } })
+    expect(phone).toHaveValue('010-1234-5678')
+    expect([phone.selectionStart, phone.selectionEnd]).toEqual([13, 13])
+  })
+
+  it('하이픈 바로 뒤에서 Backspace를 누르면 하이픈 앞의 숫자를 지운다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234-|5678
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 9, initialSelectionEnd: 9 })
+
+    expect(phone).toHaveValue('010-1235-678')
+    expect(phone.selectionStart).toBe(7)
+  })
+
+  it('하이픈 하나만 골라 지우면 번호가 그대로다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234[-]5678
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 8, initialSelectionEnd: 9 })
+    expect(phone).toHaveValue('010-1234-5678')
+
+    // 고른 뒤에 커서만 두고 지우면 다시 하이픈 앞의 숫자를 지운다
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 9, initialSelectionEnd: 9 })
+    expect(phone).toHaveValue('010-1235-678')
+  })
+
+  it('하이픈 바로 앞에서 Delete를 누르면 하이픈 뒤의 숫자를 지운다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234|-5678
+    await user.type(phone, '{Delete}', { initialSelectionStart: 8, initialSelectionEnd: 8 })
+
+    expect(phone).toHaveValue('010-1234-678')
+    expect(phone.selectionStart).toBe(8)
   })
 
   it('로그인 링크로 로그인 화면에 간다', async () => {

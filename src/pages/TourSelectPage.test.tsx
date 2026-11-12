@@ -404,6 +404,24 @@ describe('테마 → 상품 → 투어 등급·인원 → 옵션 → 가격 → 
     expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
   })
 
+  it('400 문구나 계산 실패 표시는 인원을 비우면 지운다(지금 입력과 맞지 않는다)', async () => {
+    const user = renderPage()
+    await openTour(user)
+    replyOnce(QUOTE, failWith(400, SEAT_SHORTAGE))
+    await priceWith(user, /^그랜드/, '50')
+    expect(await screen.findByText(SEAT_SHORTAGE)).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText('인원'))
+    await waitFor(() => expect(screen.queryByText(SEAT_SHORTAGE)).not.toBeInTheDocument())
+    expect(screen.getByText('투어 등급과 인원을 고르면 가격이 나옵니다.')).toBeInTheDocument()
+
+    replyOnce(QUOTE, failWith(503, '서버 응답이 없습니다.'))
+    await user.type(screen.getByLabelText('인원'), '3')
+    expect(await screen.findByRole('button', { name: '다시 계산' })).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('인원'))
+    await waitFor(() => expect(screen.queryByRole('button', { name: '다시 계산' })).not.toBeInTheDocument())
+  })
+
   it('계산하지 못한 뒤 지난 가격의 인원으로 되돌리면 실패 표시를 지우고 신청할 수 있다', async () => {
     const user = renderPage()
     await openTour(user)
@@ -855,7 +873,7 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(screen.queryByText('상품 목록을 불러오는 중입니다.')).not.toBeInTheDocument()
   })
 
-  it('직후의 가격 계산이 400·409 밖의 실패면 알리고, 가격이 없으니 옵션 바꾸기를 열지 않는다', async () => {
+  it('직후의 가격 계산이 400·409 밖의 실패면 알리고, 옵션 바꾸기 대신 다시 계산을 둔다', async () => {
     const user = renderPage(FakeVoiceInput)
     replyOnce(QUOTE, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
     await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
@@ -863,7 +881,10 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
     expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')
     expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('인원')).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: '다시 계산' }))
+    expect(await screen.findByText('가격 요약')).toBeInTheDocument()
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] })
   })
 
   it('이 상품에 없는 투어 등급을 채웠으면 가격을 계산하지 않고 부른 쪽에 넘기고, 그 뒤에도 등급을 고르라고 한다', async () => {

@@ -189,16 +189,12 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const applying = useRef(false)
   // 목록 요청이 겹치면 마지막에 보낸 것만 보인다(먼저 보낸 응답이 늦게 와 새 남은 자리를 덮지 않게)
   const toursRequest = useRef(0)
-  // 가격 계산도 마지막에 보낸 것만 반영한다(입력을 막지 않아 요청이 겹칠 수 있다)
-  const quoteRequest = useRef(0)
   const quoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // 인원 타이머가 울릴 때 그때의 입력·옵션으로 계산하려고 둔다
+  // 고른 상품의 최신 상태. 화면(detail)과 함께 바꿔, 이벤트·타이머·응답이 다시 그리기 전에도 최신 값을 읽는다
   const detailRef = useRef<Detail | null>(null)
+  // 가격 계산 중에 고친 입력이 있다. 그 계산이 끝나는 자리에서 그때의 입력으로 다시 계산한다
+  const requote = useRef(false)
   const tourList = tours?.status === 'loaded' ? tours.list : undefined
-
-  useEffect(() => {
-    detailRef.current = detail
-  })
 
   useEffect(() => {
     const timer = quoteTimer
@@ -214,6 +210,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   function newContext(): number {
     clearQuoteTimer()
+    requote.current = false
     context.current += 1
     return context.current
   }
@@ -222,8 +219,13 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     return seq === context.current
   }
 
+  function writeDetail(next: Detail | null) {
+    detailRef.current = next
+    setDetail(next)
+  }
+
   function updateDetail(patch: Partial<Detail>) {
-    setDetail((current) => (current ? { ...current, ...patch } : current))
+    if (detailRef.current) writeDetail({ ...detailRef.current, ...patch })
   }
 
   // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다
@@ -247,7 +249,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   function resetTo(next: { theme: Theme; detail: Detail | null; message?: string | null; list?: TourSummary[] }) {
     const seq = newContext()
     setTheme(next.theme)
-    setDetail(next.detail)
+    writeDetail(next.detail)
     setListMessage(next.message ?? null)
     setPending(null)
     if (next.list) {
@@ -271,7 +273,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   async function selectTour(tourId: number) {
     const seq = newContext()
     setListMessage(null)
-    setDetail(newDetail(tourId))
+    writeDetail(newDetail(tourId))
     setPending('levels')
     try {
       const levels = await getLevels(tourId)
@@ -286,8 +288,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     }
   }
 
+  // 옵션 패널의 문구는 옵션을 다시 바꾸거나 패널을 열고 닫을 때만 지운다(되돌린 까닭이라 뒤이은 가격 계산이 지우지 않게)
   function priceArrived(result: PriceQuote, submitted: PricedSelection, optionIds: number[]) {
-    updateDetail({ quote: result, submitted, optionIds, priced: true, levelMessage: null, optionMessage: null })
+    updateDetail({ quote: result, submitted, optionIds, priced: true, levelMessage: null })
   }
 
   // 400을 받아 투어 등급과 인원을 다시 받는다. 고른 옵션은 그대로 두고, 줄어든 남은 자리를 보이려고 목록을 다시 불러온다
@@ -305,7 +308,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     }
   }
 
-  // 마지막에 보낸 가격 계산의 응답만 반영한다. 409(더는 신청할 수 없음)는 늘 상품 목록으로 돌아간다
+  // 가격 계산은 하나씩 보낸다(부르는 쪽이 quoting으로 막는다). 409(더는 신청할 수 없음)는 늘 상품 목록으로 돌아간다
   async function runQuote(
     tourId: number,
     selection: PricedSelection,
@@ -313,32 +316,40 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     failure: { onBadRequest(error: ApiError, seq: number): Promise<void> | void; onOtherFailure(error: unknown): void },
   ) {
     const seq = context.current
-    const request = ++quoteRequest.current
-    const latest = () => isCurrent(seq) && request === quoteRequest.current
     updateDetail({ quoting: true })
     try {
       const result = await quote(tourId, selection, optionIds)
-      if (latest()) priceArrived(result, selection, optionIds)
+      if (isCurrent(seq)) priceArrived(result, selection, optionIds)
     } catch (error) {
-      if (!latest()) return
+      if (!isCurrent(seq)) return
       if (hasStatus(error, 409)) showTourList(error.message)
       else if (hasStatus(error, 400)) await failure.onBadRequest(error, seq)
       else failure.onOtherFailure(error)
     } finally {
-      if (latest()) updateDetail({ quoting: false })
+      if (isCurrent(seq)) {
+        updateDetail({ quoting: false })
+        if (requote.current) {
+          requote.current = false
+          if (detailRef.current) void quoteSelection(detailRef.current)
+        }
+      }
     }
   }
 
   // 투어 등급·인원으로 가격을 계산한다(설계의 selectLevel). 등급을 고르거나 인원을 치다 멈추면 부른다
   async function quoteSelection(current: Detail) {
     if (applying.current || current.applyResult) return
-    // 보낼 수 없는 입력의 문구는 화면이 입력에서 바로 보인다(늦게 온 응답이 지우지 못하게 저장하지 않는다)
-    const check = checkSelection(current.levels, current.levelInput, current.headcountInput)
-    if (!('selection' in check)) return
     // 가격 계산은 하나씩 보낸다. 계산 중에 고친 입력은 그 계산이 끝난 뒤 그때의 입력으로 계산한다
-    // (겹쳐 보내면 먼저 보낸 계산의 되돌리기·문구가 건너뛰어진다)
+    // (겹쳐 보내면 먼저 보낸 계산의 되돌리기·문구가 섞인다)
     if (current.quoting) {
-      scheduleQuote()
+      requote.current = true
+      return
+    }
+    // 보낼 수 없는 입력의 문구는 화면이 입력에서 바로 보인다(늦게 온 응답이 지우지 못하게 저장하지 않는다).
+    // 덜 고친 입력이면 지난 계산의 서버 문구·실패 표시는 지금 입력과 맞지 않아 지운다
+    const check = checkSelection(current.levels, current.levelInput, current.headcountInput)
+    if (!('selection' in check)) {
+      updateDetail({ levelMessage: null, quoteFailed: false })
       return
     }
     const { selection } = check
@@ -363,7 +374,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     })
   }
 
-  // 이만큼 뒤에 그때의 입력·옵션으로 계산한다
+  // 인원을 치다 멈추면 그때의 입력·옵션으로 계산한다
   function scheduleQuote() {
     clearQuoteTimer()
     quoteTimer.current = setTimeout(() => {
@@ -373,10 +384,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   }
 
   function selectLevel(level: TourLevel) {
-    if (!detail) return
     clearQuoteTimer()
     updateDetail({ levelInput: level })
-    void quoteSelection({ ...detail, levelInput: level })
+    if (detailRef.current) void quoteSelection(detailRef.current)
   }
 
   function changeHeadcount(headcountInput: string) {
@@ -387,13 +397,14 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 인원 칸의 Enter와 다시 계산 단추. 기다리지 않고 계산한다
   function quoteNow() {
     clearQuoteTimer()
-    if (detail) void quoteSelection(detail)
+    if (detailRef.current) void quoteSelection(detailRef.current)
   }
 
   function changeOptions(optionIds: number[]) {
-    if (!detail?.submitted || pending || detail.quoting) return
+    const current = detailRef.current
+    if (!current?.submitted || pending || current.quoting) return
     // 가격이 나와 있으면 마지막으로 가격이 나온 옵션, 다시 받는 중이면 남겨 둔 옵션이다
-    const { tourId, submitted, optionIds: previousIds } = detail
+    const { tourId, submitted, optionIds: previousIds } = current
     updateDetail({ optionIds, optionMessage: null })
     void runQuote(tourId, submitted, optionIds, {
       onBadRequest: async (error, seq) => {
@@ -408,10 +419,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   }
 
   async function applyTour() {
-    if (!detail?.quote || !detail.priced || detail.quoting || pending || applying.current) return
+    const current = detailRef.current
+    if (!current?.quote || !current.priced || current.quoting || pending || applying.current) return
     applying.current = true
     const seq = context.current
-    const { summary } = detail.quote
+    const { summary } = current.quote
     setPending('apply')
     const outcome = await ApiClient.post<ApplyTourResponse>(
       '/api/v1/bookings',
@@ -469,7 +481,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         showError(error)
         // 없어진 상품(404)이면 목록을 다시 불러온다(화면에서 고를 때와 같다)
         if (hasStatus(error, 404)) resetTo({ theme: selection.theme, detail: null })
-        else setDetail(null)
+        else writeDetail(null)
         return { status: 'failed' }
       }
       if (!isCurrent(seq)) return { status: 'failed' }
@@ -489,6 +501,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         if (!isCurrent(seq)) return { status: 'failed' }
         if (hasStatus(error, 400) || hasStatus(error, 409)) return { status: 'rejected', error }
         showError(error)
+        // 화면에서 다시 계산할 수 있게 한다
+        updateDetail({ quoteFailed: true })
         return { status: 'failed' }
       }
     } finally {
@@ -556,7 +570,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
           onQuoteNow={quoteNow}
           onConfirmPrice={() => updateDetail({ discountConfirmed: true })}
           onOpenOptions={() => updateDetail({ optionPanelOpen: true, optionMessage: null })}
-          onChangeOptions={(optionIds) => void changeOptions(optionIds)}
+          onChangeOptions={changeOptions}
           onFinishOptions={() => updateDetail({ optionPanelOpen: false, optionMessage: null })}
           onApply={() => void applyTour()}
         />

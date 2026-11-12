@@ -349,7 +349,7 @@ describe('테마 → 상품 → 투어 등급·인원 → 옵션 → 가격 → 
     expect(countOf(QUOTE)).toBe(1)
   })
 
-  it('가격을 계산하는 동안에도 인원을 고칠 수 있고, 늦게 온 지난 응답은 버린다', async () => {
+  it('가격을 계산하는 동안에도 인원을 고칠 수 있고, 고친 인원은 그 계산이 끝난 뒤 계산한다', async () => {
     let finish: (response: Response) => void = () => {}
     replyOnce(QUOTE, () => new Promise<Response>((resolve) => (finish = resolve)))
     const user = renderPage()
@@ -359,13 +359,67 @@ describe('테마 → 상품 → 투어 등급·인원 → 옵션 → 가격 → 
     expect(screen.getByLabelText('인원')).toBeEnabled()
     expect(screen.getByText('가격을 계산하는 중입니다.')).toBeInTheDocument()
     await priceWith(user, /^그랜드/, '3')
-    await waitFor(() => expect(within(screen.getByText('가격 요약').closest('[data-slot=card]') as HTMLElement).getByText('3명')).toBeInTheDocument())
+    await sleep(HEADCOUNT_DELAY_MS + 100)
+    expect(countOf(QUOTE)).toBe(1)
 
     finish(jsonResponse(200, quoteFor({ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] })))
-    await sleep(50)
-    expect(screen.getByText('3명')).toBeInTheDocument()
-    expect(screen.queryByText('2명')).not.toBeInTheDocument()
+    await waitFor(() => expect(countOf(QUOTE)).toBe(2))
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 3, optionIds: [] })
+    expect(await screen.findByText('3명')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: '신청하기' })).toBeEnabled())
+  })
+
+  it('옵션 계산 중에 인원을 고치면, 옵션 계산이 400으로 되돌린 옵션과 고친 인원으로 계산한다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await openOptions(user)
+
+    let finish: (response: Response) => void = () => {}
+    replyOnce(QUOTE, () => new Promise<Response>((resolve) => (finish = resolve)))
+    await user.click(screen.getByRole('radio', { name: /^3등급 호텔/ }))
+    await priceWith(user, /^그랜드/, '3')
+    await sleep(HEADCOUNT_DELAY_MS + 100)
+    expect(countOf(QUOTE)).toBe(2)
+
+    finish(failWith(400, NEGATIVE_PRICE))
+    expect(await screen.findByText(NEGATIVE_PRICE)).toBeInTheDocument()
+    await waitFor(() => expect(countOf(QUOTE)).toBe(3))
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 3, optionIds: [] })
+    expect(screen.getByRole('radio', { name: '기본 제공(4등급 호텔)' })).toBeChecked()
+  })
+
+  it('늦게 온 응답이 지금 입력의 검사 문구를 지우지 않는다', async () => {
+    let finish: (response: Response) => void = () => {}
+    replyOnce(QUOTE, () => new Promise<Response>((resolve) => (finish = resolve)))
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '5')
+
+    await priceWith(user, /^그랜드/, '0')
+    expect(screen.getByText('인원은 1 이상의 정수로 입력해 주세요.')).toBeInTheDocument()
+    finish(jsonResponse(200, quoteFor({ tourId: 1, level: 'GRAND', headcount: 5, optionIds: [] })))
+    expect(await screen.findByText('가격 요약')).toBeInTheDocument()
+    expect(screen.getByText('인원은 1 이상의 정수로 입력해 주세요.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
+  })
+
+  it('계산하지 못한 뒤 지난 가격의 인원으로 되돌리면 실패 표시를 지우고 신청할 수 있다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    replyOnce(QUOTE, failWith(503, '서버 응답이 없습니다.'))
+    await priceWith(user, /^그랜드/, '3')
+    expect(await screen.findByText('고친 투어 등급·인원으로 가격을 계산하지 못했습니다.')).toBeInTheDocument()
+
+    await priceWith(user, /^그랜드/, '2')
+    await waitFor(() =>
+      expect(screen.queryByText('고친 투어 등급·인원으로 가격을 계산하지 못했습니다.')).not.toBeInTheDocument(),
+    )
     expect(screen.getByRole('button', { name: '신청하기' })).toBeEnabled()
+    expect(countOf(QUOTE)).toBe(2)
   })
 
   it('고친 투어 등급·인원의 가격이 나오기 전에는 신청할 수 없다', async () => {
@@ -778,13 +832,25 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
   })
 
-  it('투어 등급을 불러오지 못하면 알리고 상품 목록을 보여 준다', async () => {
-    const user = renderPage(FakeVoiceInput)
+  it('상품이 없어졌으면(투어 등급 404) 상품 목록을 다시 불러온다', async () => {
     replyOnce('GET /api/v1/tours/1/levels', failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    replyOnce(TOURS, jsonResponse(200, golfTours), jsonResponse(200, golfTours.slice(1)))
+    const user = renderPage(FakeVoiceInput)
     await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
 
     expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
-    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(await screen.findByRole('button', { name: /1\/3 출발 3일/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(2)
+  })
+
+  it('투어 등급을 불러오지 못하면 알리고 상품 목록을 보여 준다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    replyOnce('GET /api/v1/tours/1/levels', failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
+
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
     expect(screen.queryByText('상품 목록을 불러오는 중입니다.')).not.toBeInTheDocument()
   })

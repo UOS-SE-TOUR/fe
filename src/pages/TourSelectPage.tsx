@@ -109,6 +109,22 @@ function parseHeadcount(input: string): number | null {
   return value >= 1 && value <= MAX_HEADCOUNT ? value : null
 }
 
+// 투어 등급·인원 입력을 가격 계산에 보낼 수 있는지 본다. 화면 문구(아직 덜 골랐으면 null)나 보낼 내용을 돌려준다.
+// 화면에서 고를 때와 음성으로 채울 때가 같은 규칙을 쓴다
+function checkSelection(
+  levels: TourLevelsResponse | null,
+  level: TourLevel | null,
+  headcountInput: string,
+): { selection: PricedSelection } | { message: string | null } {
+  const text = headcountInput.trim()
+  const headcount = parseHeadcount(text)
+  if (text !== '' && headcount === null) return { message: HEADCOUNT_MESSAGE }
+  // 음성이 이 상품에 없는 등급(허니문의 클래식 등)을 채웠으면 화면에 고른 등급이 없다
+  if (level && !levels?.levels.some((item) => item.level === level)) return { message: text ? LEVEL_MESSAGE : null }
+  if (!level || headcount === null) return { message: null }
+  return { selection: { level, headcount } }
+}
+
 function hasStatus(error: unknown, status: number): error is ApiError {
   return error instanceof ApiError && error.status === status
 }
@@ -316,26 +332,22 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 투어 등급·인원으로 가격을 계산한다(설계의 selectLevel). 등급을 고르거나 인원을 치다 멈추면 부른다
   async function quoteSelection(current: Detail) {
     if (applying.current || current.applyResult) return
-    const text = current.headcountInput.trim()
-    // 음성이 이 상품에 없는 등급(허니문의 클래식 등)을 채웠으면 화면에 고른 등급이 없다
-    const offered = current.levels?.levels.some((item) => item.level === current.levelInput) ?? false
-    if (!current.levelInput || !offered) {
-      updateDetail({ levelMessage: current.levelInput && text ? LEVEL_MESSAGE : null })
+    // 보낼 수 없는 입력의 문구는 화면이 입력에서 바로 보인다(늦게 온 응답이 지우지 못하게 저장하지 않는다)
+    const check = checkSelection(current.levels, current.levelInput, current.headcountInput)
+    if (!('selection' in check)) return
+    // 가격 계산은 하나씩 보낸다. 계산 중에 고친 입력은 그 계산이 끝난 뒤 그때의 입력으로 계산한다
+    // (겹쳐 보내면 먼저 보낸 계산의 되돌리기·문구가 건너뛰어진다)
+    if (current.quoting) {
+      scheduleQuote()
       return
     }
-    if (text === '') {
-      updateDetail({ levelMessage: null })
-      return
-    }
-    const headcount = parseHeadcount(text)
-    if (headcount === null) {
-      updateDetail({ levelMessage: HEADCOUNT_MESSAGE })
-      return
-    }
+    const { selection } = check
     const { submitted, tourId, optionIds } = current
-    const unchanged = submitted?.level === current.levelInput && submitted.headcount === headcount
-    if (current.priced && !current.quoting && unchanged) return
-    const selection = { level: current.levelInput, headcount }
+    if (current.priced && submitted?.level === selection.level && submitted.headcount === selection.headcount) {
+      // 지난 가격의 내용으로 되돌렸다. 고친 내용의 계산 실패 표시는 지운다
+      updateDetail({ quoteFailed: false })
+      return
+    }
     updateDetail({ levelMessage: null, quoteFailed: false })
     await runQuote(tourId, selection, optionIds, {
       onBadRequest: async (error, seq) => {
@@ -351,6 +363,15 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     })
   }
 
+  // 이만큼 뒤에 그때의 입력·옵션으로 계산한다
+  function scheduleQuote() {
+    clearQuoteTimer()
+    quoteTimer.current = setTimeout(() => {
+      quoteTimer.current = null
+      if (detailRef.current) void quoteSelection(detailRef.current)
+    }, HEADCOUNT_DELAY_MS)
+  }
+
   function selectLevel(level: TourLevel) {
     if (!detail) return
     clearQuoteTimer()
@@ -360,11 +381,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   function changeHeadcount(headcountInput: string) {
     updateDetail({ headcountInput })
-    clearQuoteTimer()
-    quoteTimer.current = setTimeout(() => {
-      quoteTimer.current = null
-      if (detailRef.current) void quoteSelection(detailRef.current)
-    }, HEADCOUNT_DELAY_MS)
+    scheduleQuote()
   }
 
   // 인원 칸의 Enter와 다시 계산 단추. 기다리지 않고 계산한다
@@ -450,20 +467,19 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       } catch (error) {
         if (!isCurrent(seq)) return { status: 'failed' }
         showError(error)
-        setDetail(null)
+        // 없어진 상품(404)이면 목록을 다시 불러온다(화면에서 고를 때와 같다)
+        if (hasStatus(error, 404)) resetTo({ theme: selection.theme, detail: null })
+        else setDetail(null)
         return { status: 'failed' }
       }
       if (!isCurrent(seq)) return { status: 'failed' }
       updateDetail({ levels })
-      // 화면에서 고를 때(selectLevel)와 같은 규칙으로 거른다
-      if (!levels.levels.some((item) => item.level === selection.level)) {
-        return { status: 'rejected', error: new ApiError(LEVEL_MESSAGE, 400) }
-      }
-      if (parseHeadcount(String(selection.headcount)) === null) {
-        return { status: 'rejected', error: new ApiError(HEADCOUNT_MESSAGE, 400) }
+      const check = checkSelection(levels, selection.level, String(selection.headcount))
+      if (!('selection' in check)) {
+        return { status: 'rejected', error: new ApiError(check.message ?? LEVEL_MESSAGE, 400) }
       }
       // 이 가격 계산이 끝날 때까지 입력을 막아 둔다(pending 'levels')
-      const priced = { level: selection.level, headcount: selection.headcount }
+      const priced = check.selection
       try {
         const result = await quote(selection.tourId, priced, [])
         if (!isCurrent(seq)) return { status: 'failed' }
@@ -575,6 +591,9 @@ function TourDetail(props: TourDetailProps) {
   const headcountNow = parseHeadcount(detail.headcountInput)
   // 고친 투어 등급·인원의 가격이 아직 나오지 않았다
   const edited = submitted !== null && (detail.levelInput !== submitted.level || headcountNow !== submitted.headcount)
+  const check = checkSelection(levels, detail.levelInput, detail.headcountInput)
+  // 입력 검사 문구가 먼저고, 없으면 서버의 400 문구다
+  const levelMessage = ('message' in check ? check.message : null) ?? detail.levelMessage
   const title = tour?.title ?? priceQuote?.summary.title ?? (theme ? themeLabel(theme) : '고른 상품')
 
   return (
@@ -641,9 +660,9 @@ function TourDetail(props: TourDetailProps) {
                 />
                 {tour && <p className="text-sm text-muted-foreground">남은 자리 {tour.remainingSeats}명</p>}
               </div>
-              {detail.levelMessage && (
+              {levelMessage && (
                 <Alert variant="destructive">
-                  <AlertDescription>{detail.levelMessage}</AlertDescription>
+                  <AlertDescription>{levelMessage}</AlertDescription>
                 </Alert>
               )}
               {detail.quoting && <p className="text-sm text-muted-foreground">가격을 계산하는 중입니다.</p>}
@@ -655,7 +674,7 @@ function TourDetail(props: TourDetailProps) {
                   </Button>
                 </div>
               )}
-              {!detail.quoting && !detail.quoteFailed && !detail.priced && !detail.levelMessage && (
+              {!detail.quoting && !detail.quoteFailed && !detail.priced && !levelMessage && (
                 <p className="text-sm text-muted-foreground">투어 등급과 인원을 고르면 가격이 나옵니다.</p>
               )}
             </form>

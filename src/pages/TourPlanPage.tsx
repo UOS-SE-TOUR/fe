@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,14 +74,23 @@ function levelsOf(theme: Theme): TourLevel[] {
     .filter((level) => level !== 'CLASSIC' || !grandAndPremiumOnly.includes(theme))
 }
 
-// name은 받침으로 끝나는 칸 이름이다(기간, 정원, 가격, 추가 요금)
-function parseInteger(text: string, name: string, max: number): { value: number } | { error: string } {
-  const trimmed = text.trim()
-  if (trimmed === '') return { error: `${name}을 입력해 주세요.` }
-  if (!/^-?[0-9]+$/.test(trimmed)) return { error: `${name}은 정수로 입력해 주세요.` }
-  const value = Number(trimmed)
+// 전각 숫자·부호·쉼표(한글 입력기)를 반각으로 바꾼다
+function toHalfWidth(text: string): string {
+  return text.replace(/[０-９－，]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+}
+
+// 세 자리마다 쉼표를 찍은 수(1,500,000)도 받는다. name은 받침으로 끝나는 칸 이름이다(기간, 정원, 가격, 추가 요금)
+function parseInteger(text: string, name: string, max: number): { value?: number; error?: string } {
+  const normalized = toHalfWidth(text).trim()
+  if (normalized === '') return { error: `${name}을 입력해 주세요.` }
+  if (!/^-?([0-9]+|[0-9]{1,3}(,[0-9]{3})+)$/.test(normalized)) return { error: `${name}은 정수로 입력해 주세요.` }
+  const value = Number(normalized.replace(/,/g, ''))
   if (Math.abs(value) > max) return { error: `${name}은 입력할 수 있는 범위를 넘었습니다.` }
   return { value }
+}
+
+function hasErrors({ prices, transports, ...fields }: FormErrors): boolean {
+  return Object.values(fields).some(Boolean) || Object.keys(prices).length > 0 || Object.keys(transports).length > 0
 }
 
 // 빈 칸과 정수가 아닌 값만 막는다. 그 밖의 규칙(기본 교통, 정원, 출발일 등)은 서버의 400 문구를 보여 준다
@@ -89,45 +98,36 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
   const errors: FormErrors = { prices: {}, transports: {} }
 
   if (form.theme === '') errors.theme = '테마를 골라 주세요.'
-  // 날짜 칸은 날짜가 아니면 빈 값을 준다. 다섯 자리 연도는 be가 읽지 못한다
+  // 날짜 칸은 날짜가 아니면 빈 값을 준다. 네 자리를 넘는 연도는 be가 읽지 못한다
   if (form.departureDate === '') errors.departureDate = '출발일을 입력해 주세요.'
   else if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(form.departureDate)) {
-    errors.departureDate = '출발일은 9999년 12월 31일까지 입력할 수 있습니다.'
+    errors.departureDate = '출발일을 확인해 주세요. 9999년 12월 31일까지 입력할 수 있습니다.'
   }
 
   const duration = parseInteger(form.duration, '기간', INT_MAX)
-  if ('error' in duration) errors.duration = duration.error
+  errors.duration = duration.error
   const capacity = parseInteger(form.capacity, '정원', INT_MAX)
-  if ('error' in capacity) errors.capacity = capacity.error
+  errors.capacity = capacity.error
 
   const prices: RegisterTourRequest['prices'] = []
   if (form.theme !== '') {
     for (const level of levelsOf(form.theme)) {
       const price = parseInteger(form.prices[level], `${tourLevelLabel(level)} 가격`, LONG_MAX)
-      if ('error' in price) errors.prices[level] = price.error
-      else prices.push({ level, price: price.value })
+      if (price.error) errors.prices[level] = price.error
+      else if (price.value !== undefined) prices.push({ level, price: price.value })
     }
   }
 
   const transports: RegisterTourRequest['transports'] = []
   for (const row of form.transports) {
-    const nameError = row.name.trim() === '' ? '교통 이름을 입력해 주세요.' : undefined
+    const name = row.name.trim()
+    const nameError = name === '' ? '교통 이름을 입력해 주세요.' : undefined
     const unitPrice = parseInteger(row.unitPrice, '추가 요금', LONG_MAX)
-    if (nameError || 'error' in unitPrice) {
-      errors.transports[row.id] = { name: nameError, unitPrice: 'error' in unitPrice ? unitPrice.error : undefined }
-    } else {
-      transports.push({ name: row.name, unitPrice: unitPrice.value })
-    }
+    if (nameError || unitPrice.error) errors.transports[row.id] = { name: nameError, unitPrice: unitPrice.error }
+    else if (unitPrice.value !== undefined) transports.push({ name, unitPrice: unitPrice.value })
   }
 
-  if (
-    form.theme === '' ||
-    errors.departureDate ||
-    'error' in duration ||
-    'error' in capacity ||
-    Object.keys(errors.prices).length > 0 ||
-    Object.keys(errors.transports).length > 0
-  ) {
+  if (hasErrors(errors) || form.theme === '' || duration.value === undefined || capacity.value === undefined) {
     return { errors, request: null }
   }
   return {
@@ -150,6 +150,11 @@ function tourIdOf(body: unknown): number | null {
 
 const noErrors: FormErrors = { prices: {}, transports: {} }
 
+// 칸이 막혔으면 그 이유 문구(FieldError id)를 칸에 잇는다
+function errorIdOf(id: string, error: string | undefined): string | undefined {
+  return error ? `${id}-error` : undefined
+}
+
 export function TourPlanPage() {
   const [form, setForm] = useState(emptyForm)
   // 등록을 한 번 누른 뒤부터 칸마다 막은 이유를 보여 주고, 고치면 바로 지운다
@@ -163,29 +168,36 @@ export function TourPlanPage() {
   // 단추가 막히기 전에 두 번 눌러도 한 번만 보낸다
   const submittingRef = useRef(false)
 
-  const errors = submitted ? validate(form).errors : noErrors
+  const validation = useMemo(() => validate(form), [form])
+  const errors = submitted ? validation.errors : noErrors
+
+  // 입력을 고치면 지난 등록의 서버 문구는 지운다. 처리됐는지 모르는 실패의 문구는 남긴다
+  function edit(change: (current: TourForm) => TourForm) {
+    setForm(change)
+    if (!resultUnknown) setMessage(null)
+  }
 
   function update(patch: Partial<TourForm>) {
-    setForm((current) => ({ ...current, ...patch }))
+    edit((current) => ({ ...current, ...patch }))
   }
 
   function updatePrice(level: TourLevel, price: string) {
-    setForm((current) => ({ ...current, prices: { ...current.prices, [level]: price } }))
+    edit((current) => ({ ...current, prices: { ...current.prices, [level]: price } }))
   }
 
   function updateTransport(id: number, patch: Partial<TransportRow>) {
-    setForm((current) => ({
+    edit((current) => ({
       ...current,
       transports: current.transports.map((row) => (row.id === id ? { ...row, ...patch } : row)),
     }))
   }
 
   function addTransport() {
-    setForm((current) => ({ ...current, transports: [...current.transports, newTransport()] }))
+    edit((current) => ({ ...current, transports: [...current.transports, newTransport()] }))
   }
 
   function removeTransport(id: number) {
-    setForm((current) => ({ ...current, transports: current.transports.filter((row) => row.id !== id) }))
+    edit((current) => ({ ...current, transports: current.transports.filter((row) => row.id !== id) }))
   }
 
   function showRegisterResult(tourId: number) {
@@ -203,12 +215,12 @@ export function TourPlanPage() {
     event.preventDefault()
     if (submittingRef.current || resultUnknown) return
     setSubmitted(true)
-    const { request } = validate(form)
+    setMessage(null)
+    const { request } = validation
     if (!request) return
 
     submittingRef.current = true
     setSubmitting(true)
-    setMessage(null)
     try {
       const tourId = tourIdOf(await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true }))
       if (tourId === null) {
@@ -257,6 +269,7 @@ export function TourPlanPage() {
               <RadioGroup
                 value={form.theme}
                 onValueChange={(theme) => update({ theme: theme as Theme })}
+                aria-describedby={errorIdOf('theme', errors.theme)}
                 className="sm:grid-cols-2"
               >
                 {themes.map((theme) => (
@@ -268,7 +281,7 @@ export function TourPlanPage() {
                   </Field>
                 ))}
               </RadioGroup>
-              <FieldError>{errors.theme}</FieldError>
+              <FieldError id="theme-error">{errors.theme}</FieldError>
             </FieldSet>
 
             <Field data-invalid={!!errors.departureDate}>
@@ -280,8 +293,9 @@ export function TourPlanPage() {
                 value={form.departureDate}
                 onChange={(event) => update({ departureDate: event.target.value })}
                 aria-invalid={!!errors.departureDate}
+                aria-describedby={errorIdOf('departureDate', errors.departureDate)}
               />
-              <FieldError>{errors.departureDate}</FieldError>
+              <FieldError id="departureDate-error">{errors.departureDate}</FieldError>
             </Field>
 
             <div className="grid gap-7 sm:grid-cols-2">
@@ -293,8 +307,9 @@ export function TourPlanPage() {
                   value={form.duration}
                   onChange={(event) => update({ duration: event.target.value })}
                   aria-invalid={!!errors.duration}
+                  aria-describedby={errorIdOf('duration', errors.duration)}
                 />
-                <FieldError>{errors.duration}</FieldError>
+                <FieldError id="duration-error">{errors.duration}</FieldError>
               </Field>
               <Field data-invalid={!!errors.capacity}>
                 <FieldLabel htmlFor="capacity">정원(명)</FieldLabel>
@@ -304,9 +319,10 @@ export function TourPlanPage() {
                   value={form.capacity}
                   onChange={(event) => update({ capacity: event.target.value })}
                   aria-invalid={!!errors.capacity}
+                  aria-describedby={errorIdOf('capacity', errors.capacity)}
                 />
                 <FieldDescription>3명 이상, 허니문 낭만 투어는 짝수</FieldDescription>
-                <FieldError>{errors.capacity}</FieldError>
+                <FieldError id="capacity-error">{errors.capacity}</FieldError>
               </Field>
             </div>
 
@@ -329,8 +345,9 @@ export function TourPlanPage() {
                           value={form.prices[level]}
                           onChange={(event) => updatePrice(level, event.target.value)}
                           aria-invalid={!!errors.prices[level]}
+                          aria-describedby={errorIdOf(`price-${level}`, errors.prices[level])}
                         />
-                        <FieldError>{errors.prices[level]}</FieldError>
+                        <FieldError id={`price-${level}-error`}>{errors.prices[level]}</FieldError>
                       </Field>
                     ))}
                   </div>
@@ -354,8 +371,9 @@ export function TourPlanPage() {
                         value={row.name}
                         onChange={(event) => updateTransport(row.id, { name: event.target.value })}
                         aria-invalid={!!rowErrors?.name}
+                        aria-describedby={errorIdOf(`transport-${row.id}-name`, rowErrors?.name)}
                       />
-                      <FieldError>{rowErrors?.name}</FieldError>
+                      <FieldError id={`transport-${row.id}-name-error`}>{rowErrors?.name}</FieldError>
                     </Field>
                     <Field data-invalid={!!rowErrors?.unitPrice}>
                       <FieldLabel htmlFor={`transport-${row.id}-price`}>{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
@@ -365,8 +383,9 @@ export function TourPlanPage() {
                         value={row.unitPrice}
                         onChange={(event) => updateTransport(row.id, { unitPrice: event.target.value })}
                         aria-invalid={!!rowErrors?.unitPrice}
+                        aria-describedby={errorIdOf(`transport-${row.id}-price`, rowErrors?.unitPrice)}
                       />
-                      <FieldError>{rowErrors?.unitPrice}</FieldError>
+                      <FieldError id={`transport-${row.id}-price-error`}>{rowErrors?.unitPrice}</FieldError>
                     </Field>
                     <Button
                       type="button"
@@ -395,7 +414,8 @@ export function TourPlanPage() {
             )}
             {resultUnknown && (
               <p className="text-sm text-muted-foreground">
-                같은 상품이 이미 등록됐을 수 있어 등록 단추를 막았습니다. 다시 등록하려면 화면을 새로 여세요.
+                이 화면에서는 상품이 등록됐는지 확인할 수 없어 등록 단추를 막았습니다. 같은 상품이 이미 등록됐을 수
+                있습니다. 그래도 다시 등록하려면 화면을 새로 여세요.
               </p>
             )}
             <Button type="submit" className="self-start" disabled={submitting || resultUnknown}>

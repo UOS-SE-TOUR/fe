@@ -201,6 +201,46 @@ describe('화면에서 막는 것', () => {
     expect(screen.queryByText('기간은 정수로 입력해 주세요.')).not.toBeInTheDocument()
   })
 
+  it('막은 칸은 그 이유 문구로 이어 읽힌다', async () => {
+    const { user } = await openPage()
+
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    expect(screen.getByLabelText('기간(일)')).toHaveAccessibleDescription('기간을 입력해 주세요.')
+    expect(screen.getByLabelText('교통 1 이름')).toHaveAccessibleDescription('교통 이름을 입력해 주세요.')
+    await user.type(screen.getByLabelText('기간(일)'), '3')
+    expect(screen.getByLabelText('기간(일)')).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('세 자리마다 쉼표를 찍은 수와 전각 숫자는 정수로 받고, 교통 이름은 앞뒤 공백을 떼어 보낸다', async () => {
+    const { user } = await openPage()
+    await fillGolfTour(user)
+    await user.clear(screen.getByLabelText('그랜드'))
+    await user.type(screen.getByLabelText('그랜드'), '1,500,000')
+    await user.clear(screen.getByLabelText('정원(명)'))
+    await user.type(screen.getByLabelText('정원(명)'), '２０')
+    await user.clear(screen.getByLabelText('교통 1 이름'))
+    await user.type(screen.getByLabelText('교통 1 이름'), '  전세 버스 ')
+    fetchMock.mockResolvedValueOnce(jsonResponse(201, { tourId: 16 }))
+
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    expect(await screen.findByText('상품 번호 16')).toBeInTheDocument()
+    expect(sentBody()).toEqual(golfRequest)
+  })
+
+  it('쉼표 자리가 틀린 수는 정수로 받지 않는다', async () => {
+    const { user } = await openPage()
+    await fillGolfTour(user)
+    await user.clear(screen.getByLabelText('그랜드'))
+    await user.type(screen.getByLabelText('그랜드'), '15,0000')
+
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    expect(screen.getByText('그랜드 가격은 정수로 입력해 주세요.')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('서버가 정수로 읽지 못하는 큰 수는 보내지 않는다', async () => {
     const { user } = await openPage()
     await fillGolfTour(user)
@@ -235,6 +275,28 @@ describe('서버에 맡기는 것', () => {
     expect(await screen.findByText('상품 번호 15')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('지난 서버 문구는 입력을 고치거나 다시 등록을 누르면 지운다', async () => {
+    const serverMessage = '정원은 3명 이상이어야 합니다.'
+    const { user } = await openPage()
+    await fillGolfTour(user)
+    // Response 본문은 한 번만 읽히니 부를 때마다 새로 만든다
+    fetchMock.mockImplementation(async () => jsonResponse(400, { message: serverMessage }))
+    await user.click(screen.getByRole('button', { name: '등록' }))
+    expect(await screen.findByText(serverMessage)).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('정원(명)'), '0')
+    expect(screen.queryByText(serverMessage)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '등록' }))
+    expect(await screen.findByText(serverMessage)).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('기간(일)'))
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    expect(screen.queryByText(serverMessage)).not.toBeInTheDocument()
+    expect(screen.getByText('기간을 입력해 주세요.')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('처리됐는지 모르는 실패', () => {
@@ -250,7 +312,7 @@ describe('처리됐는지 모르는 실패', () => {
     await user.click(screen.getByRole('button', { name: '등록' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
-    expect(screen.getByText(/같은 상품이 이미 등록됐을 수 있어/)).toBeInTheDocument()
+    expect(screen.getByText(/확인할 수 없어 등록 단추를 막았습니다/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '등록' })).toBeDisabled()
 
     await user.type(screen.getByLabelText('기간(일)'), '0')

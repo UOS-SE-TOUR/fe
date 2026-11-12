@@ -7,6 +7,7 @@ import {
   CONNECTION_FAILED_MESSAGE,
   GATEWAY_TIMEOUT_MESSAGE,
   showError,
+  UNKNOWN_RESULT_MESSAGE,
 } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { jsonResponse, stubFetch } from '@/test/http'
@@ -76,11 +77,41 @@ describe('ApiClient 요청', () => {
     expect(error.message).toBe(CONNECTION_FAILED_MESSAGE)
   })
 
-  it('POST 성공 응답의 본문을 못 받으면 처리됐는지 알 수 없다는 문구로 던진다(다시 보내면 신청이 두 번 될 수 있다)', async () => {
-    fetchMock.mockResolvedValue(new Response('<!doctype html>', { status: 200 }))
+})
 
-    const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }))
-    expect(error).toMatchObject({ status: 200, message: GATEWAY_TIMEOUT_MESSAGE })
+describe('다시 보내면 두 번 처리되는 요청(unsafeToRetry)', () => {
+  const unsafe = { unsafeToRetry: true }
+
+  it('연결이 끊기면 처리됐는지 알 수 없다는 문구와 표시를 붙여 던진다', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }, unsafe))
+    expect(error).toMatchObject({ status: null, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
+  })
+
+  it.each([
+    ['본문이 빈 502(개발 서버 프록시)', new Response('', { status: 502 })],
+    ['HTML 본문의 502(호스팅)', new Response('<html>Bad Gateway</html>', { status: 502 })],
+    ['성공했는데 본문이 JSON이 아님', new Response('<!doctype html>', { status: 200 })],
+  ])('%s도 처리됐는지 알 수 없다고 던진다', async (_, response) => {
+    fetchMock.mockResolvedValue(response)
+
+    const error = await caught(ApiClient.post('/api/v1/staff/items', { name: '골프공' }, unsafe))
+    expect(error).toMatchObject({ status: response.status, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
+  })
+
+  it('서버 문구가 있는 실패는 그 문구로 던지고 처리됐는지 모름 표시를 붙이지 않는다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '남은 자리보다 인원이 많습니다.' }))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }, unsafe))
+    expect(error).toMatchObject({ status: 400, message: '남은 자리보다 인원이 많습니다.', resultUnknown: false })
+  })
+
+  it('옵션이 없는 POST(가격 계산 등)는 연결이 끊기면 연결 실패 문구로 던진다', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings/quote', { tourId: 1 }))
+    expect(error).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE, resultUnknown: false })
   })
 })
 
@@ -98,7 +129,7 @@ describe('ApiClient 오류 문구', () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
     const error = await caught(ApiClient.get('/api/v1/tours'))
-    expect(error).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE, handled: false })
+    expect(error).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE, handled: false, resultUnknown: false })
   })
 
   it.each([
@@ -113,18 +144,18 @@ describe('ApiClient 오류 문구', () => {
     expect(error).toMatchObject({ status: response.status, message: CONNECTION_FAILED_MESSAGE })
   })
 
-  it('문구 없는 504는 처리됐는지 알 수 없다는 문구로 던진다', async () => {
+  it('문구 없는 504는 처리됐는지 알 수 없다는 문구와 표시를 붙여 던진다', async () => {
     fetchMock.mockResolvedValue(new Response('<html>Gateway Timeout</html>', { status: 504 }))
 
     const error = await caught(ApiClient.post('/api/v1/bookings', {}))
-    expect(error).toMatchObject({ status: 504, message: GATEWAY_TIMEOUT_MESSAGE })
+    expect(error).toMatchObject({ status: 504, message: GATEWAY_TIMEOUT_MESSAGE, resultUnknown: true })
   })
 
-  it('문구가 있는 504는 그 문구를 쓴다', async () => {
+  it('문구가 있는 504는 그 문구를 쓰고, 처리됐는지 모름 표시는 그대로 붙인다', async () => {
     fetchMock.mockResolvedValue(jsonResponse(504, { message: '서버 응답이 늦었습니다.' }))
 
     const error = await caught(ApiClient.post('/api/v1/bookings', {}))
-    expect(error.message).toBe('서버 응답이 늦었습니다.')
+    expect(error).toMatchObject({ message: '서버 응답이 늦었습니다.', resultUnknown: true })
   })
 })
 
@@ -201,7 +232,7 @@ describe('showError', () => {
   })
 
   it('ApiClient가 이미 처리한 오류(401·403)는 다시 보여 주지 않는다', () => {
-    showError(new ApiError('권한이 없습니다.', 403, true))
+    showError(new ApiError('권한이 없습니다.', 403, { handled: true }))
 
     expect(toast.error).not.toHaveBeenCalled()
   })

@@ -5,6 +5,8 @@ import { landingPath, pagePaths, type MemberType } from '@/lib/pages'
 // 서버 문구({"message"})가 없는 실패의 문구. 504는 서버 앞단 Nginx가 504에 주는 문구와 같다
 export const CONNECTION_FAILED_MESSAGE = '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'
 export const GATEWAY_TIMEOUT_MESSAGE = '서버 응답이 늦어 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
+// unsafeToRetry 요청이 문구 없이 실패했을 때. 서버에 닿았는지 알 수 없어 "다시 시도"로만 이끌면 두 번 처리될 수 있다
+export const UNKNOWN_RESULT_MESSAGE = '서버와 연결이 끊겨 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
 const UNAUTHORIZED_MESSAGE = '로그인이 필요합니다.'
 export const FORBIDDEN_MESSAGE = '권한이 없습니다.'
 const UNEXPECTED_MESSAGE = '문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.'
@@ -14,18 +16,27 @@ export class ApiError extends Error {
   readonly status: number | null
   // 401·403처럼 ApiClient가 이미 처리했으면 true. 화면은 이 오류를 보여 주지 않는다
   readonly handled: boolean
+  // 서버가 처리했는지 알 수 없으면 true(504, unsafeToRetry 요청의 연결 끊김). 화면은 단추를 다시 열지 않고 결과를 다시 읽는다
+  readonly resultUnknown: boolean
 
-  constructor(message: string, status: number | null, handled = false) {
+  constructor(
+    message: string,
+    status: number | null,
+    { handled = false, resultUnknown = false }: { handled?: boolean; resultUnknown?: boolean } = {},
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.handled = handled
+    this.resultUnknown = resultUnknown
   }
 }
 
 interface RequestOptions {
   // false면 401·403도 처리하지 않고 던지기만 한다(AuthStore.restore)
   handleAuthErrors?: boolean
+  // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가). 문구 없는 실패를 "처리됐는지 알 수 없음"으로 던진다
+  unsafeToRetry?: boolean
 }
 
 // 401·403 때 로그인 상태를 다루는 길. AuthStore가 불러와질 때 등록한다(설계대로 AuthStore → ApiClient 한 방향만 import하고, ApiClient는 AuthStore를 모른다)
@@ -60,7 +71,7 @@ function handleUnauthorized(message: string): never {
   authHandlers?.clear()
   toast.error(message, { id: 'unauthorized' })
   navigateTo(pagePaths.LoginPage)
-  throw new ApiError(message, 401, true)
+  throw new ApiError(message, 401, { handled: true })
 }
 
 // 권한이 없다는 알림. 라우터가 막을 때와 403이 함께 와도 하나만 뜬다
@@ -73,7 +84,14 @@ async function handleForbidden(message: string): Promise<never> {
   notifyForbidden(message)
   const memberType = authHandlers ? await authHandlers.restore() : null
   navigateTo(landingPath(memberType))
-  throw new ApiError(message, 403, true)
+  throw new ApiError(message, 403, { handled: true })
+}
+
+// 서버 문구 없이 실패했다(연결 끊김, 호스팅·개발 서버 프록시가 낸 실패, 성공 응답의 본문을 못 받음)
+function failedWithoutMessage(status: number | null, options: RequestOptions): ApiError {
+  return options.unsafeToRetry
+    ? new ApiError(UNKNOWN_RESULT_MESSAGE, status, { resultUnknown: true })
+    : new ApiError(CONNECTION_FAILED_MESSAGE, status)
 }
 
 async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, options: RequestOptions): Promise<T> {
@@ -92,7 +110,7 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new ApiError(CONNECTION_FAILED_MESSAGE, null)
+    throw failedWithoutMessage(null, options)
   }
 
   let text: string | null
@@ -106,8 +124,7 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   if (response.ok) {
     if (text === '') return undefined as T
     if (parsed) return parsed.value as T
-    // 서버는 처리했는데 본문을 받지 못했다. GET이 아니면(신청 등) 다시 보내라고 하면 두 번 될 수 있다
-    throw new ApiError(method === 'GET' ? CONNECTION_FAILED_MESSAGE : GATEWAY_TIMEOUT_MESSAGE, response.status)
+    throw failedWithoutMessage(response.status, options)
   }
 
   const message = serverMessage(parsed)
@@ -115,9 +132,12 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
     if (response.status === 401) return handleUnauthorized(message ?? UNAUTHORIZED_MESSAGE)
     if (response.status === 403) return handleForbidden(message ?? FORBIDDEN_MESSAGE)
   }
+  if (response.status === 504) {
+    throw new ApiError(message ?? GATEWAY_TIMEOUT_MESSAGE, 504, { resultUnknown: true })
+  }
+  if (message) throw new ApiError(message, response.status)
   // 문구가 없으면 서버가 아니라 호스팅·개발 서버 프록시가 낸 실패다(be가 꺼짐 등)
-  const fallback = response.status === 504 ? GATEWAY_TIMEOUT_MESSAGE : CONNECTION_FAILED_MESSAGE
-  throw new ApiError(message ?? fallback, response.status)
+  throw failedWithoutMessage(response.status, options)
 }
 
 export const ApiClient = {

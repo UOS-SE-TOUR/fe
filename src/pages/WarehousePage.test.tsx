@@ -39,9 +39,9 @@ function requestAt(index: number) {
 
 async function fillForm(name: string, themeLabel: string, quantity: string) {
   const user = userEvent.setup()
-  await user.type(screen.getByLabelText('물품 이름'), name)
-  await user.selectOptions(screen.getByLabelText('테마'), themeLabel)
-  await user.type(screen.getByLabelText('수량'), quantity)
+  await user.type(screen.getByRole('textbox', { name: '물품 이름' }), name)
+  await user.selectOptions(screen.getByRole('combobox', { name: '테마' }), themeLabel)
+  await user.type(screen.getByRole('textbox', { name: '수량' }), quantity)
   return user
 }
 
@@ -120,8 +120,8 @@ describe('물품 추가', () => {
     })
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))
     expect(requestAt(2)).toMatchObject({ path: '/api/v1/staff/items', method: 'GET' })
-    expect(screen.getByLabelText('물품 이름')).toHaveValue('')
-    expect(screen.getByLabelText('수량')).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: '물품 이름' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: '수량' })).toHaveValue('')
   })
 
   it('있던 물품이면 처음 저장된 이름으로 알린다', async () => {
@@ -179,13 +179,13 @@ describe('물품 추가', () => {
     await user.click(screen.getByRole('button', { name: '추가' }))
     expect(screen.getByRole('alert')).toHaveTextContent('물품 이름을 입력해 주세요.')
 
-    await user.type(screen.getByLabelText('물품 이름'), '골프공')
+    await user.type(screen.getByRole('textbox', { name: '물품 이름' }), '골프공')
     await user.click(screen.getByRole('button', { name: '추가' }))
     expect(screen.getByRole('alert')).toHaveTextContent('테마를 골라 주세요.')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('요청이 끝날 때까지 추가 단추를 막아 한 번만 보낸다', async () => {
+  it('요청이 끝날 때까지 추가 단추와 입력칸을 막아 한 번만 보낸다', async () => {
     let respond: (response: Response) => void = () => {}
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, []))
@@ -198,6 +198,9 @@ describe('물품 추가', () => {
     await user.click(screen.getByRole('button', { name: '추가' }))
     const button = screen.getByRole('button', { name: '추가하는 중' })
     expect(button).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: '물품 이름' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '테마' })).toBeDisabled()
+    expect(screen.getByRole('textbox', { name: '수량' })).toBeDisabled()
     await user.click(button)
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
@@ -222,8 +225,8 @@ describe('물품 추가', () => {
     expect(requestAt(2)).toMatchObject({ path: '/api/v1/staff/items', method: 'GET' })
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled()
     expect(screen.getByText('물품 목록을 다시 불러온 뒤에 추가할 수 있습니다.')).toBeInTheDocument()
-    expect(screen.getByLabelText('물품 이름')).toHaveValue('')
-    expect(screen.getByLabelText('수량')).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: '물품 이름' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: '수량' })).toHaveValue('')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('물품 목록을 불러오는 중입니다.')).toBeInTheDocument()
 
@@ -268,7 +271,7 @@ describe('물품 추가', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))
     expect(screen.getByRole('status')).toBeEmptyDOMElement()
-    expect(screen.getByLabelText('물품 이름')).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: '물품 이름' })).toHaveValue('')
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 })

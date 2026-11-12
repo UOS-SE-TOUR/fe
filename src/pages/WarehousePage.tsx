@@ -29,8 +29,8 @@ function formatCount(count: number): string {
 
 function isItem(value: unknown): value is Item {
   if (typeof value !== 'object' || value === null) return false
-  const { name, quantity } = value as Partial<Item>
-  return typeof name === 'string' && typeof quantity === 'number'
+  const { id, name, theme, quantity } = value as Partial<Item>
+  return typeof id === 'number' && typeof name === 'string' && typeof theme === 'string' && typeof quantity === 'number'
 }
 
 type CheckedInput = { error: string } | { error: null; name: string; theme: Theme; count: number }
@@ -59,10 +59,6 @@ export function WarehousePage() {
   const addingRef = useRef(false)
   const loadSeq = useRef(0)
 
-  const showItems = useCallback((items: Item[]) => {
-    setItemsState({ status: 'loaded', items })
-  }, [])
-
   // 늦게 온 앞선 응답은 버린다(추가한 뒤 다시 읽은 목록을 덮지 않게)
   const loadItems = useCallback(() => {
     const seq = ++loadSeq.current
@@ -75,7 +71,8 @@ export function WarehousePage() {
           showError(new Error('창고 물품 목록 응답이 물품 배열이 아니다'))
           return
         }
-        showItems(items)
+        // 설계의 showItems(items)
+        setItemsState({ status: 'loaded', items })
         setNeedsRecheck(false)
       },
       (error: unknown) => {
@@ -84,7 +81,13 @@ export function WarehousePage() {
         showError(error)
       },
     )
-  }, [showItems])
+  }, [])
+
+  // 다시 읽는 동안 옛 수량을 지금 수량처럼 보이지 않게 표를 내린다
+  function reload() {
+    setItemsState({ status: 'loading' })
+    loadItems()
+  }
 
   useEffect(() => {
     loadItems()
@@ -99,14 +102,12 @@ export function WarehousePage() {
     setQuantity('')
   }
 
-  // 다시 보내지 않는다. 수량이 이미 더해졌을 수 있어 입력을 비우고(다시 보내려면 다시 입력한다) 목록을 다시 읽는다.
-  // 다시 읽는 동안 옛 수량을 지금 수량처럼 보이지 않게 표를 내린다
+  // 다시 보내지 않는다. 수량이 이미 더해졌을 수 있어 입력을 비우고(다시 보내려면 다시 입력한다) 목록을 다시 읽는다
   function showUnknownResult(error: ApiError) {
     setNeedsRecheck(true)
     clearInput()
     showError(error)
-    setItemsState({ status: 'loading' })
-    loadItems()
+    reload()
   }
 
   async function addItem(name: string, itemTheme: Theme, count: number) {
@@ -148,11 +149,6 @@ export function WarehousePage() {
     void addItem(input.name, input.theme, input.count)
   }
 
-  function reload() {
-    setItemsState({ status: 'loading' })
-    loadItems()
-  }
-
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6">
       <header className="flex items-center justify-between gap-4">
@@ -173,7 +169,13 @@ export function WarehousePage() {
         >
           <div className="flex flex-col gap-2">
             <Label htmlFor="item-name">물품 이름</Label>
-            <Input id="item-name" value={itemName} onChange={(event) => setItemName(event.target.value)} />
+            {/* 보내는 동안 입력칸도 막는다(끝나면 입력을 비우므로 그사이 입력한 것이 사라진다) */}
+            <Input
+              id="item-name"
+              value={itemName}
+              disabled={adding}
+              onChange={(event) => setItemName(event.target.value)}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="item-theme">테마</Label>
@@ -181,6 +183,7 @@ export function WarehousePage() {
               id="item-theme"
               className="w-full"
               value={theme}
+              disabled={adding}
               onChange={(event) => setTheme(event.target.value as Theme | '')}
             >
               <NativeSelectOption value="" disabled>
@@ -199,6 +202,7 @@ export function WarehousePage() {
               id="item-quantity"
               inputMode="numeric"
               value={quantity}
+              disabled={adding}
               onChange={(event) => setQuantity(event.target.value)}
             />
           </div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { RouteObject } from 'react-router'
 import { pagePaths, type PageName } from '@/lib/pages'
+import { WarehousePage } from '@/pages/WarehousePage'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PlaceholderPage } from '@/router/PlaceholderPage'
 
@@ -12,7 +13,7 @@ const pageElements: Record<PageName, ReactNode> = {
   TourSelectPage: <PlaceholderPage title="여행 상품 선택" />,
   StaffMainPage: <PlaceholderPage title="직원 첫 화면" />,
   TourPlanPage: <PlaceholderPage title="상품 기획" />,
-  WarehousePage: <PlaceholderPage title="창고" />,
+  WarehousePage: <WarehousePage />,
 }
 
 export const routes: RouteObject[] = [

@@ -129,6 +129,19 @@ describe('editPhoneNumber', () => {
     expect(editPhoneNumber(full, '010-12345678', 8)).toEqual({ value: full, caret: 8 })
   })
 
+  it('하이픈 하나만 골라 지우면 숫자는 그대로 두고 하이픈을 다시 붙인다', () => {
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentBackward', false)).toEqual({ value: full, caret: 8 })
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentForward', false)).toEqual({ value: full, caret: 8 })
+  })
+
+  it('숫자를 지워 01로 시작하는 11자리 넘는 번호가 되면 막지 않고 숫자만 보인다', () => {
+    // 0|212345678901에서 2를 지웠다(01로 시작하지 않으면 자릿수를 막지 않는다)
+    expect(editPhoneNumber('0212345678901', '012345678901', 1, 'deleteContentForward')).toEqual({
+      value: '012345678901',
+      caret: 1,
+    })
+  })
+
   it('11자리를 넘겨 치면 칸이 늘지 않고 커서도 그 자리에 남는다', () => {
     // 끝에 더 쳤다
     expect(editPhoneNumber(full, '010-1234-56789', 14, 'insertText')).toEqual({ value: full, caret: 13 })

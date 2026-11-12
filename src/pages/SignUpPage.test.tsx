@@ -210,6 +210,20 @@ describe('SignUpPage', () => {
     expect(phone.selectionStart).toBe(7)
   })
 
+  it('하이픈 하나만 골라 지우면 번호가 그대로다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234[-]5678
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 8, initialSelectionEnd: 9 })
+    expect(phone).toHaveValue('010-1234-5678')
+
+    // 고른 뒤에 커서만 두고 지우면 다시 하이픈 앞의 숫자를 지운다
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 9, initialSelectionEnd: 9 })
+    expect(phone).toHaveValue('010-1235-678')
+  })
+
   it('하이픈 바로 앞에서 Delete를 누르면 하이픈 뒤의 숫자를 지운다', async () => {
     renderAt('/signup')
     const phone = screen.getByLabelText<HTMLInputElement>('연락처')

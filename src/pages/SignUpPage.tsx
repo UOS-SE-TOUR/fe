@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,7 @@ export function SignUpPage() {
   const [form, setForm] = useState<SignUpForm>(emptyForm)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const phoneSelectionCollapsed = useRef(true)
 
   // 입력을 바꾸면 앞의 실패 문구는 낡은 것이라 지운다
   function update<K extends keyof SignUpForm>(key: K, value: SignUpForm[K]) {
@@ -48,11 +49,19 @@ export function SignUpPage() {
   function updatePhone(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget
     const { inputType } = event.nativeEvent as Partial<InputEvent>
-    const next = editPhoneNumber(form.phone, input.value, input.selectionStart ?? input.value.length, inputType)
+    const caret = input.selectionStart ?? input.value.length
+    const next = editPhoneNumber(form.phone, input.value, caret, inputType, phoneSelectionCollapsed.current)
+    phoneSelectionCollapsed.current = true
     if (input.value !== next.value) input.value = next.value
     // 자동 완성은 초점이 없는 칸에도 값을 넣는다. 그 칸으로 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
     if (document.activeElement === input) input.setSelectionRange(next.caret, next.caret)
     update('phone', next.value)
+  }
+
+  // 입력 이벤트에서는 입력 전에 고른 글자가 있었는지 알 수 없어, 키를 누를 때 본다
+  function notePhoneSelection(event: KeyboardEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    phoneSelectionCollapsed.current = input.selectionStart === input.selectionEnd
   }
 
   function showSignUpResult() {
@@ -140,6 +149,7 @@ export function SignUpPage() {
                   placeholder="010-1234-5678"
                   aria-describedby="signup-phone-help"
                   value={form.phone}
+                  onKeyDown={notePhoneSelection}
                   onChange={updatePhone}
                 />
                 <FieldDescription id="signup-phone-help">여행이 확정되면 이 휴대폰 번호로 문자를 보냅니다.</FieldDescription>

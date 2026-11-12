@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { memberTypes, pageAccess, type MemberType, type PageName } from '@/lib/pages'
+import { isMemberType, pageAccess, type MemberType, type PageName } from '@/lib/pages'
 import { ApiClient, ApiError, setAuthHandlers, showError } from '@/modules/ApiClient'
 
 // members/login·members/me 응답 본문
@@ -26,10 +26,10 @@ function setState(next: AuthState) {
   listeners.forEach((listener) => listener())
 }
 
-function isMember(value: unknown): value is Member {
+export function isMember(value: unknown): value is Member {
   if (typeof value !== 'object' || value === null) return false
   const { memberType, name } = value as Record<string, unknown>
-  return (memberTypes as readonly unknown[]).includes(memberType) && typeof name === 'string'
+  return isMemberType(memberType) && typeof name === 'string'
 }
 
 // 서버가 답했으면(로그인했거나 401) true, 다른 실패로 회원 구분을 확인하지 못했으면 false

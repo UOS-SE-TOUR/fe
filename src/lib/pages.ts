@@ -2,6 +2,10 @@
 export const memberTypes = ['CUSTOMER', 'STAFF'] as const
 export type MemberType = (typeof memberTypes)[number]
 
+export function isMemberType(value: unknown): value is MemberType {
+  return (memberTypes as readonly unknown[]).includes(value)
+}
+
 // 설계 3장의 «Page» 이름
 export type PageName =
   | 'LoginPage'

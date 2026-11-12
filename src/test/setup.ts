@@ -16,7 +16,7 @@ if (!window.matchMedia) {
   })) as typeof window.matchMedia
 }
 
-// jsdom에는 ResizeObserver가 없다. shadcn/ui의 라디오·체크박스(Radix)가 크기를 잴 때 부른다
+// jsdom에는 ResizeObserver도 없다. shadcn/ui의 라디오·체크박스(Radix)가 크기를 잴 때 부른다
 if (!window.ResizeObserver) {
   window.ResizeObserver = class {
     observe() {}

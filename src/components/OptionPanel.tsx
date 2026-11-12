@@ -83,6 +83,8 @@ export function OptionPanel(props: OptionPanelProps) {
   const { tourId, level, levelDetail, optionIds, price, message, disabled, onChangeOptions, onFinish } = props
   const key = `${tourId}:${level}`
   const [loaded, setLoaded] = useState<{ key: string; options: TourOptionsResponse | null } | null>(null)
+  // 불러오지 못했을 때 다시 불러오기를 누르면 올린다
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -98,10 +100,15 @@ export function OptionPanel(props: OptionPanelProps) {
     return () => {
       active = false
     }
-  }, [key, tourId, level])
+  }, [key, tourId, level, attempt])
 
   // undefined면 불러오는 중, null이면 불러오지 못했다
   const options = loaded?.key === key ? loaded.options : undefined
+
+  function retry() {
+    setLoaded(null)
+    setAttempt((count) => count + 1)
+  }
 
   function selectOption(items: TourOptionItem[], choice: string) {
     const others = optionIds.filter((id) => !items.some((item) => item.optionId === id))
@@ -120,7 +127,14 @@ export function OptionPanel(props: OptionPanelProps) {
       </CardHeader>
       <CardContent className="space-y-6">
         {options === undefined && <p className="text-sm text-muted-foreground">옵션을 불러오는 중입니다.</p>}
-        {options === null && <p className="text-sm text-muted-foreground">옵션을 불러오지 못했습니다.</p>}
+        {options === null && (
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-muted-foreground">옵션을 불러오지 못했습니다.</p>
+            <Button variant="outline" onClick={retry}>
+              다시 불러오기
+            </Button>
+          </div>
+        )}
         {options && (
           <>
             <SingleChoice

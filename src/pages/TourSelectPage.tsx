@@ -61,7 +61,7 @@ interface Detail {
   optionIds: number[]
   // 이 상품에서 마지막으로 나온 가격. 신청은 이 고른 내용으로 보낸다
   quote: PriceQuote | null
-  // quote가 지금 고른 투어 등급·인원·옵션의 가격이다(다시 받는 중이면 false)
+  // quote가 마지막으로 보낸 투어 등급·인원·옵션의 가격이다. 400으로 투어 등급·인원을 다시 받는 동안은 false
   priced: boolean
   discountConfirmed: boolean
   optionPanelOpen: boolean
@@ -328,6 +328,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       )
       if (isCurrent(seq)) updateDetail({ applyResult: result, optionPanelOpen: false })
     } catch (error) {
+      // 신청은 끝났다. 아래에서 목록을 다시 불러오는 동안 음성 입력을 막지 않는다
+      applying.current = false
       if (!isCurrent(seq)) return
       // 신청이 이미 됐을 수 있어 단추를 다시 열지 않는다
       if (error instanceof ApiError && error.resultUnknown) showTourList(error.message)
@@ -488,7 +490,7 @@ function TourDetail(props: TourDetailProps) {
           <CardTitle>{title}</CardTitle>
           {tour && (
             <p className="text-sm text-muted-foreground">
-              {formatDate(tour.departureDate)} 출발 · {tour.duration}일 · 남은 자리 {tour.remainingSeats}명
+              {formatDate(tour.departureDate)} 출발 · {tour.duration}일
             </p>
           )}
         </CardHeader>
@@ -559,7 +561,8 @@ function TourDetail(props: TourDetailProps) {
         </Button>
       )}
 
-      {submitted && detail.optionPanelOpen && !applyResult && (
+      {/* 단골 할인을 확인받는 동안은 옵션을 바꾸지 않는다 */}
+      {submitted && detail.optionPanelOpen && !applyResult && !confirming && (
         <OptionPanel
           tourId={detail.tourId}
           level={submitted.level}

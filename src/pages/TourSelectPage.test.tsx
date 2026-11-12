@@ -350,6 +350,24 @@ describe('단골 할인', () => {
     expect(screen.queryByText('단골 할인이 적용됩니다')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '신청하기' })).toBeEnabled()
   })
+
+  it('처음 나온 가격이 옵션을 바꿀 때 나왔어도, 확인받는 동안은 옵션 패널을 닫아 둔다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    replyOnce(QUOTE, failWith(400, NEGATIVE_PRICE))
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText(NEGATIVE_PRICE)
+
+    always.set(QUOTE, (body) => jsonResponse(200, quoteFor(body as QuoteRequest, 300_000)))
+    await openOptions(user)
+    await user.click(screen.getByRole('radio', { name: /^5등급 호텔/ }))
+
+    expect(await screen.findByText('단골 할인이 적용됩니다')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '옵션 고르기 끝' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '확인' }))
+    expect(screen.getByRole('button', { name: '옵션 고르기 끝' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^5등급 호텔/ })).toBeChecked()
+  })
 })
 
 describe('투어 등급·인원을 고른 뒤의 가격 계산', () => {
@@ -688,6 +706,21 @@ describe('applySelection(음성으로 채운 내용)', () => {
 })
 
 describe('그 밖의 실패', () => {
+  it('옵션 목록을 불러오지 못하면 패널에서 다시 불러올 수 있다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    replyOnce('GET /api/v1/tours/1/options?level=GRAND', new Response('', { status: 502 }))
+    await user.click(screen.getByRole('button', { name: '옵션 바꾸기' }))
+    expect(await screen.findByText('옵션을 불러오지 못했습니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '다시 불러오기' }))
+    expect(await screen.findByRole('radio', { name: /^5등급 호텔/ })).toBeInTheDocument()
+    expect(countOf('GET /api/v1/tours/1/options?level=GRAND')).toBe(2)
+  })
+
   it('상품 목록을 불러오지 못하면 알리고 다시 불러올 수 있다', async () => {
     replyOnce(TOURS, new Response('', { status: 502 }))
     const user = renderPage()

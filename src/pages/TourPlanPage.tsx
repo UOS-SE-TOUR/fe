@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -178,7 +179,7 @@ export function TourPlanPage() {
   const [message, setMessage] = useState<string | null>(null)
   // 상품이 이미 생겼을 수 있어 등록 단추를 다시 열지 않는다(직원용 상품 목록 API가 없어 다시 읽을 수 없다)
   const [resultUnknown, setResultUnknown] = useState(false)
-  // 등록했다. 성공 응답에서 상품 번호를 읽지 못했으면 tourId가 null
+  // 등록했다. 성공 응답에 상품 번호가 없으면 tourId가 null
   const [registered, setRegistered] = useState<{ tourId: number | null } | null>(null)
   // 단추가 막히기 전에 두 번 눌러도 한 번만 보낸다
   const submittingRef = useRef(false)
@@ -229,8 +230,11 @@ export function TourPlanPage() {
   async function registerTour(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submittingRef.current || resultUnknown) return
-    setSubmitted(true)
-    setMessage(null)
+    // 칸에 막은 이유(aria-describedby)를 먼저 그린 뒤 초점을 옮긴다
+    flushSync(() => {
+      setSubmitted(true)
+      setMessage(null)
+    })
     const { request, errors: blocked } = validation
     if (!request) {
       const id = firstInvalidId(form, blocked)
@@ -243,10 +247,7 @@ export function TourPlanPage() {
     try {
       showRegisterResult(tourIdOf(await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true })))
     } catch (error) {
-      // 성공 응답의 본문만 못 읽었으면 상품은 생겼다
-      if (error instanceof ApiError && error.resultUnknown && error.status !== null && error.status < 300) {
-        showRegisterResult(null)
-      } else if (error instanceof ApiError) {
+      if (error instanceof ApiError) {
         if (error.resultUnknown) setResultUnknown(true)
         if (!error.handled) setMessage(error.message)
       } else {
@@ -262,9 +263,16 @@ export function TourPlanPage() {
     <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">상품 기획</h1>
-        <Button variant="outline" asChild>
-          <Link to={pagePaths.StaffMainPage}>직원 첫 화면으로</Link>
-        </Button>
+        {/* 보내는 동안 떠나면 등록됐는지 알 수 없다 */}
+        {submitting ? (
+          <Button variant="outline" disabled>
+            직원 첫 화면으로
+          </Button>
+        ) : (
+          <Button variant="outline" asChild>
+            <Link to={pagePaths.StaffMainPage}>직원 첫 화면으로</Link>
+          </Button>
+        )}
       </header>
 
       {registered ? (

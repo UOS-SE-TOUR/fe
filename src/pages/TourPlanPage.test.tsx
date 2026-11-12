@@ -118,10 +118,13 @@ describe('등록', () => {
     expect(screen.getByLabelText('정원(명)')).toBeDisabled()
     expect(screen.getByRole('radio', { name: '허니문 낭만 투어' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '교통 선택지 더하기' })).toBeDisabled()
+    expect(screen.queryByRole('link', { name: '직원 첫 화면으로' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '직원 첫 화면으로' })).toBeDisabled()
 
     respond(jsonResponse(400, { message: '정원은 3명 이상이어야 합니다.' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('정원은 3명 이상이어야 합니다.')
     expect(screen.getByLabelText('정원(명)')).toBeEnabled()
+    expect(screen.getByRole('link', { name: '직원 첫 화면으로' })).toBeInTheDocument()
   })
 
   it('등록하면 다음 단추(다른 상품 기획하기)로 초점을 옮긴다', async () => {
@@ -134,13 +137,10 @@ describe('등록', () => {
     expect(await screen.findByRole('button', { name: '다른 상품 기획하기' })).toHaveFocus()
   })
 
-  it.each([
-    ['상품 번호가 없는 성공 응답', () => jsonResponse(201, {})],
-    ['본문을 읽지 못한 성공 응답', () => new Response('<html>', { status: 201 })],
-  ])('%s이면 등록했다고 보여 주되 상품 번호를 받지 못했다고 알린다', async (_, response) => {
+  it('상품 번호가 없는 성공 응답이면 등록했다고 보여 주되 상품 번호를 받지 못했다고 알린다', async () => {
     const { user } = await openPage()
     await fillGolfTour(user)
-    fetchMock.mockResolvedValueOnce(response())
+    fetchMock.mockResolvedValueOnce(jsonResponse(201, {}))
 
     await user.click(screen.getByRole('button', { name: '등록' }))
 
@@ -231,6 +231,10 @@ describe('화면에서 막는 것', () => {
     await user.type(screen.getByLabelText('그랜드'), '150만')
     await user.clear(screen.getByLabelText('교통 1 1인 추가 요금(원)'))
     await user.type(screen.getByLabelText('교통 1 1인 추가 요금(원)'), '0.0')
+    // 초점이 옮겨지는 그 순간에 막은 이유가 이미 칸에 이어져 있어야 낭독기가 함께 읽는다
+    const duration = screen.getByLabelText('기간(일)')
+    let describedAtFocus: string | null = null
+    duration.addEventListener('focus', () => (describedAtFocus = duration.getAttribute('aria-describedby')))
 
     await user.click(screen.getByRole('button', { name: '등록' }))
 
@@ -238,6 +242,8 @@ describe('화면에서 막는 것', () => {
     expect(screen.getByText('그랜드 가격은 정수로 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('추가 요금은 정수로 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByLabelText('기간(일)')).toHaveFocus()
+    expect(screen.getByLabelText('기간(일)')).toHaveAccessibleDescription('기간은 정수로 입력해 주세요.')
+    expect(describedAtFocus).toBe('duration-error')
     expect(fetchMock).not.toHaveBeenCalled()
 
     await user.clear(screen.getByLabelText('기간(일)'))
@@ -347,6 +353,8 @@ describe('처리됐는지 모르는 실패', () => {
   it.each([
     ['500', () => jsonResponse(500, { message: '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.' }), UNKNOWN_RESULT_MESSAGE],
     ['504', () => new Response('', { status: 504 }), GATEWAY_TIMEOUT_MESSAGE],
+    // be가 보낸 응답인지 알 수 없다(로그인 포털 등)
+    ['본문을 읽지 못한 성공 응답', () => new Response('<html>', { status: 200 }), UNKNOWN_RESULT_MESSAGE],
   ])('%s면 문구를 보여 주고 등록 단추를 다시 열지 않는다', async (_, response, message) => {
     const { user } = await openPage()
     await fillGolfTour(user)

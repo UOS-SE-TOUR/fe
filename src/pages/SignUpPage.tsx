@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { pagePaths, type MemberType } from '@/lib/pages'
+import { memberTypes, pagePaths, type MemberType } from '@/lib/pages'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 설계의 form. 칸 이름은 be의 회원가입 요청(SignUpRequest)과 같다
@@ -36,7 +36,7 @@ const memberTypeOptions: { value: MemberType; label: string }[] = [
 ]
 
 function isMemberType(value: string): value is MemberType {
-  return memberTypeOptions.some((option) => option.value === value)
+  return (memberTypes as readonly string[]).includes(value)
 }
 
 export function SignUpPage() {
@@ -45,8 +45,10 @@ export function SignUpPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // 입력을 바꾸면 앞의 실패 문구는 낡은 것이라 지운다
   function update<K extends keyof SignUpForm>(key: K, value: SignUpForm[K]) {
     setForm((current) => ({ ...current, [key]: value }))
+    setError(null)
   }
 
   function showSignUpResult() {

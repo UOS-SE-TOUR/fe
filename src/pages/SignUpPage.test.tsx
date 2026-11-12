@@ -116,6 +116,20 @@ describe('SignUpPage', () => {
     expect(toast.success).not.toHaveBeenCalled()
   })
 
+  it('입력을 바꾸면(회원 구분도) 앞의 실패 문구를 지운다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '직원 코드가 맞지 않아 직원으로 가입할 수 없습니다.' }))
+    renderAt('/signup')
+
+    await fillForm()
+    await user.click(screen.getByRole('radio', { name: '직원' }))
+    await user.type(screen.getByLabelText('직원 코드'), 'wrong-code')
+    await submit()
+    expect(await screen.findByRole('alert')).toHaveTextContent('직원 코드가 맞지 않아 직원으로 가입할 수 없습니다.')
+
+    await user.click(screen.getByRole('radio', { name: '고객' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('400이 아닌 실패는 공용 알림으로 보인다', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
     const router = renderAt('/signup')

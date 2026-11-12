@@ -12,7 +12,9 @@ export function renderAt(path: string) {
 
 // stubFetch로 바꾼 fetch에 n번째로 보낸 요청의 주소·메서드·본문
 export function sentRequest(fetchMock: { mock: { calls: Parameters<typeof fetch>[] } }, index = 0) {
-  const [path, init] = fetchMock.mock.calls[index]
+  const call = fetchMock.mock.calls.at(index)
+  if (!call) throw new Error(`${index}번째 요청을 보내지 않았다(보낸 요청 ${fetchMock.mock.calls.length}개)`)
+  const [path, init] = call
   return {
     path,
     method: init?.method,

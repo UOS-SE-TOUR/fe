@@ -44,6 +44,9 @@ export function LoginPage() {
     if (!submitting) void logIn(id, password)
   }
 
+  // 실패 문구는 아이디·비밀번호 어느 쪽이 틀렸는지 가리지 않아 두 칸 모두에 잇는다
+  const errorProps = error ? { 'aria-invalid': true, 'aria-describedby': 'login-error' } : {}
+
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
       <Card className="w-full max-w-sm">
@@ -58,7 +61,16 @@ export function LoginPage() {
             <FieldGroup className="gap-5">
               <Field>
                 <FieldLabel htmlFor="login-id">아이디</FieldLabel>
-                <Input id="login-id" autoComplete="username" value={id} onChange={(event) => setId(event.target.value)} />
+                <Input
+                  id="login-id"
+                  autoComplete="username"
+                  {...errorProps}
+                  value={id}
+                  onChange={(event) => {
+                    setId(event.target.value)
+                    setError(null)
+                  }}
+                />
               </Field>
               <Field>
                 <FieldLabel htmlFor="login-password">비밀번호</FieldLabel>
@@ -66,11 +78,15 @@ export function LoginPage() {
                   id="login-password"
                   type="password"
                   autoComplete="current-password"
+                  {...errorProps}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                    setError(null)
+                  }}
                 />
               </Field>
-              {error && <FieldError>{error}</FieldError>}
+              {error && <FieldError id="login-error">{error}</FieldError>}
               <Button type="submit" disabled={submitting}>
                 로그인
               </Button>

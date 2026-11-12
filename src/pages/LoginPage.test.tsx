@@ -73,6 +73,20 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: '로그인' })).toBeEnabled()
   })
 
+  it('실패 문구를 두 칸에 잇고, 입력을 고치면 지운다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '아이디 또는 비밀번호가 맞지 않습니다.' }))
+    renderAt('/login')
+
+    await logIn('hong', 'wrong-password')
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByLabelText('아이디')).toHaveAccessibleDescription('아이디 또는 비밀번호가 맞지 않습니다.')
+    expect(screen.getByLabelText('비밀번호')).toBeInvalid()
+
+    await userEvent.setup().type(screen.getByLabelText('비밀번호'), 'x')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('비밀번호')).toBeValid()
+  })
+
   it('400이 아닌 실패는 공용 알림으로 보인다', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
     const router = renderAt('/login')

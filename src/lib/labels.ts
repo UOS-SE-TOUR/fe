@@ -1,3 +1,11 @@
+import type { MemberType } from '@/lib/pages'
+
+// 회원 구분의 화면 이름
+export const memberTypeLabels: Record<MemberType, string> = {
+  CUSTOMER: '고객',
+  STAFF: '직원',
+}
+
 // 서버가 영문 값으로 주는 테마·투어 등급·상품 상태의 화면 이름(be의 Theme·TourLevel·TourStatus와 같은 값). 목록 순서가 화면에 보이는 순서다
 export const themes = [
   { value: 'HONEYMOON', label: '허니문 낭만 투어' },

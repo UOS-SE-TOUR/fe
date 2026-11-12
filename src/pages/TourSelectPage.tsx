@@ -330,14 +330,14 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         updateDetail({ quoting: false })
         if (requote.current) {
           requote.current = false
-          if (detailRef.current) void quoteSelection(detailRef.current)
+          if (detailRef.current) void selectLevel(detailRef.current)
         }
       }
     }
   }
 
-  // 투어 등급·인원으로 가격을 계산한다(설계의 selectLevel). 등급을 고르거나 인원을 치다 멈추면 부른다
-  async function quoteSelection(current: Detail) {
+  // 투어 등급·인원으로 가격을 계산한다(설계 5.4 selectLevel). 등급을 고르거나 인원을 치다 멈추면 부른다
+  async function selectLevel(current: Detail) {
     if (applying.current || current.applyResult) return
     // 가격 계산은 하나씩 보낸다. 계산 중에 고친 입력은 그 계산이 끝난 뒤 그때의 입력으로 계산한다
     // (겹쳐 보내면 먼저 보낸 계산의 되돌리기·문구가 섞인다)
@@ -379,14 +379,14 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     clearQuoteTimer()
     quoteTimer.current = setTimeout(() => {
       quoteTimer.current = null
-      if (detailRef.current) void quoteSelection(detailRef.current)
+      if (detailRef.current) void selectLevel(detailRef.current)
     }, HEADCOUNT_DELAY_MS)
   }
 
-  function selectLevel(level: TourLevel) {
+  function changeLevel(level: TourLevel) {
     clearQuoteTimer()
     updateDetail({ levelInput: level })
-    if (detailRef.current) void quoteSelection(detailRef.current)
+    if (detailRef.current) void selectLevel(detailRef.current)
   }
 
   function changeHeadcount(headcountInput: string) {
@@ -397,7 +397,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 인원 칸의 Enter와 다시 계산 단추. 기다리지 않고 계산한다
   function quoteNow() {
     clearQuoteTimer()
-    if (detailRef.current) void quoteSelection(detailRef.current)
+    if (detailRef.current) void selectLevel(detailRef.current)
   }
 
   function changeOptions(optionIds: number[]) {
@@ -565,7 +565,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
           theme={theme}
           pending={pending}
           onBack={() => showTourList(null)}
-          onSelectLevel={selectLevel}
+          onChangeLevel={changeLevel}
           onChangeHeadcount={changeHeadcount}
           onQuoteNow={quoteNow}
           onConfirmPrice={() => updateDetail({ discountConfirmed: true })}
@@ -585,7 +585,7 @@ interface TourDetailProps {
   theme: Theme | null
   pending: Pending
   onBack(): void
-  onSelectLevel(level: TourLevel): void
+  onChangeLevel(level: TourLevel): void
   onChangeHeadcount(headcount: string): void
   onQuoteNow(): void
   onConfirmPrice(): void
@@ -636,7 +636,7 @@ function TourDetail(props: TourDetailProps) {
                 <legend className="text-sm font-medium">투어 등급</legend>
                 <RadioGroup
                   value={detail.levelInput ?? ''}
-                  onValueChange={(value) => props.onSelectLevel(value as TourLevel)}
+                  onValueChange={(value) => props.onChangeLevel(value as TourLevel)}
                   disabled={locked}
                 >
                   {levels.levels.map((item) => (

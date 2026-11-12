@@ -30,7 +30,6 @@ export function CustomerMainPage() {
   const { member } = useAuthState()
   const { logOut, loggingOut } = useLogOut()
   const [previousTours, setPreviousTours] = useState<PreviousTourResponse[]>([])
-  const [popupOpen, setPopupOpen] = useState(false)
   // 이 화면을 연 동안 이전 여행을 부른 요청. 개발 서버(StrictMode)는 같은 화면에서 effect만 다시 돌리므로 ref가 남아
   // 그 요청을 다시 기다린다. 다른 화면에 갔다 돌아오면 새 화면이라 비어 있고, 표시도 이미 지워져 다시 부르지 않는다
   const previousToursRequest = useRef<Promise<unknown> | null>(null)
@@ -45,11 +44,6 @@ export function CustomerMainPage() {
       return previousToursRequest.current
     }
 
-    function showPreviousTours(tours: PreviousTourResponse[]) {
-      setPreviousTours(tours)
-      setPopupOpen(tours.length > 0)
-    }
-
     const request = loadPreviousTours()
     if (!request) return
     let active = true
@@ -60,7 +54,7 @@ export function CustomerMainPage() {
           showError(new Error('이전 여행 응답이 이전 여행 배열이 아니다'))
           return
         }
-        showPreviousTours(tours)
+        setPreviousTours(tours)
       },
       (error: unknown) => {
         if (active) showError(error)
@@ -95,7 +89,7 @@ export function CustomerMainPage() {
           </Card>
         </Link>
       </nav>
-      <PreviousToursPopup tours={previousTours} open={popupOpen} onClosePopup={() => setPopupOpen(false)} />
+      {previousTours.length > 0 && <PreviousToursPopup tours={previousTours} />}
     </main>
   )
 }

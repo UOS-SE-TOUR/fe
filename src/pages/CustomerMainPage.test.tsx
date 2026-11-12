@@ -57,6 +57,17 @@ function respondPreviousTours(tours: unknown = previousTours) {
   fetchMock.mockImplementation(async () => jsonResponse(200, tours))
 }
 
+// 개발 서버(main.tsx)처럼 StrictMode로 띄운다. effect가 두 번 돈다
+function renderStrictAt(path: string) {
+  const router = createMemoryRouter(routes, { initialEntries: [path] })
+  render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  )
+  return router
+}
+
 describe('CustomerMainPage', () => {
   it('로그인한 고객의 이름을 보여 준다', async () => {
     renderAt('/')
@@ -203,19 +214,33 @@ describe('이전 여행 팝업', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  // 개발 서버(main.tsx)는 StrictMode라 effect가 두 번 돈다
-  it('StrictMode에서도 팝업이 뜬다', async () => {
+  it('StrictMode에서도 이전 여행을 한 번만 부르고 팝업을 띄운다', async () => {
     markFromLogin()
     respondPreviousTours()
-    const router = createMemoryRouter(routes, { initialEntries: ['/'] })
-    render(
-      <StrictMode>
-        <RouterProvider router={router} />
-      </StrictMode>,
-    )
+    renderStrictAt('/')
 
     expect(await screen.findByRole('dialog', { name: '이전 여행' })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(isFromLogin()).toBe(false)
+  })
+
+  it('로그인 화면에서 고객으로 로그인하면(StrictMode) 고객 첫 화면에 이전 여행 팝업이 뜬다', async () => {
+    AuthStore.clear()
+    fetchMock.mockImplementation(async (path) =>
+      path === '/api/v1/members/login'
+        ? jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' })
+        : jsonResponse(200, previousTours),
+    )
+    const router = renderStrictAt('/login')
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText('아이디'), 'hong')
+    await user.type(screen.getByLabelText('비밀번호'), 'password1')
+    await user.click(screen.getByRole('button', { name: '로그인' }))
+
+    expect(await screen.findByRole('dialog', { name: '이전 여행' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/')
+    expect(sentRequest(fetchMock, 1)).toEqual({ path: '/api/v1/bookings/previous', method: 'GET', body: undefined })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

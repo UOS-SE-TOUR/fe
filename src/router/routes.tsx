@@ -28,7 +28,6 @@ export const routes: RouteObject[] = [
   ...(Object.keys(pageElements) as PageName[]).map((page) => ({
     path: pagePaths[page],
     errorElement: <PageLoadError />,
-    // 화면 파일은 작아 보통 순간에 받으므로, 받는 동안 문구를 띄우면 깜빡이기만 한다
     element: (
       <PageGate page={page}>
         <Suspense fallback={null}>{pageElements[page]}</Suspense>

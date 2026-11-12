@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useRouteError } from 'react-router'
 import { Button } from '@/components/ui/button'
 
-// 화면을 그리지 못했을 때(화면 파일을 못 받음 등) 라우터의 영어 개발자 오류 화면 대신 보인다
+// 라우터의 영어 개발자 오류 화면 대신 보인다
 export function PageLoadError() {
   const error = useRouteError()
 

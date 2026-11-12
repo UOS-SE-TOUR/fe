@@ -21,12 +21,13 @@ interface PreviousToursPopupProps {
 export function PreviousToursPopup({ tours, open, onClosePopup }: PreviousToursPopupProps) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClosePopup()}>
-      <DialogContent showCloseButton={false}>
+      {/* 낮은 화면에서도 제목·닫기 단추는 보이고 목록만 스크롤된다 */}
+      <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]">
         <DialogHeader>
           <DialogTitle>이전 여행</DialogTitle>
           <DialogDescription>지금까지 다녀온 여행 {tours.length}건입니다.</DialogDescription>
         </DialogHeader>
-        <ul className="-mx-6 max-h-[60svh] divide-y overflow-y-auto px-6">
+        <ul className="-mx-6 min-h-0 divide-y overflow-y-auto px-6">
           {tours.map((tour) => (
             <li key={tour.bookingId} className="flex items-start justify-between gap-4 py-3">
               <div className="min-w-0">

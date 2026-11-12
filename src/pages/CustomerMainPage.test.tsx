@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -184,17 +184,23 @@ describe('이전 여행 팝업', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('응답 전에 화면을 떠나도 응답을 받으면 "로그인 직후" 표시를 지운다', async () => {
+  it('응답 전에 다른 화면에 갔다 돌아오면 다시 부르지 않고 늦게 온 응답으로 팝업을 띄우지 않는다', async () => {
     markFromLogin()
     let respond: (response: Response) => void = () => {}
-    fetchMock.mockReturnValue(new Promise((resolve) => (respond = resolve)))
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
     renderAt('/')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    cleanup()
+    expect(isFromLogin()).toBe(false)
+    const user = userEvent.setup()
 
-    respond(jsonResponse(200, previousTours))
+    await user.click(screen.getByRole('link', { name: /^여행 상품 선택/ }))
+    await user.click(await screen.findByRole('link', { name: '고객 메뉴' }))
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
+    await act(async () => respond(jsonResponse(200, previousTours)))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
-    await waitFor(() => expect(isFromLogin()).toBe(false))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   // 개발 서버(main.tsx)는 StrictMode라 effect가 두 번 돈다
@@ -209,6 +215,7 @@ describe('이전 여행 팝업', () => {
     )
 
     expect(await screen.findByRole('dialog', { name: '이전 여행' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(isFromLogin()).toBe(false)
   })
 })

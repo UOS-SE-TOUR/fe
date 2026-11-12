@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { PreviousToursPopup } from '@/components/PreviousToursPopup'
 import { Button } from '@/components/ui/button'
@@ -31,25 +31,38 @@ export function CustomerMainPage() {
   const { logOut, loggingOut } = useLogOut()
   const [previousTours, setPreviousTours] = useState<PreviousTourResponse[]>([])
   const [popupOpen, setPopupOpen] = useState(false)
+  // 이 화면을 연 동안 이전 여행을 부른 요청. 개발 서버(StrictMode)는 같은 화면에서 effect만 다시 돌리므로 ref가 남아
+  // 그 요청을 다시 기다린다. 다른 화면에 갔다 돌아오면 새 화면이라 비어 있고, 표시도 이미 지워져 다시 부르지 않는다
+  const previousToursRequest = useRef<Promise<unknown> | null>(null)
 
-  // 로그인 직후에만 이전 여행을 읽는다(설계 loadPreviousTours). "로그인 직후" 표시는 응답을 받은 뒤 지운다 —
-  // 부르는 순간 지우면 개발 서버(StrictMode)가 effect를 두 번 돌릴 때 두 번째가 표시를 못 봐 팝업이 뜨지 않는다
   useEffect(() => {
-    if (!isFromLogin()) return
-    let active = true
-    ApiClient.get<unknown>('/api/v1/bookings/previous').then(
-      (tours) => {
+    // 로그인 직후에만 한 번 읽는다(설계 loadPreviousTours). 부르면서 "로그인 직후" 표시를 지운다
+    function loadPreviousTours(): Promise<unknown> | null {
+      if (!previousToursRequest.current && isFromLogin()) {
         clearFromLogin()
+        previousToursRequest.current = ApiClient.get<unknown>('/api/v1/bookings/previous')
+      }
+      return previousToursRequest.current
+    }
+
+    function showPreviousTours(tours: PreviousTourResponse[]) {
+      setPreviousTours(tours)
+      setPopupOpen(tours.length > 0)
+    }
+
+    const request = loadPreviousTours()
+    if (!request) return
+    let active = true
+    request.then(
+      (tours) => {
         if (!active) return
         if (!Array.isArray(tours) || !tours.every(isPreviousTour)) {
           showError(new Error('이전 여행 응답이 이전 여행 배열이 아니다'))
           return
         }
-        setPreviousTours(tours)
-        setPopupOpen(tours.length > 0)
+        showPreviousTours(tours)
       },
       (error: unknown) => {
-        clearFromLogin()
         if (active) showError(error)
       },
     )

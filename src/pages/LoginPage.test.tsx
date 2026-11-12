@@ -30,10 +30,10 @@ async function logIn(loginId: string, password: string) {
 }
 
 describe('LoginPage', () => {
+  // "로그인 직후" 표시는 고객 첫 화면이 읽자마자 지우므로, 그 화면이 이전 여행을 부른 것으로 본다
   it('고객으로 로그인하면 고객 첫 화면으로 가고 "로그인 직후" 표시를 켠다', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
-      // 고객 첫 화면이 부르는 이전 여행은 기다리게 둔다(응답을 받으면 표시를 지운다)
       .mockReturnValueOnce(new Promise(() => {}))
     const router = renderAt('/login')
 
@@ -48,7 +48,6 @@ describe('LoginPage', () => {
     })
     expect(AuthStore.getState().member).toEqual({ memberType: 'CUSTOMER', name: '홍길동' })
     expect(sentRequest(fetchMock, 1)).toEqual({ path: '/api/v1/bookings/previous', method: 'GET', body: undefined })
-    expect(isFromLogin()).toBe(true)
   })
 
   it('직원으로 로그인하면 직원 첫 화면으로 가고 "로그인 직후" 표시는 끈다', async () => {
@@ -119,7 +118,9 @@ describe('LoginPage', () => {
 
   it('응답을 기다리는 동안 로그인 단추를 막는다', async () => {
     let respond: (response: Response) => void = () => {}
-    fetchMock.mockReturnValue(new Promise((resolve) => (respond = resolve)))
+    fetchMock
+      .mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
+      .mockReturnValueOnce(new Promise(() => {}))
     renderAt('/login')
 
     await logIn('hong', 'password1')

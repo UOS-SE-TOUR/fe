@@ -40,23 +40,20 @@ export function SignUpPage() {
   const phoneInput = useRef<HTMLInputElement>(null)
   const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
 
-  // 입력 이벤트에서는 입력 전에 고른 범위를 알 수 없어 바로 앞의 beforeinput에서 적어 둔다(React의 onBeforeInput은 지우기에 오지 않는다)
+  // 입력 전에 고른 범위는 input 이벤트로 알 수 없어 beforeinput에서 적는다(React onBeforeInput은 지우기에 오지 않는다)
   useEffect(() => {
     const input = phoneInput.current
     if (!input) return
     const note = () => {
-      phoneSelectionBefore.current = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }
-    }
-    // 값이 그대로인 입력은 React가 onChange를 건너뛰므로, 문서까지 올라온 input(React가 처리한 뒤)에서 지운다
-    const forget = (event: Event) => {
-      if (event.target === input) phoneSelectionBefore.current = undefined
+      const selection = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }
+      phoneSelectionBefore.current = selection
+      // 그 입력이 끝나면 버린다. input이 오지 않거나 React가 onChange를 건너뛰어도 다음 입력에 남지 않게
+      setTimeout(() => {
+        if (phoneSelectionBefore.current === selection) phoneSelectionBefore.current = undefined
+      })
     }
     input.addEventListener('beforeinput', note)
-    document.addEventListener('input', forget)
-    return () => {
-      input.removeEventListener('beforeinput', note)
-      document.removeEventListener('input', forget)
-    }
+    return () => input.removeEventListener('beforeinput', note)
   }, [])
 
   // 입력을 바꾸면 앞의 실패 문구는 낡은 것이라 지운다
@@ -65,15 +62,14 @@ export function SignUpPage() {
     setError(null)
   }
 
-  // 연락처는 치는 대로 하이픈을 붙여 보인다. 칸의 값과 커서를 여기서 바로 맞춘다 — React가 나중에 값만 바꾸면 커서가 끝으로 튄다
+  // 연락처 칸의 값과 커서를 여기서 바로 맞춘다. React가 값만 바꾸면 커서가 끝으로 튄다
   function updatePhone(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget
     const { inputType } = event.nativeEvent as Partial<InputEvent>
     const caret = input.selectionStart ?? input.value.length
     const next = editPhoneNumber(form.phone, input.value, caret, inputType, phoneSelectionBefore.current)
-    phoneSelectionBefore.current = undefined
     if (input.value !== next.value) input.value = next.value
-    // 자동 완성은 초점이 없는 칸에도 값을 넣는다. 그 칸으로 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
+    // 자동 완성은 초점 없는 칸에도 값을 넣으니, 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
     if (document.activeElement === input) input.setSelectionRange(next.caret, next.selectionEnd ?? next.caret)
     if (next.value !== form.phone) update('phone', next.value)
   }

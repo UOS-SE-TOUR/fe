@@ -53,6 +53,14 @@ export function formatPhoneNumber(text: string, caret = text.length): PhoneNumbe
   return { value, caret: positionAfterDigits(value, caretDigits) }
 }
 
+// 하이픈만 지운 지우기 키가 지울 숫자의 자리(커서 앞 숫자 수에 더할 값)
+const HYPHEN_DELETE_STEPS: Partial<Record<string, number>> = {
+  deleteContentBackward: -1,
+  deleteWordBackward: -1,
+  deleteContentForward: 0,
+  deleteWordForward: 0,
+}
+
 export function editPhoneNumber(
   previous: string,
   text: string,
@@ -63,19 +71,19 @@ export function editPhoneNumber(
   const digits = digitsOf(text)
   const caretDigits = digitsOf(text.slice(0, caret)).length
   const deleting = inputType?.startsWith('delete') === true
-  // 커서에서 지우기 키로 하이픈만 지웠으면 그 너머의 숫자를 지운다 — 하이픈이 다시 붙어 아무 일도 안 일어난 것처럼 보이지 않게
-  const step = !deleting ? null : inputType?.endsWith('Backward') ? -1 : inputType?.endsWith('Forward') ? 0 : null
+  // 커서에서 하이픈만 지웠으면 그 너머의 숫자를 지운다(그대로 두면 하이픈이 다시 붙어 아무 일도 안 일어난다)
+  const step = inputType === undefined ? undefined : HYPHEN_DELETE_STEPS[inputType]
   const collapsed = !selectionBefore || selectionBefore.start === selectionBefore.end
-  if (step !== null && collapsed && text.length === previous.length - 1 && digits === digitsOf(previous)) {
+  if (step !== undefined && collapsed && text.length === previous.length - 1 && digits === digitsOf(previous)) {
     const index = caretDigits + step
-    const next = index >= 0 && index < digits.length ? formatPhoneNumber(digits.slice(0, index) + digits.slice(index + 1), index) : null
+    const next = formatPhoneNumber(digits.slice(0, index) + digits.slice(index + 1), index)
     if (next) return next
   }
   const next = formatPhoneNumber(text, caret)
   if (!next) {
-    // 지우기는 늘 받는다. 11자리를 넘긴 01 번호는 숫자만 보이고, 그대로 보내면 서버가 거절한다
+    // 지우기는 늘 받는다(11자리 넘는 01 번호는 숫자만 보인다)
     if (deleting) return { value: digits, caret: caretDigits }
-    // 넣거나 바꿔서 11자리를 넘기는 입력은 받지 않는다 — 잘라 남기면 쓰던 번호에 붙여 넣은 번호가 섞여 엉뚱한 번호가 된다
+    // 넣거나 바꿔서 11자리를 넘기면 받지 않는다(잘라 남기면 붙여 넣은 번호가 섞여 엉뚱한 번호가 된다)
     const caretBefore = caret - (text.length - previous.length)
     const { start, end } = selectionBefore ?? { start: caretBefore, end: caretBefore }
     const clamp = (position: number) => Math.max(0, Math.min(previous.length, position))

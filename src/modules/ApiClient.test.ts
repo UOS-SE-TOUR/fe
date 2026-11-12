@@ -6,6 +6,7 @@ import {
   ApiError,
   CONNECTION_FAILED_MESSAGE,
   GATEWAY_TIMEOUT_MESSAGE,
+  REQUEST_TIMEOUT_MS,
   showError,
   UNKNOWN_RESULT_MESSAGE,
 } from '@/modules/ApiClient'
@@ -66,6 +67,22 @@ describe('ApiClient 요청', () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 
     await expect(ApiClient.post('/api/v1/members/logout')).resolves.toBeUndefined()
+  })
+
+  it('응답이 시간 제한(REQUEST_TIMEOUT_MS)을 넘기면 연결 실패로 던진다', async () => {
+    const timer = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timer.signal)
+    fetchMock.mockImplementation(
+      (_, init) =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        }),
+    )
+
+    const pending = caught(ApiClient.get('/api/v1/members/me'))
+    expect(timeout).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS)
+    timer.abort(new DOMException('시간 초과', 'TimeoutError'))
+    expect(await pending).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE })
   })
 
   it('/api/v1/로 시작하지 않는 주소는 부르지 않는다', async () => {
@@ -239,6 +256,28 @@ describe('ApiClient 401·403 처리', () => {
     expect(navigate).toHaveBeenCalledWith('/login')
     expect(toast.error).toHaveBeenCalledWith('로그인이 필요합니다.', expect.anything())
     expect(toast.error).not.toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
+  })
+
+  it('403 뒤 다시 읽기가 서버 실패로 끝나면 권한이 없다고만 알리고 낡은 회원 구분으로 옮기지 않는다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(403, { message: '권한이 없습니다.' }))
+      .mockResolvedValueOnce(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }))
+
+    const error = await caught(ApiClient.get('/api/v1/bookings/previous'))
+    expect(error).toMatchObject({ status: 403, handled: true })
+    expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
+    expect(toast.error).toHaveBeenCalledWith('서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.')
+    expect(AuthStore.memberType).toBe('CUSTOMER')
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('401인데 이미 로그인 화면이면 옮기지 않는다', async () => {
+    location = '/login'
+    fetchMock.mockResolvedValue(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+
+    await caught(ApiClient.get('/api/v1/tours?theme=GOLF'))
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('403 뒤 회원 구분이 그대로이고 이미 그 첫 화면이면 옮기지 않는다', async () => {

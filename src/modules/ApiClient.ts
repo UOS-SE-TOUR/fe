@@ -9,6 +9,8 @@ export const UNKNOWN_RESULT_MESSAGE = '서버와 연결이 끊겨 처리됐는�
 const UNAUTHORIZED_MESSAGE = '로그인이 필요합니다.'
 export const FORBIDDEN_MESSAGE = '권한이 없습니다.'
 const UNEXPECTED_MESSAGE = '문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.'
+// 응답을 이만큼 기다리면 연결이 끊긴 것으로 본다. 운영은 Nginx가 60초에 504를 주니 그보다 조금 길게 둔다
+export const REQUEST_TIMEOUT_MS = 65_000
 
 export class ApiError extends Error {
   // 응답 없이 실패했으면 null
@@ -41,7 +43,8 @@ interface RequestOptions {
 // AuthStore가 불러와질 때 등록한다. ApiClient는 AuthStore를 import하지 않는다(설계의 의존 방향)
 interface AuthHandlers {
   clear(): void
-  restore(): Promise<MemberType | null>
+  // confirmed가 false면 서버 실패로 회원 구분을 확인하지 못했다
+  restore(): Promise<{ confirmed: boolean; memberType: MemberType | null }>
 }
 
 let authHandlers: AuthHandlers | null = null
@@ -65,10 +68,15 @@ function serverMessage(parsed: { value: unknown } | null): string | null {
   return typeof message === 'string' && message.trim() !== '' ? message : null
 }
 
+// 이미 그 화면이면 옮기지 않는다(옮기면 그 화면이 다시 불러 같은 오류가 되풀이된다)
+function moveTo(path: string) {
+  if (currentPath() !== path) navigateTo(path)
+}
+
 function handleUnauthorized(message: string): never {
   authHandlers?.clear()
   toast.error(message, { id: 'unauthorized' })
-  navigateTo(pagePaths.LoginPage)
+  moveTo(pagePaths.LoginPage)
   throw new ApiError(message, 401, { handled: true })
 }
 
@@ -79,13 +87,17 @@ export function notifyForbidden(message = FORBIDDEN_MESSAGE) {
 
 // 다른 탭에서 계정이 바뀌었을 수 있어 회원 구분을 다시 읽고 그 첫 화면으로 보낸다
 async function handleForbidden(message: string): Promise<never> {
-  const memberType = authHandlers ? await authHandlers.restore() : null
-  if (memberType) notifyForbidden(message)
+  const handled = new ApiError(message, 403, { handled: true })
+  const result = authHandlers ? await authHandlers.restore() : null
+  // 다시 읽지 못했으면(그 문구는 restore가 알렸다) 낡은 회원 구분으로 옮기지 않는다
+  if (!result?.confirmed) {
+    notifyForbidden(message)
+    throw handled
+  }
+  if (result.memberType) notifyForbidden(message)
   else toast.error(UNAUTHORIZED_MESSAGE, { id: 'unauthorized' })
-  const target = landingPath(memberType)
-  // 이미 그 화면이면 옮기지 않는다(옮기면 그 화면이 다시 불러 또 403이 된다)
-  if (currentPath() !== target) navigateTo(target)
-  throw new ApiError(message, 403, { handled: true })
+  moveTo(landingPath(result.memberType))
+  throw handled
 }
 
 function unknownResult(status: number | null): ApiError {
@@ -111,11 +123,9 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   try {
     response = await fetch(path, {
       method,
-      headers:
-        body === undefined
-          ? { Accept: 'application/json' }
-          : { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: { Accept: 'application/json', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
   } catch {
     throw connectionLost(null, options)

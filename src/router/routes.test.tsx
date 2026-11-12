@@ -124,7 +124,7 @@ describe('로그인한 채 다시 읽을 때(403 뒤)', () => {
 
     let respond: (response: Response) => void = () => {}
     fetchMock.mockReturnValue(new Promise((resolve) => (respond = resolve)))
-    let restoring = Promise.resolve()
+    let restoring = Promise.resolve(true)
     act(() => {
       restoring = AuthStore.restore()
     })

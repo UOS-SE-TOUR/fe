@@ -128,11 +128,11 @@ describe('로그인했을 때', () => {
 
   it('자기 화면은 그대로 열고 로그인한 이름을 보여 준다', async () => {
     AuthStore.setMember('STAFF', '김직원')
-    const router = renderAt('/staff/tours/new')
+    const router = renderAt('/staff/items')
 
-    expect(await screen.findByRole('heading', { name: '상품 기획' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '창고' })).toBeInTheDocument()
     expect(screen.getByText('김직원님으로 로그인했습니다.')).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/staff/tours/new')
+    expect(router.state.location.pathname).toBe('/staff/items')
   })
 
   it('없는 주소는 자기 첫 화면으로 보낸다', async () => {

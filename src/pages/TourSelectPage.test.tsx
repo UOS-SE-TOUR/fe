@@ -701,6 +701,17 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(screen.queryByText('상품 목록을 불러오는 중입니다.')).not.toBeInTheDocument()
   })
 
+  it('직후의 가격 계산이 400·409 밖의 실패면 알리고, 가격이 없으니 옵션 바꾸기를 열지 않는다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    replyOnce(QUOTE, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
+
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')
+    expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '가격 보기' })).toBeEnabled()
+  })
+
   it('신청을 처리하는 중이면 알리고 아무것도 바꾸지 않는다', async () => {
     let finish: (response: Response) => void = () => {}
     replyOnce(APPLY, () => new Promise<Response>((resolve) => (finish = resolve)))
@@ -729,6 +740,19 @@ describe('그 밖의 실패', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
     expect(countOf(TOURS)).toBe(1)
+  })
+
+  it('상품이 없어졌으면(투어 등급 404) 상품 목록을 다시 불러온다', async () => {
+    replyOnce('GET /api/v1/tours/1/levels', failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    replyOnce(TOURS, jsonResponse(200, golfTours), jsonResponse(200, golfTours.slice(1)))
+    const user = renderPage()
+    await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
+    await user.click(await screen.findByRole('button', { name: /12\/20 출발 5일/ }))
+
+    expect(await screen.findByRole('button', { name: /1\/3 출발 3일/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(countOf(TOURS)).toBe(2)
   })
 
   it('옵션 목록을 불러오지 못하면 패널에서 다시 불러올 수 있다', async () => {

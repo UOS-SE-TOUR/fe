@@ -78,35 +78,33 @@ function SingleChoice({ title, name, defaultLabel, items, optionIds, disabled, o
   )
 }
 
-// 옵션 목록은 상품·투어 등급마다 불러온다(요금 차이가 등급 기준이다). 고른 옵션과 가격은 TourSelectPage가 갖는다
+// 옵션 목록은 상품·투어 등급마다 불러온다(요금 차이가 등급 기준이다). 부르는 쪽이 상품·등급을 key로 주어,
+// 등급이 바뀌면 새로 그린다. 고른 옵션과 가격은 TourSelectPage가 갖는다
 export function OptionPanel(props: OptionPanelProps) {
   const { tourId, level, levelDetail, optionIds, price, message, disabled, onChangeOptions, onFinish } = props
-  const key = `${tourId}:${level}`
-  const [loaded, setLoaded] = useState<{ key: string; options: TourOptionsResponse | null } | null>(null)
+  // undefined면 불러오는 중, null이면 불러오지 못했다
+  const [options, setOptions] = useState<TourOptionsResponse | null | undefined>(undefined)
   // 불러오지 못했을 때 다시 불러오기를 누르면 올린다
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let active = true
     ApiClient.get<TourOptionsResponse>(`/api/v1/tours/${tourId}/options?level=${level}`)
-      .then((options) => {
-        if (active) setLoaded({ key, options })
+      .then((result) => {
+        if (active) setOptions(result)
       })
       .catch((error: unknown) => {
         if (!active) return
         showError(error)
-        setLoaded({ key, options: null })
+        setOptions(null)
       })
     return () => {
       active = false
     }
-  }, [key, tourId, level, attempt])
-
-  // undefined면 불러오는 중, null이면 불러오지 못했다
-  const options = loaded?.key === key ? loaded.options : undefined
+  }, [tourId, level, attempt])
 
   function retry() {
-    setLoaded(null)
+    setOptions(undefined)
     setAttempt((count) => count + 1)
   }
 

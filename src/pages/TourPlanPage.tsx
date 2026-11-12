@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { Link } from 'react-router'
+import { Link, useBlocker } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
@@ -14,8 +14,8 @@ import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 const grandAndPremiumOnly: readonly Theme[] = ['HONEYMOON', 'PARENTS']
 
 // be가 읽는 범위(기간·정원은 Java int, 가격·추가 요금은 Java long을 JavaScript가 정확히 담는 데까지). 넘으면 본문을 읽지 못해 400이다
-const INT_MAX = 2_147_483_647
-const SAFE_LONG_MAX = Number.MAX_SAFE_INTEGER
+const INT_RANGE = { min: -2_147_483_648, max: 2_147_483_647 }
+const SAFE_LONG_RANGE = { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }
 
 interface TransportRow {
   id: number
@@ -80,13 +80,19 @@ function toHalfWidth(text: string): string {
 }
 
 // 세 자리마다 쉼표를 찍은 수(1,500,000)도 받는다. name은 받침으로 끝나는 칸 이름이다(기간, 정원, 가격, 추가 요금)
-function parseInteger(text: string, name: string, max: number): { value?: number; error?: string } {
+function parseInteger(
+  text: string,
+  name: string,
+  range: { min: number; max: number },
+): { ok: true; value: number } | { ok: false; error: string } {
   const normalized = toHalfWidth(text).trim()
-  if (normalized === '') return { error: `${name}을 입력해 주세요.` }
-  if (!/^-?([0-9]+|[0-9]{1,3}(,[0-9]{3})+)$/.test(normalized)) return { error: `${name}은 정수로 입력해 주세요.` }
+  if (normalized === '') return { ok: false, error: `${name}을 입력해 주세요.` }
+  if (!/^-?([0-9]+|[0-9]{1,3}(,[0-9]{3})+)$/.test(normalized)) {
+    return { ok: false, error: `${name}은 정수로 입력해 주세요.` }
+  }
   const value = Number(normalized.replace(/,/g, ''))
-  if (Math.abs(value) > max) return { error: `${name}은 입력할 수 있는 범위를 넘었습니다.` }
-  return { value }
+  if (value < range.min || value > range.max) return { ok: false, error: `${name}은 입력할 수 있는 범위를 넘었습니다.` }
+  return { ok: true, value }
 }
 
 function hasErrors({ prices, transports, ...fields }: FormErrors): boolean {
@@ -104,17 +110,17 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
     errors.departureDate = '출발일을 9999년 12월 31일까지의 날짜로 입력해 주세요.'
   }
 
-  const duration = parseInteger(form.duration, '기간', INT_MAX)
-  errors.duration = duration.error
-  const capacity = parseInteger(form.capacity, '정원', INT_MAX)
-  errors.capacity = capacity.error
+  const duration = parseInteger(form.duration, '기간', INT_RANGE)
+  if (!duration.ok) errors.duration = duration.error
+  const capacity = parseInteger(form.capacity, '정원', INT_RANGE)
+  if (!capacity.ok) errors.capacity = capacity.error
 
   const prices: RegisterTourRequest['prices'] = []
   if (form.theme !== '') {
     for (const level of levelsOf(form.theme)) {
-      const price = parseInteger(form.prices[level], `${tourLevelLabel(level)} 가격`, SAFE_LONG_MAX)
-      if (price.error) errors.prices[level] = price.error
-      else if (price.value !== undefined) prices.push({ level, price: price.value })
+      const price = parseInteger(form.prices[level], `${tourLevelLabel(level)} 가격`, SAFE_LONG_RANGE)
+      if (price.ok) prices.push({ level, price: price.value })
+      else errors.prices[level] = price.error
     }
   }
 
@@ -122,12 +128,12 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
   for (const row of form.transports) {
     const name = row.name.trim()
     const nameError = name === '' ? '교통 이름을 입력해 주세요.' : undefined
-    const unitPrice = parseInteger(row.unitPrice, '추가 요금', SAFE_LONG_MAX)
-    if (nameError || unitPrice.error) errors.transports[row.id] = { name: nameError, unitPrice: unitPrice.error }
-    else if (unitPrice.value !== undefined) transports.push({ name, unitPrice: unitPrice.value })
+    const unitPrice = parseInteger(row.unitPrice, '추가 요금', SAFE_LONG_RANGE)
+    if (!nameError && unitPrice.ok) transports.push({ name, unitPrice: unitPrice.value })
+    else errors.transports[row.id] = { name: nameError, unitPrice: unitPrice.ok ? undefined : unitPrice.error }
   }
 
-  if (hasErrors(errors) || form.theme === '' || duration.value === undefined || capacity.value === undefined) {
+  if (hasErrors(errors) || form.theme === '' || !duration.ok || !capacity.ok) {
     return { errors, request: null }
   }
   return {
@@ -166,9 +172,24 @@ function tourIdOf(body: unknown): number | null {
 
 const noErrors: FormErrors = { prices: {}, transports: {} }
 
-// 칸이 막혔으면 그 이유 문구(FieldError id)를 칸에 잇는다
-function errorIdOf(id: string, error: string | undefined): string | undefined {
-  return error ? `${id}-error` : undefined
+// 칸이 막혔으면 그 이유 문구(BlockedReason)를 칸에 잇는다
+function errorIdOf(fieldId: string, error: string | undefined): string | undefined {
+  return error ? `${fieldId}-error` : undefined
+}
+
+// 칸마다 막은 이유. 초점과 aria-describedby로 칸과 함께 읽히니, 고칠 때마다 다시 낭독되지 않게 알림(role=alert)을 뗀다
+function BlockedReason({ fieldId, children }: { fieldId: string; children: ReactNode }) {
+  return (
+    <FieldError id={`${fieldId}-error`} role={undefined}>
+      {children}
+    </FieldError>
+  )
+}
+
+// 요청이 끝나 막았던 칸·단추가 풀렸는데 초점이 빠져 있는지
+function focusLost(): boolean {
+  const active = document.activeElement
+  return !active || active === document.body || active.matches(':disabled')
 }
 
 export function TourPlanPage() {
@@ -183,6 +204,19 @@ export function TourPlanPage() {
   const [registered, setRegistered] = useState<{ tourId: number | null } | null>(null)
   // 단추가 막히기 전에 두 번 눌러도 한 번만 보낸다
   const submittingRef = useRef(false)
+  const messageRef = useRef<HTMLParagraphElement>(null)
+
+  // 보내는 동안 떠나면 등록됐는지 알 수 없으니 화면 이동(뒤로 가기 포함)과 탭 닫기를 막는다
+  const blocker = useBlocker(submitting)
+  useEffect(() => {
+    if (!submitting && blocker.state === 'blocked') blocker.reset()
+  }, [submitting, blocker])
+  useEffect(() => {
+    if (!submitting) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [submitting])
 
   const validation = useMemo(() => validate(form), [form])
   const errors = submitted ? validation.errors : noErrors
@@ -242,6 +276,7 @@ export function TourPlanPage() {
       return
     }
 
+    const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     submittingRef.current = true
     setSubmitting(true)
     try {
@@ -255,7 +290,12 @@ export function TourPlanPage() {
       }
     } finally {
       submittingRef.current = false
-      setSubmitting(false)
+      flushSync(() => setSubmitting(false))
+      // 막혔던 칸·단추에서 빠진 초점을 되돌린다. 등록 단추가 계속 막히면(처리됐는지 모름) 문구로 옮긴다
+      if (focusLost()) {
+        const target = returnTo?.isConnected && !returnTo.matches(':disabled') ? returnTo : messageRef.current
+        target?.focus()
+      }
     }
   }
 
@@ -263,7 +303,6 @@ export function TourPlanPage() {
     <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">상품 기획</h1>
-        {/* 보내는 동안 떠나면 등록됐는지 알 수 없다 */}
         {submitting ? (
           <Button variant="outline" disabled>
             직원 첫 화면으로
@@ -312,7 +351,7 @@ export function TourPlanPage() {
                     </Field>
                   ))}
                 </RadioGroup>
-                <FieldError id="theme-error">{errors.theme}</FieldError>
+                <BlockedReason fieldId="theme">{errors.theme}</BlockedReason>
               </FieldSet>
 
               <Field data-invalid={!!errors.departureDate}>
@@ -326,7 +365,7 @@ export function TourPlanPage() {
                   aria-invalid={!!errors.departureDate}
                   aria-describedby={errorIdOf('departureDate', errors.departureDate)}
                 />
-                <FieldError id="departureDate-error">{errors.departureDate}</FieldError>
+                <BlockedReason fieldId="departureDate">{errors.departureDate}</BlockedReason>
               </Field>
 
               <div className="grid gap-7 sm:grid-cols-2">
@@ -340,7 +379,7 @@ export function TourPlanPage() {
                     aria-invalid={!!errors.duration}
                     aria-describedby={errorIdOf('duration', errors.duration)}
                   />
-                  <FieldError id="duration-error">{errors.duration}</FieldError>
+                  <BlockedReason fieldId="duration">{errors.duration}</BlockedReason>
                 </Field>
                 <Field data-invalid={!!errors.capacity}>
                   <FieldLabel htmlFor="capacity">정원(명)</FieldLabel>
@@ -353,7 +392,7 @@ export function TourPlanPage() {
                     aria-describedby={errorIdOf('capacity', errors.capacity)}
                   />
                   <FieldDescription>3명 이상, 허니문 낭만 투어는 짝수</FieldDescription>
-                  <FieldError id="capacity-error">{errors.capacity}</FieldError>
+                  <BlockedReason fieldId="capacity">{errors.capacity}</BlockedReason>
                 </Field>
               </div>
 
@@ -378,7 +417,7 @@ export function TourPlanPage() {
                             aria-invalid={!!errors.prices[level]}
                             aria-describedby={errorIdOf(`price-${level}`, errors.prices[level])}
                           />
-                          <FieldError id={`price-${level}-error`}>{errors.prices[level]}</FieldError>
+                          <BlockedReason fieldId={`price-${level}`}>{errors.prices[level]}</BlockedReason>
                         </Field>
                       ))}
                     </div>
@@ -404,7 +443,7 @@ export function TourPlanPage() {
                           aria-invalid={!!rowErrors?.name}
                           aria-describedby={errorIdOf(`transport-${row.id}-name`, rowErrors?.name)}
                         />
-                        <FieldError id={`transport-${row.id}-name-error`}>{rowErrors?.name}</FieldError>
+                        <BlockedReason fieldId={`transport-${row.id}-name`}>{rowErrors?.name}</BlockedReason>
                       </Field>
                       <Field data-invalid={!!rowErrors?.unitPrice}>
                         <FieldLabel htmlFor={`transport-${row.id}-price`}>{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
@@ -416,7 +455,7 @@ export function TourPlanPage() {
                           aria-invalid={!!rowErrors?.unitPrice}
                           aria-describedby={errorIdOf(`transport-${row.id}-price`, rowErrors?.unitPrice)}
                         />
-                        <FieldError id={`transport-${row.id}-price-error`}>{rowErrors?.unitPrice}</FieldError>
+                        <BlockedReason fieldId={`transport-${row.id}-price`}>{rowErrors?.unitPrice}</BlockedReason>
                       </Field>
                       <Button
                         type="button"
@@ -440,7 +479,7 @@ export function TourPlanPage() {
 
           <div className="flex flex-col gap-3">
             {message && (
-              <p role="alert" className="text-sm text-destructive">
+              <p ref={messageRef} role="alert" tabIndex={-1} className="text-sm text-destructive outline-none">
                 {message}
               </p>
             )}

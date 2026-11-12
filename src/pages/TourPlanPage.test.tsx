@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -127,6 +127,39 @@ describe('등록', () => {
     expect(screen.getByRole('link', { name: '직원 첫 화면으로' })).toBeInTheDocument()
   })
 
+  it('보내는 동안에는 화면 이동과 탭 닫기를 막고, 끝나면 풀어 준다', async () => {
+    const { user, router } = await openPage()
+    await fillGolfTour(user)
+    let respond: (response: Response) => void = () => {}
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    await act(() => router.navigate('/staff'))
+    expect(router.state.location.pathname).toBe('/staff/tours/new')
+    const leaving = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leaving)
+    expect(leaving.defaultPrevented).toBe(true)
+
+    respond(jsonResponse(201, { tourId: 12 }))
+    expect(await screen.findByText('상품 번호 12')).toBeInTheDocument()
+    const leavingAfter = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leavingAfter)
+    expect(leavingAfter.defaultPrevented).toBe(false)
+    await act(() => router.navigate('/staff'))
+    expect(router.state.location.pathname).toBe('/staff')
+  })
+
+  it('보내는 중에 401이 오면 로그인 화면으로 간다(이동을 막지 않는다)', async () => {
+    const { user, router } = await openPage()
+    await fillGolfTour(user)
+    fetchMock.mockResolvedValueOnce(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
   it('등록하면 다음 단추(다른 상품 기획하기)로 초점을 옮긴다', async () => {
     const { user } = await openPage()
     await fillGolfTour(user)
@@ -212,6 +245,8 @@ describe('화면에서 막는 것', () => {
     expect(screen.getByText('정원을 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('교통 이름을 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('추가 요금을 입력해 주세요.')).toBeInTheDocument()
+    // 칸마다 막은 이유는 알림으로 낭독하지 않는다(초점이 옮겨 간 칸과 함께 읽힌다)
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
 
     expect(screen.getByRole('radio', { name: '허니문 낭만 투어' })).toHaveFocus()
 
@@ -291,6 +326,23 @@ describe('화면에서 막는 것', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('be가 int로 읽을 수 있는 가장 작은 수까지는 서버에 보낸다', async () => {
+    const { user } = await openPage()
+    await fillGolfTour(user)
+    await user.clear(screen.getByLabelText('기간(일)'))
+    await user.type(screen.getByLabelText('기간(일)'), '-2147483649')
+    await user.click(screen.getByRole('button', { name: '등록' }))
+    expect(screen.getByText('기간은 입력할 수 있는 범위를 넘었습니다.')).toBeInTheDocument()
+
+    await user.clear(screen.getByLabelText('기간(일)'))
+    await user.type(screen.getByLabelText('기간(일)'), '-2147483648')
+    fetchMock.mockResolvedValueOnce(jsonResponse(400, { message: '기간은 1일 이상이어야 합니다.' }))
+    await user.click(screen.getByRole('button', { name: '등록' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('기간은 1일 이상이어야 합니다.')
+    expect(sentBody()).toEqual({ ...golfRequest, duration: -2147483648 })
+  })
+
   it('서버가 정수로 읽지 못하는 큰 수는 보내지 않는다', async () => {
     const { user } = await openPage()
     await fillGolfTour(user)
@@ -365,6 +417,8 @@ describe('처리됐는지 모르는 실패', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.getByText(/확인할 수 없어 등록 단추를 막았습니다/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '등록' })).toBeDisabled()
+    // 눌렀던 단추가 계속 막혀 있으니 초점은 문구로 옮긴다
+    expect(screen.getByRole('alert')).toHaveFocus()
 
     await user.type(screen.getByLabelText('기간(일)'), '0')
     expect(screen.getByRole('button', { name: '등록' })).toBeDisabled()

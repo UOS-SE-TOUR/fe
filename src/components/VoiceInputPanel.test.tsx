@@ -558,6 +558,12 @@ describe('오류', () => {
     await user.click(confirmButton())
     expect(await panel().findByText('골프 챌린지 투어는 2명만 신청할 수 있습니다.')).toBeInTheDocument()
     expect(panel().queryByText('말소리를 듣지 못했습니다. 다시 말해 주세요.')).not.toBeInTheDocument()
+
+    // 다시 확인해 다른 이유로 실패하면 지난 거부 문구는 남지 않는다
+    replyOnce(QUOTE, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(confirmButton())
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    expect(panel().queryByText('골프 챌린지 투어는 2명만 신청할 수 있습니다.')).not.toBeInTheDocument()
   })
 
   it('그 밖의 400은 고를 수 있는 후보를 바꾸지 않아 후보를 다시 받지 않는다', async () => {

@@ -275,8 +275,9 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
     const selection = draft && step === 'idle' ? selectionOf(draft) : null
     if (!draft || !selection) return
     const seq = session.current
-    // 앞서 알린 것(말소리 없음 등)은 이 확인의 결과와 섞이지 않게 지운다
+    // 앞서 알린 것(말소리 없음, 지난 확인의 거부 등)은 이 확인의 결과와 섞이지 않게 지운다
     setNotice(null)
+    updateDraft({ rejection: null })
     setStep('applying')
     const outcome = await applySelection(selection)
     if (seq !== session.current) return

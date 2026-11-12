@@ -132,7 +132,7 @@ export function WarehousePage() {
       addingRef.current = false
       setAdding(false)
     }
-    // 성공 응답인데 본문이 물품이 아니면(빈 본문 등) 처리됐는지 알 수 없다
+    // 성공 응답인데 본문이 물품이 아니면 처리됐는지 알 수 없다(빈 본문은 ApiClient가 이미 던졌다)
     if (!isItem(item)) {
       showUnknownResult(new ApiError(UNKNOWN_RESULT_MESSAGE, null, { resultUnknown: true }))
       return

@@ -731,11 +731,14 @@ describe('신청', () => {
     expect(countOf(TOURS)).toBe(2)
   })
 
-  it('처리됐는지 모르는 실패면 단추를 다시 열지 않고 상품 목록을 다시 불러온다', async () => {
+  it.each([
+    ['500', () => failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')],
+    ['본문이 빈 성공 응답', () => new Response('', { status: 201 })],
+  ])('처리됐는지 모르는 실패(%s)면 단추를 다시 열지 않고 상품 목록을 다시 불러온다', async (_, response) => {
     const user = renderPage()
     await priced(user)
 
-    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    replyOnce(APPLY, response())
     replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 8 }, ...golfTours.slice(1)]))
     await user.click(screen.getByRole('button', { name: '신청하기' }))
 

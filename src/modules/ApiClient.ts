@@ -127,7 +127,11 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   const parsed = text ? parseJson(text) : null
 
   if (response.ok) {
-    if (text === '') return undefined as T
+    if (text === '') {
+      // unsafeToRetry 요청은 성공하면 본문을 받는다. 비었으면 앞단이 응답을 잘랐을 수 있다
+      if (options.unsafeToRetry) throw unknownResult(response.status)
+      return undefined as T
+    }
     if (parsed) return parsed.value as T
     throw connectionLost(response.status, options)
   }

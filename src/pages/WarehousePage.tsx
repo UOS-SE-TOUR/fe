@@ -66,9 +66,15 @@ export function WarehousePage() {
   // 늦게 온 앞선 응답은 버린다(추가한 뒤 다시 읽은 목록을 덮지 않게)
   const loadItems = useCallback(() => {
     const seq = ++loadSeq.current
-    ApiClient.get<Item[]>(ITEMS_PATH).then(
+    ApiClient.get<unknown>(ITEMS_PATH).then(
       (items) => {
         if (seq !== loadSeq.current) return
+        // 성공 응답인데 본문이 목록이 아니면(빈 본문 등) 못 읽은 것으로 다룬다
+        if (!Array.isArray(items) || !items.every(isItem)) {
+          setItemsState({ status: 'failed' })
+          showError(new Error('창고 물품 목록 응답이 물품 배열이 아니다'))
+          return
+        }
         showItems(items)
         setNeedsRecheck(false)
       },
@@ -93,11 +99,13 @@ export function WarehousePage() {
     setQuantity('')
   }
 
-  // 다시 보내지 않는다. 수량이 이미 더해졌을 수 있어 입력을 비우고(다시 보내려면 다시 입력한다) 목록을 다시 읽는다
+  // 다시 보내지 않는다. 수량이 이미 더해졌을 수 있어 입력을 비우고(다시 보내려면 다시 입력한다) 목록을 다시 읽는다.
+  // 다시 읽는 동안 옛 수량을 지금 수량처럼 보이지 않게 표를 내린다
   function showUnknownResult(error: ApiError) {
     setNeedsRecheck(true)
     clearInput()
     showError(error)
+    setItemsState({ status: 'loading' })
     loadItems()
   }
 

@@ -86,6 +86,18 @@ describe('물품 목록', () => {
     expect(await screen.findByRole('table')).toBeInTheDocument()
     expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '20개']])
   })
+
+  it.each([
+    ['빈 본문', new Response('', { status: 200 })],
+    ['배열이 아닌 본문', jsonResponse(200, { message: '잘못된 응답' })],
+  ])('성공 응답인데 %s이면 못 읽은 것으로 보여 준다', async (_, response) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fetchMock.mockResolvedValueOnce(response)
+    renderPage()
+
+    expect(await screen.findByText('물품 목록을 불러오지 못했습니다.')).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('물품 추가', () => {
@@ -212,6 +224,8 @@ describe('물품 추가', () => {
     expect(screen.getByText('물품 목록을 다시 불러온 뒤에 추가할 수 있습니다.')).toBeInTheDocument()
     expect(screen.getByLabelText('물품 이름')).toHaveValue('')
     expect(screen.getByLabelText('수량')).toHaveValue('')
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.getByText('물품 목록을 불러오는 중입니다.')).toBeInTheDocument()
 
     respondList(jsonResponse(200, [{ ...golfBall, quantity: 30 }]))
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))

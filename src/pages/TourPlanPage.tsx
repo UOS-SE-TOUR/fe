@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { Link, useBlocker } from 'react-router'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { themeLabel, themes, tourLevelLabel, tourLevels, type Theme, type TourLevel } from '@/lib/labels'
@@ -172,17 +173,18 @@ function tourIdOf(body: unknown): number | null {
 
 const noErrors: FormErrors = { prices: {}, transports: {} }
 
-// 칸이 막혔으면 그 이유 문구(BlockedReason)를 칸에 잇는다
-function errorIdOf(fieldId: string, error: string | undefined): string | undefined {
-  return error ? `${fieldId}-error` : undefined
+// 칸 설명과, 칸이 막혔으면 그 이유 문구(BlockedReason)를 칸에 잇는다
+function describedBy(fieldId: string, error: string | undefined, hintId?: string): string | undefined {
+  return [hintId, error && `${fieldId}-error`].filter(Boolean).join(' ') || undefined
 }
 
-// 칸마다 막은 이유. 초점과 aria-describedby로 칸과 함께 읽히니, 고칠 때마다 다시 낭독되지 않게 알림(role=alert)을 뗀다
-function BlockedReason({ fieldId, children }: { fieldId: string; children: ReactNode }) {
+// 칸마다 막은 이유. 초점과 aria-describedby로 칸과 함께 읽히니, 고칠 때마다 다시 낭독되지 않게 알림(role=alert)으로 두지 않는다
+function BlockedReason({ fieldId, children }: { fieldId: string; children?: string }) {
+  if (!children) return null
   return (
-    <FieldError id={`${fieldId}-error`} role={undefined}>
+    <p id={`${fieldId}-error`} className="text-sm font-normal text-destructive">
       {children}
-    </FieldError>
+    </p>
   )
 }
 
@@ -205,21 +207,30 @@ export function TourPlanPage() {
   // 단추가 막히기 전에 두 번 눌러도 한 번만 보낸다
   const submittingRef = useRef(false)
   const messageRef = useRef<HTMLParagraphElement>(null)
+  const addTransportRef = useRef<HTMLButtonElement>(null)
 
   // 보내는 동안 떠나면 등록됐는지 알 수 없으니 화면 이동(뒤로 가기 포함)과 탭 닫기를 막는다
   const blocker = useBlocker(submitting)
   useEffect(() => {
-    if (!submitting && blocker.state === 'blocked') blocker.reset()
-  }, [submitting, blocker])
+    if (blocker.state !== 'blocked') return
+    toast.info('등록이 끝날 때까지 이 화면에 있어 주세요.', { id: 'tour-plan-leave' })
+    blocker.reset()
+  }, [blocker])
   useEffect(() => {
     if (!submitting) return
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      // 옛 브라우저는 이 값이 있어야 떠나기 확인 창을 띄운다
+      event.returnValue = ''
+    }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [submitting])
 
   const validation = useMemo(() => validate(form), [form])
   const errors = submitted ? validation.errors : noErrors
+  const classicHidden = form.theme !== '' && grandAndPremiumOnly.includes(form.theme)
+  const priceHintId = classicHidden ? 'price-hint' : undefined
 
   // 입력을 고치면 지난 서버 문구를 지운다. 처리됐는지 모르는 실패의 문구는 남긴다
   function edit(change: (current: TourForm) => TourForm) {
@@ -243,15 +254,27 @@ export function TourPlanPage() {
   }
 
   function addTransport() {
-    edit((current) => ({ ...current, transports: [...current.transports, newTransport()] }))
+    const row = newTransport()
+    edit((current) => ({ ...current, transports: [...current.transports, row] }))
   }
 
+  // 누른 빼기 단추가 줄과 함께 사라지니 초점을 더하기 단추로 옮긴다
   function removeTransport(id: number) {
-    edit((current) => ({ ...current, transports: current.transports.filter((row) => row.id !== id) }))
+    flushSync(() => edit((current) => ({ ...current, transports: current.transports.filter((row) => row.id !== id) })))
+    if (focusLost()) addTransportRef.current?.focus()
   }
 
   function showRegisterResult(tourId: number | null) {
     setRegistered({ tourId })
+  }
+
+  function showRegisterFailure(error: unknown) {
+    if (error instanceof ApiError) {
+      if (error.resultUnknown) setResultUnknown(true)
+      if (!error.handled) setMessage(error.message)
+    } else {
+      showError(error)
+    }
   }
 
   function showTourForm() {
@@ -279,23 +302,19 @@ export function TourPlanPage() {
     const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
     submittingRef.current = true
     setSubmitting(true)
-    try {
-      showRegisterResult(tourIdOf(await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true })))
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.resultUnknown) setResultUnknown(true)
-        if (!error.handled) setMessage(error.message)
-      } else {
-        showError(error)
-      }
-    } finally {
-      submittingRef.current = false
-      flushSync(() => setSubmitting(false))
-      // 막혔던 칸·단추에서 빠진 초점을 되돌린다. 등록 단추가 계속 막히면(처리됐는지 모름) 문구로 옮긴다
-      if (focusLost()) {
-        const target = returnTo?.isConnected && !returnTo.matches(':disabled') ? returnTo : messageRef.current
-        target?.focus()
-      }
+    const settle = await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true }).then(
+      (body) => () => showRegisterResult(tourIdOf(body)),
+      (error: unknown) => () => showRegisterFailure(error),
+    )
+    submittingRef.current = false
+    // 결과와 풀린 칸·단추를 한 번에 그린 뒤 빠진 초점을 되돌린다. 등록 단추가 계속 막히면(처리됐는지 모름) 문구로 옮긴다
+    flushSync(() => {
+      settle()
+      setSubmitting(false)
+    })
+    if (focusLost()) {
+      const target = returnTo?.isConnected && !returnTo.matches(':disabled') ? returnTo : messageRef.current
+      target?.focus()
     }
   }
 
@@ -317,14 +336,14 @@ export function TourPlanPage() {
       {registered ? (
         <Card role="status">
           <CardHeader>
-            <CardTitle>상품을 등록했습니다</CardTitle>
-            <CardDescription>
+            <CardTitle id="registered-title">상품을 등록했습니다</CardTitle>
+            <CardDescription id="registered-detail">
               {registered.tourId === null ? '상품 번호를 받지 못했습니다.' : `상품 번호 ${registered.tourId}`}
             </CardDescription>
           </CardHeader>
           <CardFooter>
             {/* 눌렀던 등록 단추가 사라지니 다음 단추로 옮긴다 */}
-            <Button autoFocus onClick={showTourForm}>
+            <Button autoFocus aria-describedby="registered-title registered-detail" onClick={showTourForm}>
               다른 상품 기획하기
             </Button>
           </CardFooter>
@@ -339,7 +358,7 @@ export function TourPlanPage() {
                 <RadioGroup
                   value={form.theme}
                   onValueChange={(theme) => update({ theme: theme as Theme })}
-                  aria-describedby={errorIdOf('theme', errors.theme)}
+                  aria-describedby={describedBy('theme', errors.theme)}
                   className="sm:grid-cols-2"
                 >
                   {themes.map((theme) => (
@@ -363,7 +382,7 @@ export function TourPlanPage() {
                   value={form.departureDate}
                   onChange={(event) => update({ departureDate: event.target.value })}
                   aria-invalid={!!errors.departureDate}
-                  aria-describedby={errorIdOf('departureDate', errors.departureDate)}
+                  aria-describedby={describedBy('departureDate', errors.departureDate)}
                 />
                 <BlockedReason fieldId="departureDate">{errors.departureDate}</BlockedReason>
               </Field>
@@ -377,7 +396,7 @@ export function TourPlanPage() {
                     value={form.duration}
                     onChange={(event) => update({ duration: event.target.value })}
                     aria-invalid={!!errors.duration}
-                    aria-describedby={errorIdOf('duration', errors.duration)}
+                    aria-describedby={describedBy('duration', errors.duration)}
                   />
                   <BlockedReason fieldId="duration">{errors.duration}</BlockedReason>
                 </Field>
@@ -389,9 +408,9 @@ export function TourPlanPage() {
                     value={form.capacity}
                     onChange={(event) => update({ capacity: event.target.value })}
                     aria-invalid={!!errors.capacity}
-                    aria-describedby={errorIdOf('capacity', errors.capacity)}
+                    aria-describedby={describedBy('capacity', errors.capacity, 'capacity-hint')}
                   />
-                  <FieldDescription>3명 이상, 허니문 낭만 투어는 짝수</FieldDescription>
+                  <FieldDescription id="capacity-hint">3명 이상, 허니문 낭만 투어는 짝수</FieldDescription>
                   <BlockedReason fieldId="capacity">{errors.capacity}</BlockedReason>
                 </Field>
               </div>
@@ -402,8 +421,8 @@ export function TourPlanPage() {
                   <FieldDescription>테마를 고르면 가격을 입력할 투어 등급이 나옵니다.</FieldDescription>
                 ) : (
                   <>
-                    {grandAndPremiumOnly.includes(form.theme) && (
-                      <FieldDescription>{`${themeLabel(form.theme)}는 그랜드와 프리미엄 가격만 받습니다.`}</FieldDescription>
+                    {classicHidden && (
+                      <FieldDescription id="price-hint">{`${themeLabel(form.theme)}는 그랜드와 프리미엄 가격만 받습니다.`}</FieldDescription>
                     )}
                     <div className="grid gap-4 sm:grid-cols-3">
                       {levelsOf(form.theme).map((level) => (
@@ -415,7 +434,11 @@ export function TourPlanPage() {
                             value={form.prices[level]}
                             onChange={(event) => updatePrice(level, event.target.value)}
                             aria-invalid={!!errors.prices[level]}
-                            aria-describedby={errorIdOf(`price-${level}`, errors.prices[level])}
+                            aria-describedby={describedBy(
+                              `price-${level}`,
+                              errors.prices[level],
+                              priceHintId,
+                            )}
                           />
                           <BlockedReason fieldId={`price-${level}`}>{errors.prices[level]}</BlockedReason>
                         </Field>
@@ -427,7 +450,7 @@ export function TourPlanPage() {
 
               <FieldSet>
                 <FieldLegend>교통 선택지</FieldLegend>
-                <FieldDescription>
+                <FieldDescription id="transport-hint">
                   1인 추가 요금이 0원인 기본 교통을 하나 넣고, 다른 교통에는 기본 교통보다 더 받는 1인 요금을 적습니다.
                 </FieldDescription>
                 {form.transports.map((row, index) => {
@@ -441,7 +464,7 @@ export function TourPlanPage() {
                           value={row.name}
                           onChange={(event) => updateTransport(row.id, { name: event.target.value })}
                           aria-invalid={!!rowErrors?.name}
-                          aria-describedby={errorIdOf(`transport-${row.id}-name`, rowErrors?.name)}
+                          aria-describedby={describedBy(`transport-${row.id}-name`, rowErrors?.name)}
                         />
                         <BlockedReason fieldId={`transport-${row.id}-name`}>{rowErrors?.name}</BlockedReason>
                       </Field>
@@ -453,7 +476,7 @@ export function TourPlanPage() {
                           value={row.unitPrice}
                           onChange={(event) => updateTransport(row.id, { unitPrice: event.target.value })}
                           aria-invalid={!!rowErrors?.unitPrice}
-                          aria-describedby={errorIdOf(`transport-${row.id}-price`, rowErrors?.unitPrice)}
+                          aria-describedby={describedBy(`transport-${row.id}-price`, rowErrors?.unitPrice, 'transport-hint')}
                         />
                         <BlockedReason fieldId={`transport-${row.id}-price`}>{rowErrors?.unitPrice}</BlockedReason>
                       </Field>
@@ -470,7 +493,7 @@ export function TourPlanPage() {
                     </div>
                   )
                 })}
-                <Button type="button" variant="outline" className="self-start" onClick={addTransport}>
+                <Button ref={addTransportRef} type="button" variant="outline" className="self-start" onClick={addTransport}>
                   교통 선택지 더하기
                 </Button>
               </FieldSet>

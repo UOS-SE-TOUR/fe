@@ -134,8 +134,10 @@ describe('등록', () => {
     fetchMock.mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
     await user.click(screen.getByRole('button', { name: '등록' }))
 
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
     await act(() => router.navigate('/staff'))
     expect(router.state.location.pathname).toBe('/staff/tours/new')
+    expect(info).toHaveBeenCalledWith('등록이 끝날 때까지 이 화면에 있어 주세요.', expect.anything())
     const leaving = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(leaving)
     expect(leaving.defaultPrevented).toBe(true)
@@ -167,7 +169,9 @@ describe('등록', () => {
 
     await user.click(screen.getByRole('button', { name: '등록' }))
 
-    expect(await screen.findByRole('button', { name: '다른 상품 기획하기' })).toHaveFocus()
+    const next = await screen.findByRole('button', { name: '다른 상품 기획하기' })
+    expect(next).toHaveFocus()
+    expect(next).toHaveAccessibleDescription('상품을 등록했습니다 상품 번호 12')
   })
 
   it('상품 번호가 없는 성공 응답이면 등록했다고 보여 주되 상품 번호를 받지 못했다고 알린다', async () => {
@@ -218,6 +222,8 @@ describe('등록', () => {
 
     expect(screen.getByLabelText('교통 2 이름')).toHaveValue('항공')
     expect(screen.queryByLabelText('교통 3 이름')).not.toBeInTheDocument()
+    // 누른 빼기 단추가 사라졌으니 초점은 더하기 단추로
+    expect(screen.getByRole('button', { name: '교통 선택지 더하기' })).toHaveFocus()
 
     fetchMock.mockResolvedValueOnce(jsonResponse(201, { tourId: 14 }))
     await user.click(screen.getByRole('button', { name: '등록' }))
@@ -288,11 +294,15 @@ describe('화면에서 막는 것', () => {
 
   it('막은 칸은 그 이유 문구로 이어 읽힌다', async () => {
     const { user } = await openPage()
+    expect(screen.getByLabelText('정원(명)')).toHaveAccessibleDescription('3명 이상, 허니문 낭만 투어는 짝수')
 
     await user.click(screen.getByRole('button', { name: '등록' }))
 
     expect(screen.getByLabelText('기간(일)')).toHaveAccessibleDescription('기간을 입력해 주세요.')
     expect(screen.getByLabelText('교통 1 이름')).toHaveAccessibleDescription('교통 이름을 입력해 주세요.')
+    expect(screen.getByLabelText('정원(명)')).toHaveAccessibleDescription(
+      '3명 이상, 허니문 낭만 투어는 짝수 정원을 입력해 주세요.',
+    )
     await user.type(screen.getByLabelText('기간(일)'), '3')
     expect(screen.getByLabelText('기간(일)')).not.toHaveAttribute('aria-describedby')
   })

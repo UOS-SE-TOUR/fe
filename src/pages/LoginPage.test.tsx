@@ -30,13 +30,16 @@ async function logIn(loginId: string, password: string) {
 }
 
 describe('LoginPage', () => {
-  it('고객으로 로그인하면 고객 첫 화면으로 가고 "로그인 직후" 표시를 켠다', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
+  // 표시는 고객 첫 화면이 읽자마자 지우므로 그 화면이 이전 여행을 부른 것으로 본다(로그인 직후가 아니면 부르지 않는 것은 CustomerMainPage.test)
+  it('고객으로 로그인하면 "로그인 직후" 표시를 켜고 고객 첫 화면으로 가, 그 화면이 이전 여행을 부른다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
+      .mockReturnValueOnce(new Promise(() => {}))
     const router = renderAt('/login')
 
     await logIn('hong', 'password1')
 
-    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
     expect(sentRequest(fetchMock)).toEqual({
       path: '/api/v1/members/login',
@@ -44,7 +47,7 @@ describe('LoginPage', () => {
       body: { loginId: 'hong', password: 'password1' },
     })
     expect(AuthStore.getState().member).toEqual({ memberType: 'CUSTOMER', name: '홍길동' })
-    expect(isFromLogin()).toBe(true)
+    expect(sentRequest(fetchMock, 1)).toEqual({ path: '/api/v1/bookings/previous', method: 'GET', body: undefined })
   })
 
   it('직원으로 로그인하면 직원 첫 화면으로 가고 "로그인 직후" 표시는 끈다', async () => {
@@ -115,7 +118,9 @@ describe('LoginPage', () => {
 
   it('응답을 기다리는 동안 로그인 단추를 막는다', async () => {
     let respond: (response: Response) => void = () => {}
-    fetchMock.mockReturnValue(new Promise((resolve) => (respond = resolve)))
+    fetchMock
+      .mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
+      .mockReturnValueOnce(new Promise(() => {}))
     renderAt('/login')
 
     await logIn('hong', 'password1')
@@ -123,7 +128,7 @@ describe('LoginPage', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     respond(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
-    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
   })
 
   it('응답 모양이 다르면 로그인하지 않고 공용 알림을 띄운다', async () => {

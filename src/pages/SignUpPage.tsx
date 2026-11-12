@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { memberTypeLabels } from '@/lib/labels'
 import { isMemberType, memberTypes, pagePaths, type MemberType } from '@/lib/pages'
+import { editPhoneNumber, type PhoneNumberSelection } from '@/lib/phoneNumber'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 설계의 form. 칸 이름은 be의 회원가입 요청(SignUpRequest)과 같다
@@ -36,11 +37,42 @@ export function SignUpPage() {
   const [form, setForm] = useState<SignUpForm>(emptyForm)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const phoneInput = useRef<HTMLInputElement>(null)
+  const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
+
+  // 입력 전에 고른 범위는 input 이벤트로 알 수 없어 beforeinput에서 적는다(React onBeforeInput은 지우기에 오지 않는다)
+  useEffect(() => {
+    const input = phoneInput.current
+    if (!input) return
+    const note = () => {
+      const selection = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }
+      phoneSelectionBefore.current = selection
+      // 그 입력이 끝나면 버린다. input이 오지 않거나 React가 onChange를 건너뛰어도 다음 입력에 남지 않게
+      setTimeout(() => {
+        if (phoneSelectionBefore.current === selection) phoneSelectionBefore.current = undefined
+      })
+    }
+    input.addEventListener('beforeinput', note)
+    return () => input.removeEventListener('beforeinput', note)
+  }, [])
 
   // 입력을 바꾸면 앞의 실패 문구는 낡은 것이라 지운다
   function update<K extends keyof SignUpForm>(key: K, value: SignUpForm[K]) {
     setForm((current) => ({ ...current, [key]: value }))
     setError(null)
+  }
+
+  // 연락처 칸의 값과 커서를 여기서 바로 맞춘다. React가 값만 바꾸면 커서가 끝으로 튄다
+  function updatePhone(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const { inputType } = event.nativeEvent as Partial<InputEvent>
+    const caret = input.selectionStart ?? input.value.length
+    const next = editPhoneNumber(form.phone, input.value, caret, inputType, phoneSelectionBefore.current)
+    if (input.value !== next.value) input.value = next.value
+    // 자동 완성은 초점 없는 칸에도 값을 넣으니, 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
+    if (document.activeElement === input) input.setSelectionRange(next.caret, next.selectionEnd ?? next.caret)
+    if (next.rejected) toast.info('휴대폰 번호는 11자리까지 입력할 수 있습니다.', { id: 'signup-phone-max-digits' })
+    if (next.value !== form.phone) update('phone', next.value)
   }
 
   function showSignUpResult() {
@@ -128,7 +160,8 @@ export function SignUpPage() {
                   placeholder="010-1234-5678"
                   aria-describedby="signup-phone-help"
                   value={form.phone}
-                  onChange={(event) => update('phone', event.target.value)}
+                  ref={phoneInput}
+                  onChange={updatePhone}
                 />
                 <FieldDescription id="signup-phone-help">여행이 확정되면 이 휴대폰 번호로 문자를 보냅니다.</FieldDescription>
               </Field>

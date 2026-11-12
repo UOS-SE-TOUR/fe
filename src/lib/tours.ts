@@ -83,6 +83,20 @@ export interface ApplyTourResponse {
   status: TourStatus
 }
 
+export interface PreviousTourResponse {
+  bookingId: number
+  tourId: number
+  title: string
+  // YYYY-MM-DD
+  departureDate: string
+  duration: number
+  level: TourLevel
+  levelName: string
+  headcount: number
+  // 신청할 때 정해진 최종 가격(원, 할인 뒤)
+  finalPrice: number
+}
+
 // 받아 오는 상품 목록의 상태
 export type ToursState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; list: TourSummary[] }
 

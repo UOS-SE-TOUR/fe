@@ -71,6 +71,7 @@ export function SignUpPage() {
     if (input.value !== next.value) input.value = next.value
     // 자동 완성은 초점 없는 칸에도 값을 넣으니, 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
     if (document.activeElement === input) input.setSelectionRange(next.caret, next.selectionEnd ?? next.caret)
+    if (next.rejected) toast.info('휴대폰 번호는 11자리까지 입력할 수 있습니다.', { id: 'signup-phone-max-digits' })
     if (next.value !== form.phone) update('phone', next.value)
   }
 

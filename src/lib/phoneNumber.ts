@@ -8,8 +8,9 @@ const COUNTRY_CODE = /^\s*\+82/
 export interface PhoneNumberInput {
   value: string
   caret: number
-  // 받지 않은 입력이면 입력 전에 고른 범위의 끝
+  // 받지 않은 입력이면 rejected와 입력 전에 고른 범위의 끝이 붙는다
   selectionEnd?: number
+  rejected?: true
 }
 
 export interface PhoneNumberSelection {
@@ -87,7 +88,7 @@ export function editPhoneNumber(
     const caretBefore = caret - (text.length - previous.length)
     const { start, end } = selectionBefore ?? { start: caretBefore, end: caretBefore }
     const clamp = (position: number) => Math.max(0, Math.min(previous.length, position))
-    return { value: previous, caret: clamp(start), selectionEnd: clamp(end) }
+    return { value: previous, caret: clamp(start), selectionEnd: clamp(end), rejected: true }
   }
   // 하이픈 바로 뒤의 숫자를 지웠으면 커서도 하이픈 뒤에 남긴다
   if (deleting && caret > 0 && !/[0-9]/.test(text[caret - 1]) && next.value[next.caret] === '-') {

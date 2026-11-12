@@ -14,6 +14,7 @@ beforeEach(() => {
   fetchMock = stubFetch()
   vi.spyOn(toast, 'error').mockImplementation(() => 'toast')
   vi.spyOn(toast, 'success').mockImplementation(() => 'toast')
+  vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
   user = userEvent.setup()
 })
 
@@ -169,8 +170,9 @@ describe('SignUpPage', () => {
     expect(phone).toHaveValue('010')
     await user.type(phone, '1')
     expect(phone).toHaveValue('010-1')
-    await user.type(phone, '23456789')
+    await user.type(phone, '2345678')
     expect(phone).toHaveValue('010-1234-5678')
+    expect(toast.info).not.toHaveBeenCalled()
     await submit()
 
     expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
@@ -212,6 +214,23 @@ describe('SignUpPage', () => {
 
     expect(phone).toHaveValue('010-1234-5678')
     expect(phone.selectionStart).toBe(6)
+    expect(toast.info).toHaveBeenCalledWith('휴대폰 번호는 11자리까지 입력할 수 있습니다.', {
+      id: 'signup-phone-max-digits',
+    })
+  })
+
+  it('쓰던 번호에 번호 전체를 붙여 넣으면 받지 않고 11자리까지라고 알린다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012')
+
+    await user.paste('01099998888')
+
+    expect(phone).toHaveValue('010-12')
+    expect([phone.selectionStart, phone.selectionEnd]).toEqual([6, 6])
+    expect(toast.info).toHaveBeenCalledWith('휴대폰 번호는 11자리까지 입력할 수 있습니다.', {
+      id: 'signup-phone-max-digits',
+    })
   })
 
   it('값이 그대로인 입력 뒤의 자동 완성은 그 앞 입력의 고른 범위를 쓰지 않는다', async () => {

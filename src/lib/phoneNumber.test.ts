@@ -165,6 +165,7 @@ describe('editPhoneNumber', () => {
       value: '0212345678901',
       caret: 1,
       selectionEnd: 2,
+      rejected: true,
     })
   })
 
@@ -174,9 +175,15 @@ describe('editPhoneNumber', () => {
       value: full,
       caret: 13,
       selectionEnd: 13,
+      rejected: true,
     })
     // 010-12|34-5678에 9를 넣었다. 입력 전 범위가 적혀 있지 않으면 넣은 글자 수로 되짚는다
-    expect(editPhoneNumber(full, '010-12934-5678', 7, 'insertText')).toEqual({ value: full, caret: 6, selectionEnd: 6 })
+    expect(editPhoneNumber(full, '010-12934-5678', 7, 'insertText')).toEqual({
+      value: full,
+      caret: 6,
+      selectionEnd: 6,
+      rejected: true,
+    })
   })
 
   it('쓰던 번호에 붙여 넣어 11자리를 넘으면 붙여 넣기를 받지 않는다', () => {
@@ -185,12 +192,14 @@ describe('editPhoneNumber', () => {
       value: '010-12',
       caret: 6,
       selectionEnd: 6,
+      rejected: true,
     })
     // 010-1|에 +82 10-9999-8888을 붙여 넣었다
     expect(editPhoneNumber('010-1', '010-1+82 10-9999-8888', 21, 'insertFromPaste', { start: 5, end: 5 })).toEqual({
       value: '010-1',
       caret: 5,
       selectionEnd: 5,
+      rejected: true,
     })
   })
 
@@ -200,6 +209,7 @@ describe('editPhoneNumber', () => {
       value: full,
       caret: 8,
       selectionEnd: 13,
+      rejected: true,
     })
   })
 })

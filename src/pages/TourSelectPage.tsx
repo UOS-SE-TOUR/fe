@@ -15,13 +15,19 @@ import { themeLabel, themes, tourStatusLabel, type Theme, type TourLevel } from 
 import { pagePaths } from '@/lib/pages'
 import {
   canApply,
+  getTours,
+  HEADCOUNT_MESSAGE,
+  parseHeadcount,
+  SEAT_SHORTAGE_MESSAGE,
+  tourSummaryLine,
   type ApplyTourResponse,
   type PriceQuote,
   type QuoteRequest,
   type TourLevelsResponse,
+  type ToursState,
   type TourSummary,
 } from '@/lib/tours'
-import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
+import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 
 // 음성(VoiceInputPanel)이 채운 내용
 export interface VoiceSelection {
@@ -36,14 +42,9 @@ export interface VoiceSelection {
 export type ApplySelectionResult = { status: 'priced' } | { status: 'rejected'; error: ApiError } | { status: 'failed' }
 export type ApplySelection = (selection: VoiceSelection) => Promise<ApplySelectionResult>
 
-// 서버(be Tour.checkSeats)의 문구. 옵션을 바꿀 때 이 400이면 투어 등급과 인원을 다시 받는다(설계 5.6)
-const SEAT_SHORTAGE_MESSAGE = '남은 자리보다 인원이 많습니다.'
 const CANNOT_APPLY_MESSAGE = '더는 신청할 수 없는 상품입니다. 다른 상품을 골라 주세요.'
-const HEADCOUNT_MESSAGE = '인원은 1 이상의 정수로 입력해 주세요.'
 const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
 const APPLYING_MESSAGE = '신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.'
-// be가 받는 인원(Integer)의 최댓값
-const MAX_HEADCOUNT = 2_147_483_647
 // 인원을 치다가 이만큼 멈추면 가격을 계산한다(글자마다 서버를 부르지 않게)
 export const HEADCOUNT_DELAY_MS = 500
 
@@ -80,8 +81,6 @@ interface Detail {
 // levels·apply는 입력까지 막고, seats(400 뒤 남은 자리를 다시 불러오는 중)는 옵션·신청만 막는다
 type Pending = 'levels' | 'seats' | 'apply' | null
 
-type ToursState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; list: TourSummary[] }
-
 function newDetail(tourId: number): Detail {
   return {
     tourId,
@@ -102,13 +101,6 @@ function newDetail(tourId: number): Detail {
   }
 }
 
-function parseHeadcount(input: string): number | null {
-  const trimmed = input.trim()
-  if (!/^\d+$/.test(trimmed)) return null
-  const value = Number(trimmed)
-  return value >= 1 && value <= MAX_HEADCOUNT ? value : null
-}
-
 // 투어 등급·인원 입력을 가격 계산에 보낼 수 있는지 본다. 화면 문구(아직 덜 골랐으면 null)나 보낼 내용을 돌려준다.
 // 화면에서 고를 때와 음성으로 채울 때가 같은 규칙을 쓴다
 function checkSelection(
@@ -123,14 +115,6 @@ function checkSelection(
   if (level && !levels?.levels.some((item) => item.level === level)) return { message: text ? LEVEL_MESSAGE : null }
   if (!level || headcount === null) return { message: null }
   return { selection: { level, headcount } }
-}
-
-function hasStatus(error: unknown, status: number): error is ApiError {
-  return error instanceof ApiError && error.status === status
-}
-
-function getTours(theme: Theme): Promise<TourSummary[]> {
-  return ApiClient.get<TourSummary[]>(`/api/v1/tours?theme=${theme}`)
 }
 
 function getLevels(tourId: number): Promise<TourLevelsResponse> {
@@ -158,9 +142,7 @@ function TourList({ tours, onSelect }: { tours: TourSummary[]; onSelect(tourId: 
           >
             <span className="space-y-1">
               <span className="block font-medium">{tour.title}</span>
-              <span className="block text-muted-foreground">
-                {formatDate(tour.departureDate)} 출발 · {tour.duration}일 · 남은 자리 {tour.remainingSeats}명
-              </span>
+              <span className="block text-muted-foreground">{tourSummaryLine(tour)}</span>
             </span>
             <Badge variant={canApply(tour) ? 'secondary' : 'outline'}>{tourStatusLabel(tour.status)}</Badge>
           </Button>

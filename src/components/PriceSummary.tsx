@@ -5,7 +5,7 @@ import type { PriceQuote } from '@/lib/tours'
 
 interface PriceSummaryProps {
   quote: PriceQuote
-  // 단골 할인을 아직 확인받지 않았다(상품을 고른 뒤 처음 나온 가격에 할인이 있을 때)
+  // 단골 할인을 아직 확인받지 않았다(상품을 고른 뒤 할인이 든 가격이 처음 나왔을 때. 한 상품에서 한 번만 확인받는다)
   confirming: boolean
   onConfirmPrice(): void
 }

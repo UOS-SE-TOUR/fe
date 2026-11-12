@@ -641,6 +641,7 @@ describe('applySelection(음성으로 채운 내용)', () => {
         <button onClick={() => void apply(selection)}>음성 결과 쓰기</button>
         <button onClick={() => void apply({ ...selection, tourId: 3 })}>음성 결과 쓰기(다른 상품)</button>
         <button onClick={() => void apply({ ...selection, level: 'CLASSIC' })}>음성 결과 쓰기(클래식)</button>
+        <button onClick={() => void apply({ ...selection, headcount: 0 })}>음성 결과 쓰기(0명)</button>
         <output aria-label="음성 결과">{result}</output>
       </div>
     )
@@ -723,18 +724,39 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(screen.getByRole('button', { name: '가격 보기' })).toBeEnabled()
   })
 
-  it('이 상품에 없는 투어 등급을 채웠으면, 그 뒤 가격 보기는 등급을 고르라고 한다', async () => {
+  it('이 상품에 없는 투어 등급을 채웠으면 가격을 계산하지 않고 부른 쪽에 넘기고, 가격 보기도 등급을 고르라고 한다', async () => {
     replyOnce('GET /api/v1/tours/1/levels', jsonResponse(200, { ...levels, levels: levels.levels.slice(1) }))
-    replyOnce(QUOTE, failWith(400, '허니문 낭만 투어는 그랜드와 프리미엄만 고를 수 있습니다.'))
     const user = renderPage(FakeVoiceInput)
     await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(클래식)' }))
-    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('rejected')
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent(
+      'rejected: 투어 등급을 골라 주세요.',
+    )
     expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '가격 보기' }))
     expect(screen.getByText('투어 등급을 골라 주세요.')).toBeInTheDocument()
-    expect(countOf(QUOTE)).toBe(1)
+    expect(countOf(QUOTE)).toBe(0)
     expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
+  })
+
+  it('정수가 아닌 인원을 채웠으면 가격을 계산하지 않고 부른 쪽에 넘긴다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(0명)' }))
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent(
+      'rejected: 인원은 1 이상의 정수로 입력해 주세요.',
+    )
+    expect(countOf(QUOTE)).toBe(0)
+  })
+
+  it('같은 테마면 받아 둔 상품 목록을 그대로 쓴다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
+    await screen.findByRole('button', { name: /12\/20 출발 5일/ })
+
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('priced')
+    expect(screen.getByText('남은 자리 10명')).toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(1)
   })
 
   it('신청을 처리하는 중이면 알리고 아무것도 바꾸지 않는다', async () => {

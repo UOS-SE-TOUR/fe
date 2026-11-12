@@ -31,8 +31,8 @@ export interface VoiceSelection {
   headcount: number
 }
 
-// applySelection 직후의 가격 계산 결과. rejected(400·409)는 VoiceInputPanel이 문구를 보여 주고 다시 말하게 한다.
-// failed는 그 밖의 실패로, 이 화면이 이미 알렸다
+// applySelection 직후의 가격 계산 결과. rejected(400·409, 또는 화면에서 고를 때처럼 상품에 없는 등급·정수가 아닌 인원)는
+// VoiceInputPanel이 문구를 보여 주고 다시 말하게 한다. failed는 그 밖의 실패로, 이 화면이 이미 알렸다
 export type ApplySelectionResult = { status: 'priced' } | { status: 'rejected'; error: ApiError } | { status: 'failed' }
 export type ApplySelection = (selection: VoiceSelection) => Promise<ApplySelectionResult>
 
@@ -367,6 +367,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     const seq = resetTo({
       theme: selection.theme,
       detail: { ...newDetail(selection.tourId), levelInput: selection.level, headcountInput: String(selection.headcount) },
+      // 같은 테마면 받아 둔 목록을 그대로 쓴다
+      list: selection.theme === theme ? tourList : undefined,
     })
     setPending('levels')
     try {
@@ -380,8 +382,15 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         return { status: 'failed' }
       }
       if (!isCurrent(seq)) return { status: 'failed' }
-      const priced = { level: selection.level, headcount: selection.headcount }
       updateDetail({ levels })
+      // 화면에서 고를 때(selectLevel)와 같은 규칙으로 거른다
+      if (!levels.levels.some((item) => item.level === selection.level)) {
+        return { status: 'rejected', error: new ApiError(LEVEL_MESSAGE, 400) }
+      }
+      if (parseHeadcount(String(selection.headcount)) === null) {
+        return { status: 'rejected', error: new ApiError(HEADCOUNT_MESSAGE, 400) }
+      }
+      const priced = { level: selection.level, headcount: selection.headcount }
       setPending('quote')
       try {
         const result = await quote(selection.tourId, priced, [])

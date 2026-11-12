@@ -192,8 +192,15 @@ describe('이전 여행 팝업', () => {
     await user.click(screen.getByRole('link', { name: /^여행 상품 선택/ }))
     await user.click(await screen.findByRole('link', { name: '고객 메뉴' }))
     expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
-    await act(async () => respond(jsonResponse(200, previousTours)))
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    const late = jsonResponse(200, previousTours)
+    const readBody = vi.spyOn(late, 'text')
+    await act(async () => respond(late))
+    // 본문을 다 읽은 뒤의 처리는 마이크로태스크뿐이라, 그다음 타이머 한 번이면 끝나 있다
+    await waitFor(() => expect(readBody).toHaveBeenCalled())
+    await act(async () => {
+      await readBody.mock.results[0].value
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)

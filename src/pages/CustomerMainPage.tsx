@@ -30,12 +30,11 @@ export function CustomerMainPage() {
   const { member } = useAuthState()
   const { logOut, loggingOut } = useLogOut()
   const [previousTours, setPreviousTours] = useState<PreviousTourResponse[]>([])
-  // 이 화면을 연 동안 이전 여행을 부른 요청. 개발 서버(StrictMode)는 같은 화면에서 effect만 다시 돌리므로 ref가 남아
-  // 그 요청을 다시 기다린다. 다른 화면에 갔다 돌아오면 새 화면이라 비어 있고, 표시도 이미 지워져 다시 부르지 않는다
+  // StrictMode가 effect를 다시 돌려도 ref는 남아 같은 요청을 기다린다. 다른 화면에서 돌아오면 비어 있어 다시 부르지 않는다
   const previousToursRequest = useRef<Promise<unknown> | null>(null)
 
   useEffect(() => {
-    // 로그인 직후에만 한 번 읽는다(설계 loadPreviousTours). 부르면서 "로그인 직후" 표시를 지운다
+    // 로그인 직후에만 한 번 읽고, 부르면서 그 표시를 지운다
     function loadPreviousTours(): Promise<unknown> | null {
       if (!previousToursRequest.current && isFromLogin()) {
         clearFromLogin()

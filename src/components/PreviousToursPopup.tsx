@@ -16,8 +16,7 @@ interface PreviousToursPopupProps {
   tours: PreviousTourResponse[]
 }
 
-// 설계 showPreviousTours(tours)는 고객 첫 화면이 받은 목록으로 이 팝업을 그리는 것이다. 서버가 준 순서(출발일이 최근인
-// 순서) 그대로 보여 주고, 상품 이름의 날짜에는 연도가 없어 출발일을 따로 보인다
+// 설계 showPreviousTours(tours)는 받은 목록으로 그리는 것이다. 상품 이름의 날짜엔 연도가 없어 출발일을 따로 보인다
 export function PreviousToursPopup({ tours }: PreviousToursPopupProps) {
   const [open, setOpen] = useState(true)
 
@@ -27,7 +26,6 @@ export function PreviousToursPopup({ tours }: PreviousToursPopupProps) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && closePopup()}>
-      {/* 낮은 화면에서도 제목·닫기 단추는 보이고 목록만 스크롤된다 */}
       <DialogContent showCloseButton={false} className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]">
         <DialogHeader>
           <DialogTitle>이전 여행</DialogTitle>

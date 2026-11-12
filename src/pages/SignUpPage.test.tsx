@@ -186,6 +186,18 @@ describe('SignUpPage', () => {
     expect(phone.selectionStart).toBe(6)
   })
 
+  it('꽉 찬 연락처 가운데에 더 쳐도 값과 커서가 그대로다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-12|34-5678
+    await user.type(phone, '9', { initialSelectionStart: 6, initialSelectionEnd: 6 })
+
+    expect(phone).toHaveValue('010-1234-5678')
+    expect(phone.selectionStart).toBe(6)
+  })
+
   it('하이픈 바로 뒤에서 Backspace를 누르면 하이픈 앞의 숫자를 지운다', async () => {
     renderAt('/signup')
     const phone = screen.getByLabelText<HTMLInputElement>('연락처')

@@ -59,6 +59,10 @@ export function WarehousePage() {
   const addingRef = useRef(false)
   const loadSeq = useRef(0)
 
+  const showItems = useCallback((items: Item[]) => {
+    setItemsState({ status: 'loaded', items })
+  }, [])
+
   // 늦게 온 앞선 응답은 버린다(추가한 뒤 다시 읽은 목록을 덮지 않게)
   const loadItems = useCallback(() => {
     const seq = ++loadSeq.current
@@ -71,8 +75,7 @@ export function WarehousePage() {
           showError(new Error('창고 물품 목록 응답이 물품 배열이 아니다'))
           return
         }
-        // 설계의 showItems(items)
-        setItemsState({ status: 'loaded', items })
+        showItems(items)
         setNeedsRecheck(false)
       },
       (error: unknown) => {
@@ -81,7 +84,7 @@ export function WarehousePage() {
         showError(error)
       },
     )
-  }, [])
+  }, [showItems])
 
   // 다시 읽는 동안 옛 수량을 지금 수량처럼 보이지 않게 표를 내린다
   function reload() {
@@ -134,8 +137,15 @@ export function WarehousePage() {
       showUnknownResult(new ApiError(UNKNOWN_RESULT_MESSAGE, null, { resultUnknown: true }))
       return
     }
-    showAddResult(item.name, count, item.quantity)
+    const added = item
+    showAddResult(added.name, count, added.quantity)
     clearInput()
+    // 다시 읽기 전에 표의 그 물품도 바로 바꾼다(알린 수량과 표의 수량이 어긋나 보이지 않게)
+    setItemsState((prev) =>
+      prev.status === 'loaded'
+        ? { ...prev, items: prev.items.map((row) => (row.id === added.id ? added : row)) }
+        : prev,
+    )
     loadItems()
   }
 

@@ -124,6 +124,26 @@ describe('물품 추가', () => {
     expect(screen.getByRole('textbox', { name: '수량' })).toHaveValue('')
   })
 
+  it('목록을 다시 읽기 전에도 표의 그 물품 수량을 바로 바꾼다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [tent, golfBall]))
+      .mockResolvedValueOnce(jsonResponse(200, { ...golfBall, quantity: 30 }))
+      .mockReturnValueOnce(new Promise(() => {}))
+    renderPage()
+    await screen.findByRole('table')
+
+    const user = await fillForm('골프공', '골프 챌린지 투어', '10')
+    await user.click(screen.getByRole('button', { name: '추가' }))
+
+    await waitFor(() =>
+      expect(rowTexts()).toEqual([
+        ['텐트', '아웃도어 트레킹 투어', '3개'],
+        ['골프공', '골프 챌린지 투어', '30개'],
+      ]),
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
   it('있던 물품이면 처음 저장된 이름으로 알린다', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, name: 'Golf Ball' }]))

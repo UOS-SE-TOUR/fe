@@ -4,6 +4,7 @@ import { pagePaths, type PageName } from '@/lib/pages'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
 import { StaffMainPage } from '@/pages/StaffMainPage'
+import { TourPlanPage } from '@/pages/TourPlanPage'
 import { TourSelectPage } from '@/pages/TourSelectPage'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PlaceholderPage } from '@/router/PlaceholderPage'
@@ -15,7 +16,7 @@ const pageElements: Record<PageName, ReactNode> = {
   CustomerMainPage: <PlaceholderPage title="고객 첫 화면" />,
   TourSelectPage: <TourSelectPage />,
   StaffMainPage: <StaffMainPage />,
-  TourPlanPage: <PlaceholderPage title="상품 기획" />,
+  TourPlanPage: <TourPlanPage />,
   WarehousePage: <PlaceholderPage title="창고" />,
 }
 

@@ -12,7 +12,7 @@ const UNEXPECTED_MESSAGE = '문제가 생겼습니다. 잠시 뒤 다시 시도�
 export const REQUEST_TIMEOUT_MS = 65_000
 
 export class ApiError extends Error {
-  // 응답 없이 실패했으면 null
+  // 응답 없이 실패했거나, 화면이 성공 응답의 본문을 결과로 못 읽어 만든 오류(unknownResult(null))면 null
   readonly status: number | null
   // ApiClient가 이미 알렸다(401·403). 화면은 보여 주지 않는다
   readonly handled: boolean

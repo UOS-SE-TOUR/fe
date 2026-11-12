@@ -190,7 +190,7 @@ describe('이전 여행 팝업', () => {
     const user = userEvent.setup()
 
     await user.click(screen.getByRole('link', { name: /^여행 상품 선택/ }))
-    await user.click(await screen.findByRole('link', { name: '고객 메뉴' }))
+    await user.click(await screen.findByRole('link', { name: '고객 첫 화면' }))
     expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
     const late = jsonResponse(200, previousTours)
     const readBody = vi.spyOn(late, 'text')

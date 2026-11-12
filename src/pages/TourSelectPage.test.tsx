@@ -597,6 +597,16 @@ describe('신청', () => {
     expect(countOf(APPLY)).toBe(1)
   })
 
+  it('신청하면 신청 인원을 더한 남은 자리를 다시 불러와 보인다', async () => {
+    const user = renderPage()
+    await priced(user)
+
+    replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 8 }, ...golfTours.slice(1)]))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
+  })
+
   it('요청이 끝날 때까지 단추를 막아 두 번 눌러도 한 번만 신청한다', async () => {
     let finish: (response: Response) => void = () => {}
     replyOnce(APPLY, () => new Promise<Response>((resolve) => (finish = resolve)))
@@ -630,6 +640,7 @@ describe('applySelection(음성으로 채운 내용)', () => {
       <div>
         <button onClick={() => void apply(selection)}>음성 결과 쓰기</button>
         <button onClick={() => void apply({ ...selection, tourId: 3 })}>음성 결과 쓰기(다른 상품)</button>
+        <button onClick={() => void apply({ ...selection, level: 'CLASSIC' })}>음성 결과 쓰기(클래식)</button>
         <output aria-label="음성 결과">{result}</output>
       </div>
     )
@@ -710,6 +721,20 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')
     expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '가격 보기' })).toBeEnabled()
+  })
+
+  it('이 상품에 없는 투어 등급을 채웠으면, 그 뒤 가격 보기는 등급을 고르라고 한다', async () => {
+    replyOnce('GET /api/v1/tours/1/levels', jsonResponse(200, { ...levels, levels: levels.levels.slice(1) }))
+    replyOnce(QUOTE, failWith(400, '허니문 낭만 투어는 그랜드와 프리미엄만 고를 수 있습니다.'))
+    const user = renderPage(FakeVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(클래식)' }))
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('rejected')
+    expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '가격 보기' }))
+    expect(screen.getByText('투어 등급을 골라 주세요.')).toBeInTheDocument()
+    expect(countOf(QUOTE)).toBe(1)
+    expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
   })
 
   it('신청을 처리하는 중이면 알리고 아무것도 바꾸지 않는다', async () => {

@@ -163,6 +163,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const context = useRef(0)
   // 신청 단추를 빠르게 두 번 눌러도 신청은 한 번만 나간다
   const applying = useRef(false)
+  // 목록 요청이 겹치면 마지막에 보낸 것만 보인다(먼저 보낸 응답이 늦게 와 새 남은 자리를 덮지 않게)
+  const toursRequest = useRef(0)
   const tourList = tours?.status === 'loaded' ? tours.list : undefined
 
   function newContext(): number {
@@ -180,12 +182,14 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다
   async function loadTours(forTheme: Theme, seq: number): Promise<TourSummary[] | null> {
+    const request = ++toursRequest.current
+    const latest = () => isCurrent(seq) && request === toursRequest.current
     try {
       const list = await getTours(forTheme)
-      if (isCurrent(seq)) setTours({ status: 'loaded', list })
+      if (latest()) setTours({ status: 'loaded', list })
       return list
     } catch (error) {
-      if (isCurrent(seq)) {
+      if (latest()) {
         showError(error)
         setTours((current) => (current?.status === 'loaded' ? current : { status: 'failed' }))
       }
@@ -254,7 +258,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   async function selectLevel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!detail || pending) return
-    if (!detail.levelInput) {
+    // 음성이 이 상품에 없는 등급(허니문의 클래식 등)을 채웠으면 화면에 고른 등급이 없다
+    const offered = detail.levels?.levels.some((item) => item.level === detail.levelInput) ?? false
+    if (!detail.levelInput || !offered) {
       updateDetail({ levelMessage: LEVEL_MESSAGE })
       return
     }
@@ -337,6 +343,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     try {
       if (outcome.ok) {
         updateDetail({ applyResult: outcome.result, optionPanelOpen: false })
+        // 신청 인원을 더한 남은 자리를 보인다
+        if (theme) void loadTours(theme, seq)
         return
       }
       const { error } = outcome

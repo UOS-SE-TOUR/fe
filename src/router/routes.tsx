@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { RouteObject } from 'react-router'
+import { VoiceInputPanel } from '@/components/VoiceInputPanel'
 import { pagePaths, type PageName } from '@/lib/pages'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
@@ -15,7 +16,7 @@ const pageElements: Record<PageName, ReactNode> = {
   LoginPage: <LoginPage />,
   SignUpPage: <SignUpPage />,
   CustomerMainPage: <PlaceholderPage title="고객 첫 화면" />,
-  TourSelectPage: <TourSelectPage />,
+  TourSelectPage: <TourSelectPage voiceInput={VoiceInputPanel} />,
   StaffMainPage: <StaffMainPage />,
   TourPlanPage: <TourPlanPage />,
   WarehousePage: <WarehousePage />,

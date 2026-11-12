@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { memberTypes, pagePaths, type MemberType } from '@/lib/pages'
+import { memberTypeLabels } from '@/lib/labels'
+import { isMemberType, memberTypes, pagePaths, type MemberType } from '@/lib/pages'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 설계의 form. 칸 이름은 be의 회원가입 요청(SignUpRequest)과 같다
@@ -28,15 +29,6 @@ const emptyForm: SignUpForm = {
   phone: '',
   memberType: 'CUSTOMER',
   staffCode: '',
-}
-
-const memberTypeOptions: { value: MemberType; label: string }[] = [
-  { value: 'CUSTOMER', label: '고객' },
-  { value: 'STAFF', label: '직원' },
-]
-
-function isMemberType(value: string): value is MemberType {
-  return (memberTypes as readonly string[]).includes(value)
 }
 
 export function SignUpPage() {
@@ -149,11 +141,11 @@ export function SignUpPage() {
                     if (isMemberType(value)) update('memberType', value)
                   }}
                 >
-                  {memberTypeOptions.map((option) => (
-                    <Field key={option.value} orientation="horizontal" className="w-auto">
-                      <RadioGroupItem id={`signup-member-type-${option.value}`} value={option.value} />
-                      <FieldLabel htmlFor={`signup-member-type-${option.value}`} className="font-normal">
-                        {option.label}
+                  {memberTypes.map((memberType) => (
+                    <Field key={memberType} orientation="horizontal" className="w-auto">
+                      <RadioGroupItem id={`signup-member-type-${memberType}`} value={memberType} />
+                      <FieldLabel htmlFor={`signup-member-type-${memberType}`} className="font-normal">
+                        {memberTypeLabels[memberType]}
                       </FieldLabel>
                     </Field>
                   ))}

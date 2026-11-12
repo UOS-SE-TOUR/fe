@@ -10,7 +10,7 @@
 ## 구조
 
 - 설계 클래스 하나에 파일 하나: «Page»는 `src/pages/<이름>.tsx`, «Component»는 `src/components/<이름>.tsx`, «Module»은 `src/modules/<이름>.ts`.
-- 설계 클래스가 아닌 공용 코드는 `src/lib/`(화면 주소 `pages.ts`, 테마·등급·상태의 화면 이름 `labels.ts`), 화면 주소와 막기는 `src/router/`에 둔다.
+- 설계 클래스가 아닌 공용 코드는 `src/lib/`(화면 주소 `pages.ts`, 회원 구분·테마·등급·상태의 화면 이름 `labels.ts`), 화면 주소와 막기는 `src/router/`에 둔다.
 - `src/components/ui/`·`src/hooks/`·`src/lib/utils.ts`는 shadcn/ui가 만든 파일이다. `npx shadcn add <이름>`으로만 더하고 손으로 고치지 않는다(ESLint·셀프 리뷰 대상도 아니다).
 - 서버는 `ApiClient`로만 부르고, 주소는 `/api/v1/...` 경로만 쓴다. 서버 도메인을 코드·`VITE_` 환경변수에 두지 않는다.
 - 로그인 상태는 `members/login`·`members/me` 응답으로만 판단한다(로그인 쿠키는 HttpOnly라 읽을 수 없다).

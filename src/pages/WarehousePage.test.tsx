@@ -100,7 +100,7 @@ describe('물품 추가', () => {
     const user = await fillForm('골프공', '골프 챌린지 투어', '10')
     await user.click(screen.getByRole('button', { name: '추가' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 30개)')
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 30개)'))
     expect(requestAt(1)).toEqual({
       path: '/api/v1/staff/items',
       method: 'POST',
@@ -123,7 +123,7 @@ describe('물품 추가', () => {
     const user = await fillForm('golf ball', '골프 챌린지 투어', '5')
     await user.click(screen.getByRole('button', { name: '추가' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Golf Ball 5개를 더했습니다(지금 25개)')
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Golf Ball 5개를 더했습니다(지금 25개)'))
   })
 
   it('400이면 서버 문구를 보여 주고 다시 추가할 수 있다', async () => {
@@ -190,11 +190,11 @@ describe('물품 추가', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
     respond(jsonResponse(200, { ...golfBall, quantity: 10 }))
-    expect(await screen.findByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 10개)')
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 10개)'))
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 
-  it('처리됐는지 모르면 다시 보내지 않고 목록을 다시 불러온 뒤에 단추를 연다', async () => {
+  it('처리됐는지 모르면 다시 보내지 않고, 입력을 비우고, 목록을 다시 불러온 뒤에 단추를 연다', async () => {
     let respondList: (response: Response) => void = () => {}
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
@@ -210,6 +210,8 @@ describe('물품 추가', () => {
     expect(requestAt(2)).toMatchObject({ path: '/api/v1/staff/items', method: 'GET' })
     expect(screen.getByRole('button', { name: '추가' })).toBeDisabled()
     expect(screen.getByText('물품 목록을 다시 불러온 뒤에 추가할 수 있습니다.')).toBeInTheDocument()
+    expect(screen.getByLabelText('물품 이름')).toHaveValue('')
+    expect(screen.getByLabelText('수량')).toHaveValue('')
 
     respondList(jsonResponse(200, [{ ...golfBall, quantity: 30 }]))
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))
@@ -236,5 +238,23 @@ describe('물품 추가', () => {
     await user.click(screen.getByRole('button', { name: '다시 불러오기' }))
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))
     expect(screen.getByRole('button', { name: '추가' })).toBeEnabled()
+  })
+
+  it('성공 응답인데 본문이 비었으면 처리됐는지 모르는 것으로 다룬다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+      .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, quantity: 30 }]))
+    renderPage()
+    await screen.findByRole('table')
+
+    const user = await fillForm('골프공', '골프 챌린지 투어', '10')
+    await user.click(screen.getByRole('button', { name: '추가' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
+    await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByLabelText('물품 이름')).toHaveValue('')
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 })

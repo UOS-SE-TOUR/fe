@@ -7,7 +7,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { themeLabel, themes, type Theme } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
-import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
+import { ApiClient, ApiError, showError, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
 
 const ITEMS_PATH = '/api/v1/staff/items'
 // be가 수량을 int로 받는다
@@ -27,14 +27,23 @@ function formatCount(count: number): string {
   return count.toLocaleString('ko-KR')
 }
 
-function checkInput(itemName: string, theme: Theme | '', quantity: string): string | null {
-  if (itemName.trim() === '') return '물품 이름을 입력해 주세요.'
-  if (theme === '') return '테마를 골라 주세요.'
+function isItem(value: unknown): value is Item {
+  if (typeof value !== 'object' || value === null) return false
+  const { name, quantity } = value as Partial<Item>
+  return typeof name === 'string' && typeof quantity === 'number'
+}
+
+type CheckedInput = { error: string } | { error: null; name: string; theme: Theme; count: number }
+
+function checkInput(itemName: string, theme: Theme | '', quantity: string): CheckedInput {
+  if (itemName.trim() === '') return { error: '물품 이름을 입력해 주세요.' }
+  if (theme === '') return { error: '테마를 골라 주세요.' }
   const text = quantity.trim()
-  if (text === '') return '수량을 입력해 주세요.'
-  if (!/^[0-9]+$/.test(text) || Number(text) < 1) return '수량은 1 이상의 정수로 입력해 주세요.'
-  if (Number(text) > MAX_QUANTITY) return '창고에 둘 수 있는 수량을 넘습니다.'
-  return null
+  if (text === '') return { error: '수량을 입력해 주세요.' }
+  const count = Number(text)
+  if (!/^[0-9]+$/.test(text) || count < 1) return { error: '수량은 1 이상의 정수로 입력해 주세요.' }
+  if (count > MAX_QUANTITY) return { error: '창고에 둘 수 있는 수량을 넘습니다.' }
+  return { error: null, name: itemName, theme, count }
 }
 
 export function WarehousePage() {
@@ -79,44 +88,56 @@ export function WarehousePage() {
     setAddResult(`${name} ${formatCount(added)}개를 더했습니다(지금 ${formatCount(current)}개)`)
   }
 
+  function clearInput() {
+    setItemName('')
+    setQuantity('')
+  }
+
+  // 다시 보내지 않는다. 수량이 이미 더해졌을 수 있어 입력을 비우고(다시 보내려면 다시 입력한다) 목록을 다시 읽는다
+  function showUnknownResult(error: ApiError) {
+    setNeedsRecheck(true)
+    clearInput()
+    showError(error)
+    loadItems()
+  }
+
   async function addItem(name: string, itemTheme: Theme, count: number) {
     addingRef.current = true
     setAdding(true)
+    let item: unknown
     try {
-      const item = await ApiClient.post<Item>(
+      item = await ApiClient.post<unknown>(
         ITEMS_PATH,
         { itemName: name, theme: itemTheme, quantity: count },
         { unsafeToRetry: true },
       )
-      showAddResult(item.name, count, item.quantity)
-      setItemName('')
-      setQuantity('')
-      loadItems()
     } catch (error) {
-      if (error instanceof ApiError && error.status === 400) {
-        setFormError(error.message)
-      } else if (error instanceof ApiError && error.resultUnknown) {
-        // 다시 보내지 않는다. 수량이 이미 더해졌을 수 있다
-        setNeedsRecheck(true)
-        showError(error)
-        loadItems()
-      } else {
-        showError(error)
-      }
+      if (error instanceof ApiError && error.status === 400) setFormError(error.message)
+      else if (error instanceof ApiError && error.resultUnknown) showUnknownResult(error)
+      else showError(error)
+      return
     } finally {
       addingRef.current = false
       setAdding(false)
     }
+    // 성공 응답인데 본문이 물품이 아니면(빈 본문 등) 처리됐는지 알 수 없다
+    if (!isItem(item)) {
+      showUnknownResult(new ApiError(UNKNOWN_RESULT_MESSAGE, null, { resultUnknown: true }))
+      return
+    }
+    showAddResult(item.name, count, item.quantity)
+    clearInput()
+    loadItems()
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (addingRef.current || needsRecheck) return
     setAddResult(null)
-    const inputError = checkInput(itemName, theme, quantity)
-    setFormError(inputError)
-    if (inputError || theme === '') return
-    void addItem(itemName, theme, Number(quantity.trim()))
+    const input = checkInput(itemName, theme, quantity)
+    setFormError(input.error)
+    if (input.error !== null) return
+    void addItem(input.name, input.theme, input.count)
   }
 
   function reload() {
@@ -185,11 +206,10 @@ export function WarehousePage() {
         {needsRecheck && (
           <p className="text-sm text-muted-foreground">물품 목록을 다시 불러온 뒤에 추가할 수 있습니다.</p>
         )}
-        {addResult && (
-          <p role="status" className="text-sm">
-            {addResult}
-          </p>
-        )}
+        {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다 */}
+        <p role="status" className="text-sm">
+          {addResult}
+        </p>
       </section>
 
       <section className="flex flex-col gap-4" aria-labelledby="items-heading">

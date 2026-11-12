@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react'
 import type { RouteObject } from 'react-router'
 import { pagePaths, type PageName } from '@/lib/pages'
+import { LoginPage } from '@/pages/LoginPage'
+import { SignUpPage } from '@/pages/SignUpPage'
+import { StaffMainPage } from '@/pages/StaffMainPage'
 import { WarehousePage } from '@/pages/WarehousePage'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PlaceholderPage } from '@/router/PlaceholderPage'
 
 // 화면마다 보여 줄 것. 주소는 pagePaths, 열 수 있는 사람은 pageAccess가 정한다. 화면 이슈(#4~#9)가 자리표시자를 실제 화면으로 바꾼다
 const pageElements: Record<PageName, ReactNode> = {
-  LoginPage: <PlaceholderPage title="로그인" />,
-  SignUpPage: <PlaceholderPage title="회원가입" />,
+  LoginPage: <LoginPage />,
+  SignUpPage: <SignUpPage />,
   CustomerMainPage: <PlaceholderPage title="고객 첫 화면" />,
   TourSelectPage: <PlaceholderPage title="여행 상품 선택" />,
-  StaffMainPage: <PlaceholderPage title="직원 첫 화면" />,
+  StaffMainPage: <StaffMainPage />,
   TourPlanPage: <PlaceholderPage title="상품 기획" />,
   WarehousePage: <WarehousePage />,
 }

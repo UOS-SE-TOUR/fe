@@ -5,6 +5,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
 import { StaffMainPage } from '@/pages/StaffMainPage'
 import { TourPlanPage } from '@/pages/TourPlanPage'
+import { TourSelectPage } from '@/pages/TourSelectPage'
 import { WarehousePage } from '@/pages/WarehousePage'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PlaceholderPage } from '@/router/PlaceholderPage'
@@ -14,7 +15,7 @@ const pageElements: Record<PageName, ReactNode> = {
   LoginPage: <LoginPage />,
   SignUpPage: <SignUpPage />,
   CustomerMainPage: <PlaceholderPage title="고객 첫 화면" />,
-  TourSelectPage: <PlaceholderPage title="여행 상품 선택" />,
+  TourSelectPage: <TourSelectPage />,
   StaffMainPage: <StaffMainPage />,
   TourPlanPage: <TourPlanPage />,
   WarehousePage: <WarehousePage />,

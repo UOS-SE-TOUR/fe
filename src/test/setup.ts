@@ -16,7 +16,7 @@ if (!window.matchMedia) {
   })) as typeof window.matchMedia
 }
 
-// jsdom에는 ResizeObserver도 없다. 라디오 단추(Radix RadioGroup)가 폼 안에서 크기를 볼 때 부른다
+// jsdom에는 ResizeObserver도 없다. shadcn/ui의 라디오·체크박스(Radix)가 크기를 잴 때 부른다
 if (!window.ResizeObserver) {
   window.ResizeObserver = class {
     observe() {}

@@ -259,6 +259,38 @@ describe('말해서 고르기', () => {
     expect(countOf(PARSE)).toBe(0)
   })
 
+  it('다시 말하다 그만두거나 알아듣지 못하면 고치던 칸을 다시 보인다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    await user.clear(panel().getByLabelText('인원'))
+    await user.type(panel().getByLabelText('인원'), '4')
+
+    await user.click(panel().getByRole('button', { name: '다시 말하기' }))
+    expect(panel().queryByLabelText('인원')).not.toBeInTheDocument()
+    await user.click(panel().getByRole('button', { name: '그만 듣기' }))
+    expect(panel().getByLabelText('인원')).toHaveValue(4)
+
+    await user.click(panel().getByRole('button', { name: '다시 말하기' }))
+    recognizer.fail('no-speech')
+    expect(panel().getByText('말소리를 듣지 못했습니다. 다시 말해 주세요.')).toBeInTheDocument()
+    expect(panel().getByLabelText('인원')).toHaveValue(4)
+  })
+
+  it('말을 푸는 동안 그만두면 늦게 온 응답은 버리고 고치던 칸을 다시 보인다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    const slow = deferred()
+    replyOnce(PARSE, slow.reply)
+    await user.click(panel().getByRole('button', { name: '다시 말하기' }))
+    recognizer.say('트레킹으로 바꿔 줘')
+    await user.click(await panel().findByRole('button', { name: '그만두기' }))
+
+    expect(panel().getByLabelText('테마')).toHaveDisplayValue('골프 챌린지 투어')
+    slow.resolve(jsonResponse(200, { ...heardAll, theme: 'TREKKING', candidates: [trekking20] }))
+    await act(() => sleep(0))
+    expect(panel().getByLabelText('테마')).toHaveDisplayValue('골프 챌린지 투어')
+  })
+
   it('화면을 떠나면 듣기를 그만둔다', async () => {
     const user = renderPage()
     await user.click(panel().getByRole('button', { name: '말하기' }))
@@ -469,7 +501,7 @@ describe('오류', () => {
     expect(countOf(GOLF_TOURS)).toBe(2)
   })
 
-  it('확인이 400으로 거부되면 후보를 새로 받되 고객이 고른 상품은 그대로 둔다', async () => {
+  it('확인이 400으로 거부되면 후보는 그대로 두고 고객이 고른 상품도 둔다', async () => {
     const user = renderPage()
     await speak(user, { ...heardAll, departureDate: '2026-12-20', candidates: [golf20Long, golf20Full, golf20Short] })
     await user.click(panel().getByRole('radio', { name: /12\/20 출발 4일/ }))
@@ -477,9 +509,34 @@ describe('오류', () => {
     await user.click(confirmButton())
 
     expect(await panel().findByText('남은 자리보다 인원이 많습니다.')).toBeInTheDocument()
-    await waitFor(() => expect(countOf(GOLF_TOURS)).toBe(2))
-    expect(await panel().findByRole('radio', { name: /12\/20 출발 4일/ })).toBeChecked()
+    expect(panel().getByRole('radio', { name: /12\/20 출발 4일/ })).toBeChecked()
     expect(panel().queryByText(CHOOSE)).not.toBeInTheDocument()
+    // 상품 선택 화면이 받은 한 번뿐이다
+    expect(countOf(GOLF_TOURS)).toBe(1)
+  })
+
+  it('409 뒤 후보를 받지 못해 다시 찾아도 고객이 고른 상품은 아직 고를 수 있으면 둔다', async () => {
+    const user = renderPage()
+    await speak(user, { ...heardAll, departureDate: '2026-12-20', candidates: [golf20Long, golf20Full, golf20Short] })
+    await user.click(panel().getByRole('radio', { name: /12\/20 출발 4일/ }))
+    replyOnce(GOLF_TOURS, jsonResponse(200, golfTours), failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    replyOnce(QUOTE, failWith(409, '출발일이 지난 상품입니다.'))
+    await user.click(confirmButton())
+
+    expect(await panel().findByText('후보 상품을 불러오지 못했습니다.')).toBeInTheDocument()
+    await user.click(panel().getByRole('button', { name: '다시 찾기' }))
+    expect(await panel().findByRole('radio', { name: /12\/20 출발 4일/ })).toBeChecked()
+    expect(confirmButton()).toBeEnabled()
+  })
+
+  it('숫자만 쓴 인원이 아니면(1e1 등) 상품 선택 화면에서 칠 때처럼 거부한다', async () => {
+    const user = renderPage()
+    await speak(user, { ...heardAll, headcount: null })
+    await user.type(panel().getByLabelText('인원'), '1e1')
+    await user.click(confirmButton())
+
+    expect(await panel().findByText('인원은 1 이상의 정수로 입력해 주세요.')).toBeInTheDocument()
+    expect(countOf(QUOTE)).toBe(0)
   })
 
   it('아무 말도 하지 않아 인식이 끝나면 다시 말하게 한다', async () => {

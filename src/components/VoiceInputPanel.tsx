@@ -7,9 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { formatDate } from '@/lib/format'
 import { themes, tourLevels, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
-import { canApply, getTours, type TourSummary } from '@/lib/tours'
+import { canApply, getTours, tourSummaryLine, type TourSummary } from '@/lib/tours'
 import { ApiClient, hasStatus, showError } from '@/modules/ApiClient'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
 import type { ApplySelection, VoiceSelection } from '@/pages/TourSelectPage'
@@ -44,6 +43,8 @@ type CandidatesState = { status: 'loading' } | { status: 'failed' } | { status: 
 
 // 받은 내용을 고객이 고치는 칸. 뽑지 못한 칸은 빈 값이다
 interface Draft {
+  // 이 내용을 뽑은 말
+  heard: string
   theme: Theme | ''
   departureDate: string
   level: TourLevel | ''
@@ -68,7 +69,7 @@ function choosableOf(candidates: CandidatesState): TourSummary[] {
 
 // 고를 수 있는 후보가 하나면 그 상품을 쓴다. 둘 이상이면 고객이 고른다. keep은 고객이 이미 고른 상품으로, 아직 고를 수 있으면 둔다
 function pickTour(list: TourSummary[], keep: number | null = null): number | null {
-  const choosable = choosableOf({ status: 'loaded', list })
+  const choosable = list.filter(canApply)
   if (keep !== null && choosable.some((tour) => tour.tourId === keep)) return keep
   return choosable.length === 1 ? choosable[0].tourId : null
 }
@@ -77,12 +78,14 @@ function isMissing(draft: Draft): boolean {
   return !draft.theme || !draft.departureDate || !draft.level || !draft.headcount.trim()
 }
 
-// 확인할 수 있는 내용이면 상품 선택 화면에 넘길 값을 돌려준다. 인원이 정수인지는 상품 선택 화면이 본다
+// 확인할 수 있는 내용이면 상품 선택 화면에 넘길 값을 돌려준다. 인원이 정수인지는 상품 선택 화면이 본다 —
+// 숫자만 쓴 인원만 수로 읽고(상품 선택 화면에서 칠 때와 같다, 1e1 등은 받지 않는다) 아니면 NaN을 넘겨 거부받는다
 function selectionOf(draft: Draft): VoiceSelection | null {
-  const { theme, level, tourId } = draft
-  if (isMissing(draft) || !theme || !level || tourId === null) return null
+  const { theme, departureDate, level, tourId } = draft
+  const headcount = draft.headcount.trim()
+  if (!theme || !departureDate || !level || !headcount || tourId === null) return null
   if (!choosableOf(draft.candidates).some((tour) => tour.tourId === tourId)) return null
-  return { theme, tourId, level, headcount: Number(draft.headcount.trim()) }
+  return { theme, tourId, level, headcount: /^\d+$/.test(headcount) ? Number(headcount) : Number.NaN }
 }
 
 interface VoiceInputPanelProps {
@@ -98,10 +101,12 @@ function newRecognizer(): Recognizer {
 export function VoiceInputPanel({ applySelection, createRecognizer = newRecognizer }: VoiceInputPanelProps) {
   const [supported] = useState(() => createRecognizer().isSupported())
   const [step, setStep] = useState<Step>('idle')
-  const [heard, setHeard] = useState('')
+  // 서버가 푸는 중인 말
+  const [parsingText, setParsingText] = useState('')
+  // 다시 말하는 동안에도 두었다가, 그만두거나 알아듣지 못하면 다시 보인다(고치던 칸을 잃지 않게)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
-  // 다시 말하기 시작하면 올린다. 그 전에 들은 말의 응답은 버린다
+  // 듣기를 시작하거나 그만두면 올린다. 그 전에 들은 말과 그 응답은 버린다
   const session = useRef(0)
   // 후보 상품을 다시 찾을 때마다 올린다. 마지막에 찾은 것만 쓴다
   const candidatesRequest = useRef(0)
@@ -126,9 +131,6 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
   // 듣기를 시작하고 말할 내용을 안내한다(설계 5.5 startVoiceInput → recognize → showVoiceGuide)
   function startVoiceInput() {
     const seq = ++session.current
-    candidatesRequest.current += 1
-    themeTours.current = null
-    setDraft(null)
     setNotice(null)
     recognizerRef.current?.abort()
     const recognizer = createRecognizer()
@@ -148,7 +150,7 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
     setStep('listening')
   }
 
-  // 듣기를 그만둔다(권한 창을 닫지 않았거나 인식이 끝나지 않아도 다시 말하거나 직접 고를 수 있게)
+  // 듣기나 말 풀기를 그만둔다(권한 창을 닫지 않았거나 인식·서버가 끝나지 않아도 다시 말하거나 직접 고를 수 있게)
   function stopVoiceInput() {
     session.current += 1
     recognizerRef.current?.abort()
@@ -163,11 +165,11 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
   }
 
   async function parse(text: string, seq: number) {
-    setHeard(text)
+    setParsingText(text)
     setStep('parsing')
     try {
       const selection = await ApiClient.post<TourSelection>('/api/v1/voice/parse', { text } satisfies VoiceParseRequest)
-      if (seq === session.current) showSelection(selection)
+      if (seq === session.current) showSelection(text, selection)
     } catch (error) {
       if (seq !== session.current) return
       setStep('idle')
@@ -178,10 +180,13 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
     }
   }
 
-  // 받은 내용을 칸에 채운다. 뽑지 못한 칸은 비워 둔다
-  function showSelection(selection: TourSelection) {
+  // 받은 내용을 칸에 채운다. 뽑지 못한 칸은 비워 둔다. 앞의 칸에서 찾던 후보와 받아 둔 목록은 버린다
+  function showSelection(heard: string, selection: TourSelection) {
+    candidatesRequest.current += 1
+    themeTours.current = null
     setStep('idle')
     setDraft({
+      heard,
       theme: selection.theme ?? '',
       departureDate: selection.departureDate ?? '',
       level: selection.level ?? '',
@@ -198,7 +203,8 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
     findCandidates(theme, departureDate)
   }
 
-  // fresh면 받아 둔 목록을 쓰지 않고 새로 받는다(불러오지 못했거나, 가격 계산이 거부해 남은 자리·상태가 바뀌었을 수 있을 때)
+  // fresh면 받아 둔 목록을 쓰지 않고 새로 받는다(불러오지 못했거나, 가격 계산이 409로 거부해 상태가 바뀌었을 때).
+  // keep(고객이 고른 상품)은 받는 동안에도 두어, 받지 못해 다시 찾을 때도 넘길 수 있게 한다
   function findCandidates(
     theme: Theme | '',
     departureDate: string,
@@ -218,7 +224,7 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       show(saved.list)
       return
     }
-    updateDraft({ candidates: { status: 'loading' }, tourId: null })
+    updateDraft({ candidates: { status: 'loading' }, tourId: keep })
     getTours(theme).then(
       (tours) => {
         if (request !== candidatesRequest.current) return
@@ -247,14 +253,14 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       setNotice({ tone: 'info', message: PRICED_MESSAGE })
     } else if (outcome.status === 'rejected') {
       // 409여도 상품 목록으로 돌아가지 않고 다시 말하게 한다(상품 선택 화면도 그대로 둔다).
-      // 그사이 마감되었거나 남은 자리가 줄었을 수 있어 후보를 새로 받는다(고른 상품은 아직 고를 수 있으면 둔다)
+      // 409(마감, 출발일이 오늘이거나 지남)면 그 상품은 더 고를 수 없으니 후보를 새로 받는다. 400은 고를 수 있는지를 바꾸지 않는다
       updateDraft({ rejection: outcome.error.message })
-      findCandidates(selection.theme, draft.departureDate, { fresh: true, keep: selection.tourId })
+      if (hasStatus(outcome.error, 409)) {
+        findCandidates(selection.theme, draft.departureDate, { fresh: true, keep: selection.tourId })
+      }
     }
     // failed는 상품 선택 화면이 이미 알렸다. 칸을 그대로 두어 다시 확인할 수 있다
   }
-
-  const busy = step !== 'idle'
 
   return (
     <section aria-label="음성으로 고르기">
@@ -288,14 +294,13 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
               )}
               {step === 'parsing' && (
                 <div className="space-y-1">
-                  <p className="text-sm">알아들은 말: “{heard}”</p>
+                  <p className="text-sm">알아들은 말: “{parsingText}”</p>
                   <p className="text-sm text-muted-foreground">말한 내용을 읽는 중입니다.</p>
                 </div>
               )}
               {draft && (step === 'idle' || step === 'applying') && (
                 <DraftForm
                   draft={draft}
-                  heard={heard}
                   applying={step === 'applying'}
                   onChangeTarget={changeTarget}
                   onChange={(patch) => updateDraft({ ...patch, rejection: null })}
@@ -305,12 +310,12 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
                   onConfirm={() => void confirmSelection()}
                 />
               )}
-              {step === 'listening' ? (
+              {step === 'listening' || step === 'parsing' ? (
                 <Button variant="outline" onClick={stopVoiceInput}>
-                  그만 듣기
+                  {step === 'listening' ? '그만 듣기' : '그만두기'}
                 </Button>
               ) : (
-                <Button variant={draft ? 'outline' : 'default'} onClick={startVoiceInput} disabled={busy}>
+                <Button variant={draft ? 'outline' : 'default'} onClick={startVoiceInput} disabled={step === 'applying'}>
                   {draft ? '다시 말하기' : '말하기'}
                 </Button>
               )}
@@ -324,7 +329,6 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
 
 interface DraftFormProps {
   draft: Draft
-  heard: string
   applying: boolean
   onChangeTarget(theme: Theme | '', departureDate: string): void
   onChange(patch: Pick<Partial<Draft>, 'level' | 'headcount' | 'tourId'>): void
@@ -332,7 +336,7 @@ interface DraftFormProps {
   onConfirm(): void
 }
 
-function DraftForm({ draft, heard, applying, ...props }: DraftFormProps) {
+function DraftForm({ draft, applying, ...props }: DraftFormProps) {
   const { candidates } = draft
   const choosable = choosableOf(candidates)
   const missing = isMissing(draft)
@@ -345,7 +349,7 @@ function DraftForm({ draft, heard, applying, ...props }: DraftFormProps) {
 
   return (
     <form className="space-y-4" onSubmit={(event) => event.preventDefault()} noValidate>
-      <p className="text-sm">알아들은 말: “{heard}”</p>
+      <p className="text-sm">알아들은 말: “{draft.heard}”</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="voice-theme">테마</Label>
@@ -436,9 +440,7 @@ function DraftForm({ draft, heard, applying, ...props }: DraftFormProps) {
                     {tour.title}
                     <Badge variant={canApply(tour) ? 'secondary' : 'outline'}>{tourStatusLabel(tour.status)}</Badge>
                   </span>
-                  <span className="text-muted-foreground">
-                    {formatDate(tour.departureDate)} 출발 · {tour.duration}일 · 남은 자리 {tour.remainingSeats}명
-                  </span>
+                  <span className="text-muted-foreground">{tourSummaryLine(tour)}</span>
                 </Label>
               </div>
             ))}

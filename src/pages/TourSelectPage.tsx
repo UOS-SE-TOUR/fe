@@ -16,6 +16,7 @@ import { pagePaths } from '@/lib/pages'
 import {
   canApply,
   getTours,
+  tourSummaryLine,
   type ApplyTourResponse,
   type PriceQuote,
   type QuoteRequest,
@@ -151,9 +152,7 @@ function TourList({ tours, onSelect }: { tours: TourSummary[]; onSelect(tourId: 
           >
             <span className="space-y-1">
               <span className="block font-medium">{tour.title}</span>
-              <span className="block text-muted-foreground">
-                {formatDate(tour.departureDate)} 출발 · {tour.duration}일 · 남은 자리 {tour.remainingSeats}명
-              </span>
+              <span className="block text-muted-foreground">{tourSummaryLine(tour)}</span>
             </span>
             <Badge variant={canApply(tour) ? 'secondary' : 'outline'}>{tourStatusLabel(tour.status)}</Badge>
           </Button>

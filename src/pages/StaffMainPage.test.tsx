@@ -27,7 +27,7 @@ describe('StaffMainPage', () => {
   it('로그인한 직원의 이름을 보여 준다', async () => {
     renderAt('/staff')
 
-    expect(await screen.findByRole('heading', { name: '직원 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '직원 메뉴' })).toBeInTheDocument()
     expect(screen.getByText('김직원님, 안녕하세요.')).toBeInTheDocument()
   })
 

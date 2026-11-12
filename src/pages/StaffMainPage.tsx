@@ -19,7 +19,7 @@ export function StaffMainPage() {
     <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">직원 첫 화면</h1>
+          <h1 className="text-2xl font-semibold">직원 메뉴</h1>
           {member && <p className="text-sm text-muted-foreground">{member.name}님, 안녕하세요.</p>}
         </div>
         <Button variant="outline" onClick={() => void logOut()} disabled={loggingOut}>

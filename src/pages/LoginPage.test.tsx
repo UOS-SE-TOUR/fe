@@ -54,7 +54,7 @@ describe('LoginPage', () => {
 
     await logIn('kim', 'password1')
 
-    expect(await screen.findByRole('heading', { name: '직원 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '직원 메뉴' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/staff')
     expect(isFromLogin()).toBe(false)
   })
@@ -109,7 +109,7 @@ describe('LoginPage', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: '로그인' }))
 
-    expect(await screen.findByRole('heading', { name: '직원 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '직원 메뉴' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 

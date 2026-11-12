@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentType, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { OptionPanel } from '@/components/OptionPanel'
@@ -44,6 +44,8 @@ const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
 const APPLYING_MESSAGE = '신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.'
 // be가 받는 인원(Integer)의 최댓값
 const MAX_HEADCOUNT = 2_147_483_647
+// 인원을 치다가 이만큼 멈추면 가격을 계산한다(글자마다 서버를 부르지 않게)
+export const HEADCOUNT_DELAY_MS = 500
 
 interface PricedSelection {
   level: TourLevel
@@ -64,6 +66,10 @@ interface Detail {
   quote: PriceQuote | null
   // quote가 마지막으로 보낸 투어 등급·인원·옵션의 가격이다. 400으로 투어 등급·인원을 다시 받는 동안은 false
   priced: boolean
+  // 마지막으로 보낸 가격 계산을 기다리는 중
+  quoting: boolean
+  // 투어 등급·인원의 가격 계산이 400·409 밖의 이유로 실패했다(다시 계산 단추를 보인다). 옵션을 바꾼 계산으로는 꺼지지 않는다
+  quoteFailed: boolean
   discountConfirmed: boolean
   optionPanelOpen: boolean
   levelMessage: string | null
@@ -71,7 +77,8 @@ interface Detail {
   applyResult: ApplyTourResponse | null
 }
 
-type Pending = 'levels' | 'quote' | 'seats' | 'apply' | null
+// levels·apply는 입력까지 막고, seats(400 뒤 남은 자리를 다시 불러오는 중)는 옵션·신청만 막는다
+type Pending = 'levels' | 'seats' | 'apply' | null
 
 type ToursState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; list: TourSummary[] }
 
@@ -85,6 +92,8 @@ function newDetail(tourId: number): Detail {
     optionIds: [],
     quote: null,
     priced: false,
+    quoting: false,
+    quoteFailed: false,
     discountConfirmed: false,
     optionPanelOpen: false,
     levelMessage: null,
@@ -157,7 +166,6 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const [listMessage, setListMessage] = useState<string | null>(null)
   // null이면 상품 목록을 보여 준다
   const [detail, setDetail] = useState<Detail | null>(null)
-  // 고른 상품 안의 요청은 하나씩만 보낸다. 그동안 입력을 막는다
   const [pending, setPending] = useState<Pending>(null)
   // 테마·상품을 다시 고르거나 목록으로 돌아가면 올린다. 그 전에 보낸 요청의 응답은 버린다
   const context = useRef(0)
@@ -165,9 +173,31 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const applying = useRef(false)
   // 목록 요청이 겹치면 마지막에 보낸 것만 보인다(먼저 보낸 응답이 늦게 와 새 남은 자리를 덮지 않게)
   const toursRequest = useRef(0)
+  // 가격 계산도 마지막에 보낸 것만 반영한다(입력을 막지 않아 요청이 겹칠 수 있다)
+  const quoteRequest = useRef(0)
+  const quoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 인원 타이머가 울릴 때 그때의 입력·옵션으로 계산하려고 둔다
+  const detailRef = useRef<Detail | null>(null)
   const tourList = tours?.status === 'loaded' ? tours.list : undefined
 
+  useEffect(() => {
+    detailRef.current = detail
+  })
+
+  useEffect(() => {
+    const timer = quoteTimer
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [])
+
+  function clearQuoteTimer() {
+    if (quoteTimer.current) clearTimeout(quoteTimer.current)
+    quoteTimer.current = null
+  }
+
   function newContext(): number {
+    clearQuoteTimer()
     context.current += 1
     return context.current
   }
@@ -249,77 +279,119 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     updateDetail({ levelMessage: message, priced: false, optionPanelOpen: false, optionMessage: null })
     if (!theme) return
     setPending('seats')
-    const list = await loadTours(theme, seq)
-    if (!isCurrent(seq) || !list) return
-    const tour = list.find((item) => item.tourId === tourId)
-    if (!tour || !canApply(tour)) showTourList(CANNOT_APPLY_MESSAGE, list)
+    try {
+      const list = await loadTours(theme, seq)
+      if (!isCurrent(seq) || !list) return
+      const tour = list.find((item) => item.tourId === tourId)
+      if (!tour || !canApply(tour)) showTourList(CANNOT_APPLY_MESSAGE, list)
+    } finally {
+      if (isCurrent(seq)) setPending((current) => (current === 'seats' ? null : current))
+    }
   }
 
-  async function selectLevel(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!detail || pending) return
+  // 마지막에 보낸 가격 계산의 응답만 반영한다. 409(더는 신청할 수 없음)는 늘 상품 목록으로 돌아간다
+  async function runQuote(
+    tourId: number,
+    selection: PricedSelection,
+    optionIds: number[],
+    failure: { onBadRequest(error: ApiError, seq: number): Promise<void> | void; onOtherFailure(error: unknown): void },
+  ) {
+    const seq = context.current
+    const request = ++quoteRequest.current
+    const latest = () => isCurrent(seq) && request === quoteRequest.current
+    updateDetail({ quoting: true })
+    try {
+      const result = await quote(tourId, selection, optionIds)
+      if (latest()) priceArrived(result, selection, optionIds)
+    } catch (error) {
+      if (!latest()) return
+      if (hasStatus(error, 409)) showTourList(error.message)
+      else if (hasStatus(error, 400)) await failure.onBadRequest(error, seq)
+      else failure.onOtherFailure(error)
+    } finally {
+      if (latest()) updateDetail({ quoting: false })
+    }
+  }
+
+  // 투어 등급·인원으로 가격을 계산한다(설계의 selectLevel). 등급을 고르거나 인원을 치다 멈추면 부른다
+  async function quoteSelection(current: Detail) {
+    if (applying.current || current.applyResult) return
+    const text = current.headcountInput.trim()
     // 음성이 이 상품에 없는 등급(허니문의 클래식 등)을 채웠으면 화면에 고른 등급이 없다
-    const offered = detail.levels?.levels.some((item) => item.level === detail.levelInput) ?? false
-    if (!detail.levelInput || !offered) {
-      updateDetail({ levelMessage: LEVEL_MESSAGE })
+    const offered = current.levels?.levels.some((item) => item.level === current.levelInput) ?? false
+    if (!current.levelInput || !offered) {
+      updateDetail({ levelMessage: current.levelInput && text ? LEVEL_MESSAGE : null })
       return
     }
-    const headcount = parseHeadcount(detail.headcountInput)
+    if (text === '') {
+      updateDetail({ levelMessage: null })
+      return
+    }
+    const headcount = parseHeadcount(text)
     if (headcount === null) {
       updateDetail({ levelMessage: HEADCOUNT_MESSAGE })
       return
     }
-    const seq = context.current
-    const selection = { level: detail.levelInput, headcount }
-    const { tourId, optionIds } = detail
-    updateDetail({ levelMessage: null })
-    setPending('quote')
-    try {
-      const result = await quote(tourId, selection, optionIds)
-      if (isCurrent(seq)) priceArrived(result, selection, optionIds)
-    } catch (error) {
-      if (!isCurrent(seq)) return
-      if (hasStatus(error, 400)) {
+    const { submitted, tourId, optionIds } = current
+    const unchanged = submitted?.level === current.levelInput && submitted.headcount === headcount
+    if (current.priced && !current.quoting && unchanged) return
+    const selection = { level: current.levelInput, headcount }
+    updateDetail({ levelMessage: null, quoteFailed: false })
+    await runQuote(tourId, selection, optionIds, {
+      onBadRequest: async (error, seq) => {
         // 옵션을 바꾸면 방금 다시 받은 이 투어 등급·인원으로 계산한다(설계 3.1)
         updateDetail({ submitted: selection })
         await askLevelAgain(error.message, tourId, seq)
-      } else if (hasStatus(error, 409)) {
-        showTourList(error.message)
-      } else {
+      },
+      // 보낸 등급·인원은 지난 가격의 것으로 남아, 바꾼 입력으로는 신청할 수 없다
+      onOtherFailure: (error) => {
         showError(error)
-      }
-    } finally {
-      if (isCurrent(seq)) setPending(null)
-    }
+        updateDetail({ quoteFailed: true })
+      },
+    })
   }
 
-  async function changeOptions(optionIds: number[]) {
-    if (!detail?.submitted || pending) return
-    const seq = context.current
+  function selectLevel(level: TourLevel) {
+    if (!detail) return
+    clearQuoteTimer()
+    updateDetail({ levelInput: level })
+    void quoteSelection({ ...detail, levelInput: level })
+  }
+
+  function changeHeadcount(headcountInput: string) {
+    updateDetail({ headcountInput })
+    clearQuoteTimer()
+    quoteTimer.current = setTimeout(() => {
+      quoteTimer.current = null
+      if (detailRef.current) void quoteSelection(detailRef.current)
+    }, HEADCOUNT_DELAY_MS)
+  }
+
+  // 인원 칸의 Enter와 다시 계산 단추. 기다리지 않고 계산한다
+  function quoteNow() {
+    clearQuoteTimer()
+    if (detail) void quoteSelection(detail)
+  }
+
+  function changeOptions(optionIds: number[]) {
+    if (!detail?.submitted || pending || detail.quoting) return
     // 가격이 나와 있으면 마지막으로 가격이 나온 옵션, 다시 받는 중이면 남겨 둔 옵션이다
     const { tourId, submitted, optionIds: previousIds } = detail
     updateDetail({ optionIds, optionMessage: null })
-    setPending('quote')
-    try {
-      const result = await quote(tourId, submitted, optionIds)
-      if (isCurrent(seq)) priceArrived(result, submitted, optionIds)
-    } catch (error) {
-      if (!isCurrent(seq)) return
-      if (hasStatus(error, 400) && error.message === SEAT_SHORTAGE_MESSAGE) {
-        await askLevelAgain(error.message, tourId, seq)
-      } else if (hasStatus(error, 409)) {
-        showTourList(error.message)
-      } else {
-        updateDetail({ optionIds: previousIds, optionMessage: hasStatus(error, 400) ? error.message : null })
-        if (!hasStatus(error, 400)) showError(error)
-      }
-    } finally {
-      if (isCurrent(seq)) setPending(null)
-    }
+    void runQuote(tourId, submitted, optionIds, {
+      onBadRequest: async (error, seq) => {
+        if (error.message === SEAT_SHORTAGE_MESSAGE) await askLevelAgain(error.message, tourId, seq)
+        else updateDetail({ optionIds: previousIds, optionMessage: error.message })
+      },
+      onOtherFailure: (error) => {
+        updateDetail({ optionIds: previousIds })
+        showError(error)
+      },
+    })
   }
 
   async function applyTour() {
-    if (!detail?.quote || !detail.priced || pending || applying.current) return
+    if (!detail?.quote || !detail.priced || detail.quoting || pending || applying.current) return
     applying.current = true
     const seq = context.current
     const { summary } = detail.quote
@@ -390,8 +462,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       if (parseHeadcount(String(selection.headcount)) === null) {
         return { status: 'rejected', error: new ApiError(HEADCOUNT_MESSAGE, 400) }
       }
+      // 이 가격 계산이 끝날 때까지 입력을 막아 둔다(pending 'levels')
       const priced = { level: selection.level, headcount: selection.headcount }
-      setPending('quote')
       try {
         const result = await quote(selection.tourId, priced, [])
         if (!isCurrent(seq)) return { status: 'failed' }
@@ -463,9 +535,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
           theme={theme}
           pending={pending}
           onBack={() => showTourList(null)}
-          onLevelInput={(levelInput) => updateDetail({ levelInput })}
-          onHeadcountInput={(headcountInput) => updateDetail({ headcountInput })}
-          onSelectLevel={(event) => void selectLevel(event)}
+          onSelectLevel={selectLevel}
+          onChangeHeadcount={changeHeadcount}
+          onQuoteNow={quoteNow}
           onConfirmPrice={() => updateDetail({ discountConfirmed: true })}
           onOpenOptions={() => updateDetail({ optionPanelOpen: true, optionMessage: null })}
           onChangeOptions={(optionIds) => void changeOptions(optionIds)}
@@ -483,9 +555,9 @@ interface TourDetailProps {
   theme: Theme | null
   pending: Pending
   onBack(): void
-  onLevelInput(level: TourLevel): void
-  onHeadcountInput(headcount: string): void
-  onSelectLevel(event: FormEvent<HTMLFormElement>): void
+  onSelectLevel(level: TourLevel): void
+  onChangeHeadcount(headcount: string): void
+  onQuoteNow(): void
   onConfirmPrice(): void
   onOpenOptions(): void
   onChangeOptions(optionIds: number[]): void
@@ -496,10 +568,12 @@ interface TourDetailProps {
 function TourDetail(props: TourDetailProps) {
   const { detail, tour, theme, pending } = props
   const { levels, quote: priceQuote, submitted, applyResult } = detail
-  const locked = pending !== null || applyResult !== null
+  // 투어 등급·인원은 가격을 계산하는 동안에도 고칠 수 있다(막으면 치던 칸에서 커서가 빠진다)
+  const locked = pending === 'levels' || pending === 'apply' || applyResult !== null
+  const busy = pending !== null || detail.quoting
   const confirming = detail.priced && priceQuote !== null && priceQuote.discount > 0 && !detail.discountConfirmed
   const headcountNow = parseHeadcount(detail.headcountInput)
-  // 고친 투어 등급·인원의 가격을 아직 보지 않았다
+  // 고친 투어 등급·인원의 가격이 아직 나오지 않았다
   const edited = submitted !== null && (detail.levelInput !== submitted.level || headcountNow !== submitted.headcount)
   const title = tour?.title ?? priceQuote?.summary.title ?? (theme ? themeLabel(theme) : '고른 상품')
 
@@ -521,7 +595,7 @@ function TourDetail(props: TourDetailProps) {
         <CardContent>
           {!levels && <p className="text-sm text-muted-foreground">투어 등급을 불러오는 중입니다.</p>}
           {levels && (
-            <form className="space-y-4" onSubmit={props.onSelectLevel} noValidate>
+            <form className="space-y-4" onSubmit={(event) => event.preventDefault()} noValidate>
               <p className="text-sm text-muted-foreground">
                 모든 등급에 포함: {levels.service} · {levels.souvenir} · {levels.vehicle}
               </p>
@@ -529,7 +603,7 @@ function TourDetail(props: TourDetailProps) {
                 <legend className="text-sm font-medium">투어 등급</legend>
                 <RadioGroup
                   value={detail.levelInput ?? ''}
-                  onValueChange={(value) => props.onLevelInput(value as TourLevel)}
+                  onValueChange={(value) => props.onSelectLevel(value as TourLevel)}
                   disabled={locked}
                 >
                   {levels.levels.map((item) => (
@@ -556,7 +630,12 @@ function TourDetail(props: TourDetailProps) {
                   min={1}
                   step={1}
                   value={detail.headcountInput}
-                  onChange={(event) => props.onHeadcountInput(event.target.value)}
+                  onChange={(event) => props.onChangeHeadcount(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return
+                    event.preventDefault()
+                    props.onQuoteNow()
+                  }}
                   disabled={locked}
                   className="w-32"
                 />
@@ -567,9 +646,18 @@ function TourDetail(props: TourDetailProps) {
                   <AlertDescription>{detail.levelMessage}</AlertDescription>
                 </Alert>
               )}
-              <Button type="submit" disabled={locked}>
-                가격 보기
-              </Button>
+              {detail.quoting && <p className="text-sm text-muted-foreground">가격을 계산하는 중입니다.</p>}
+              {!detail.quoting && detail.quoteFailed && (
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-muted-foreground">고친 투어 등급·인원으로 가격을 계산하지 못했습니다.</p>
+                  <Button type="button" variant="outline" onClick={props.onQuoteNow} disabled={locked}>
+                    다시 계산
+                  </Button>
+                </div>
+              )}
+              {!detail.quoting && !detail.quoteFailed && !detail.priced && !detail.levelMessage && (
+                <p className="text-sm text-muted-foreground">투어 등급과 인원을 고르면 가격이 나옵니다.</p>
+              )}
             </form>
           )}
         </CardContent>
@@ -580,7 +668,7 @@ function TourDetail(props: TourDetailProps) {
       )}
 
       {submitted && !confirming && !applyResult && !detail.optionPanelOpen && (
-        <Button variant="outline" onClick={props.onOpenOptions} disabled={pending !== null}>
+        <Button variant="outline" onClick={props.onOpenOptions} disabled={busy}>
           옵션 바꾸기
         </Button>
       )}
@@ -595,7 +683,7 @@ function TourDetail(props: TourDetailProps) {
           optionIds={detail.optionIds}
           price={detail.priced && priceQuote ? priceQuote.finalPrice : null}
           message={detail.optionMessage}
-          disabled={pending !== null}
+          disabled={busy}
           onChangeOptions={props.onChangeOptions}
           onFinish={props.onFinishOptions}
         />
@@ -611,10 +699,7 @@ function TourDetail(props: TourDetailProps) {
 
       {detail.priced && priceQuote && !confirming && !applyResult && (
         <div className="space-y-2">
-          {edited && pending === null && (
-            <p className="text-sm text-muted-foreground">바꾼 투어 등급·인원으로 가격을 다시 봐 주세요.</p>
-          )}
-          <Button onClick={props.onApply} disabled={pending !== null || edited}>
+          <Button onClick={props.onApply} disabled={busy || edited}>
             {pending === 'apply' ? '신청하는 중' : '신청하기'}
           </Button>
         </div>

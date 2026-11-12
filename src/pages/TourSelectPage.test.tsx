@@ -15,7 +15,12 @@ import type {
   TourSummary,
 } from '@/lib/tours'
 import { UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
-import { TourSelectPage, type ApplySelection, type VoiceSelection } from '@/pages/TourSelectPage'
+import {
+  HEADCOUNT_DELAY_MS,
+  TourSelectPage,
+  type ApplySelection,
+  type VoiceSelection,
+} from '@/pages/TourSelectPage'
 import { jsonResponse, stubFetch } from '@/test/http'
 
 const SEAT_SHORTAGE = '남은 자리보다 인원이 많습니다.'
@@ -214,12 +219,17 @@ async function openTour(user: UserEvent, title: RegExp = /12\/20 출발 5일/) {
   await screen.findByRole('radio', { name: /^그랜드/ })
 }
 
+// 인원을 친 뒤 등급을 고른다. 등급이 바뀌면 바로, 그대로면 인원을 멈춘 뒤(HEADCOUNT_DELAY_MS) 한 번 계산한다
 async function priceWith(user: UserEvent, level: RegExp, headcount: string) {
-  await user.click(screen.getByRole('radio', { name: level }))
   const input = screen.getByLabelText('인원')
   await user.clear(input)
   await user.type(input, headcount)
-  await user.click(screen.getByRole('button', { name: '가격 보기' }))
+  const radio = screen.getByRole('radio', { name: level })
+  if (radio.getAttribute('aria-checked') !== 'true') await user.click(radio)
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function openOptions(user: UserEvent) {
@@ -282,27 +292,93 @@ describe('테마 → 상품 → 투어 등급·인원 → 옵션 → 가격 → 
     expect(toast.error).not.toHaveBeenCalled()
   })
 
-  it.each(['1.5', '0', '-1', ''])('인원 "%s"는 서버에 보내지 않고 정수를 입력하라고 한다', async (headcount) => {
+  it.each(['1.5', '0', '-1'])('인원 "%s"는 서버에 보내지 않고 정수를 입력하라고 한다', async (headcount) => {
     const user = renderPage()
     await openTour(user)
 
     await user.click(screen.getByRole('radio', { name: /^그랜드/ }))
-    if (headcount) await user.type(screen.getByLabelText('인원'), headcount)
-    await user.click(screen.getByRole('button', { name: '가격 보기' }))
+    await user.type(screen.getByLabelText('인원'), headcount)
 
-    expect(screen.getByText('인원은 1 이상의 정수로 입력해 주세요.')).toBeInTheDocument()
+    expect(await screen.findByText('인원은 1 이상의 정수로 입력해 주세요.')).toBeInTheDocument()
     expect(countOf(QUOTE)).toBe(0)
   })
 
-  it('바꾼 투어 등급·인원의 가격을 보기 전에는 신청할 수 없다', async () => {
+  it('투어 등급만 골랐으면 계산하지 않고 인원을 기다린다', async () => {
+    const user = renderPage()
+    await openTour(user)
+
+    await user.click(screen.getByRole('radio', { name: /^그랜드/ }))
+    expect(screen.getByText('투어 등급과 인원을 고르면 가격이 나옵니다.')).toBeInTheDocument()
+    expect(countOf(QUOTE)).toBe(0)
+  })
+
+  it('투어 등급을 고르면 바로 계산한다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await user.type(screen.getByLabelText('인원'), '2')
+
+    await user.click(screen.getByRole('radio', { name: /^그랜드/ }))
+    expect(countOf(QUOTE)).toBe(1)
+    expect(await screen.findByText('가격 요약')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /^프리미엄/ }))
+    expect(countOf(QUOTE)).toBe(2)
+    await waitFor(() => expect(finalPrice()).toHaveTextContent('4,000,000원'))
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'PREMIUM', headcount: 2, optionIds: [] })
+  })
+
+  it('인원을 치는 동안은 계산하지 않고, 멈추면 한 번 계산한다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await user.click(screen.getByRole('radio', { name: /^그랜드/ }))
+
+    await user.type(screen.getByLabelText('인원'), '12')
+    expect(countOf(QUOTE)).toBe(0)
+    await waitFor(() => expect(countOf(QUOTE)).toBe(1))
+    expect(bodiesOf(QUOTE)).toEqual([{ tourId: 1, level: 'GRAND', headcount: 12, optionIds: [] }])
+  })
+
+  it('인원 칸에서 Enter를 누르면 기다리지 않고 한 번 계산한다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await user.click(screen.getByRole('radio', { name: /^그랜드/ }))
+
+    await user.type(screen.getByLabelText('인원'), '3{Enter}')
+    expect(countOf(QUOTE)).toBe(1)
+    await sleep(HEADCOUNT_DELAY_MS + 100)
+    expect(countOf(QUOTE)).toBe(1)
+  })
+
+  it('가격을 계산하는 동안에도 인원을 고칠 수 있고, 늦게 온 지난 응답은 버린다', async () => {
+    let finish: (response: Response) => void = () => {}
+    replyOnce(QUOTE, () => new Promise<Response>((resolve) => (finish = resolve)))
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+
+    expect(screen.getByLabelText('인원')).toBeEnabled()
+    expect(screen.getByText('가격을 계산하는 중입니다.')).toBeInTheDocument()
+    await priceWith(user, /^그랜드/, '3')
+    await waitFor(() => expect(within(screen.getByText('가격 요약').closest('[data-slot=card]') as HTMLElement).getByText('3명')).toBeInTheDocument())
+
+    finish(jsonResponse(200, quoteFor({ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] })))
+    await sleep(50)
+    expect(screen.getByText('3명')).toBeInTheDocument()
+    expect(screen.queryByText('2명')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '신청하기' })).toBeEnabled()
+  })
+
+  it('고친 투어 등급·인원의 가격이 나오기 전에는 신청할 수 없다', async () => {
     const user = renderPage()
     await openTour(user)
     await priceWith(user, /^그랜드/, '2')
     await screen.findByText('가격 요약')
 
-    await user.click(screen.getByRole('radio', { name: /^프리미엄/ }))
+    await user.type(screen.getByLabelText('인원'), '0')
     expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
-    expect(screen.getByText('바꾼 투어 등급·인원으로 가격을 다시 봐 주세요.')).toBeInTheDocument()
+    await waitFor(() => expect(countOf(QUOTE)).toBe(2))
+    await waitFor(() => expect(screen.getByRole('button', { name: '신청하기' })).toBeEnabled())
+    expect(screen.getByText('20명')).toBeInTheDocument()
   })
 
   it('상품을 다시 고르면 고른 옵션과 지난 가격을 비운다', async () => {
@@ -568,7 +644,7 @@ describe('신청', () => {
     expect(await screen.findByText(SEAT_SHORTAGE)).toBeInTheDocument()
     expect((await screen.findAllByText('남은 자리 1명')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '가격 보기' })).toBeEnabled()
+    expect(screen.getByLabelText('인원')).toBeEnabled()
   })
 
   it('409면 문구를 보여 주고 그 테마의 상품 목록을 다시 불러온다', async () => {
@@ -721,10 +797,10 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
     expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')
     expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '가격 보기' })).toBeEnabled()
+    expect(screen.getByLabelText('인원')).toBeEnabled()
   })
 
-  it('이 상품에 없는 투어 등급을 채웠으면 가격을 계산하지 않고 부른 쪽에 넘기고, 가격 보기도 등급을 고르라고 한다', async () => {
+  it('이 상품에 없는 투어 등급을 채웠으면 가격을 계산하지 않고 부른 쪽에 넘기고, 그 뒤에도 등급을 고르라고 한다', async () => {
     replyOnce('GET /api/v1/tours/1/levels', jsonResponse(200, { ...levels, levels: levels.levels.slice(1) }))
     const user = renderPage(FakeVoiceInput)
     await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(클래식)' }))
@@ -733,7 +809,7 @@ describe('applySelection(음성으로 채운 내용)', () => {
     )
     expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '가격 보기' }))
+    await user.type(screen.getByLabelText('인원'), '{Enter}')
     expect(screen.getByText('투어 등급을 골라 주세요.')).toBeInTheDocument()
     expect(countOf(QUOTE)).toBe(0)
     expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
@@ -839,12 +915,18 @@ describe('그 밖의 실패', () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
     expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
-    expect(screen.getByText('바꾼 투어 등급·인원으로 가격을 다시 봐 주세요.')).toBeInTheDocument()
+    expect(screen.getByText('고친 투어 등급·인원으로 가격을 계산하지 못했습니다.')).toBeInTheDocument()
 
     // 옵션을 바꾸면 지난 가격의 투어 등급·인원(2명)으로 계산한다
     await openOptions(user)
     await user.click(screen.getByRole('radio', { name: /^5등급 호텔/ }))
     await screen.findByText('최종 가격 3,400,000원')
     expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [13] })
+    expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
+
+    // 다시 계산하면 고친 인원(3명)으로 계산하고 신청할 수 있다
+    await user.click(screen.getByRole('button', { name: '다시 계산' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: '신청하기' })).toBeEnabled())
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 3, optionIds: [13] })
   })
 })

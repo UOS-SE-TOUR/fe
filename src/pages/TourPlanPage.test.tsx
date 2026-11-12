@@ -1,13 +1,11 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GATEWAY_TIMEOUT_MESSAGE, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
-import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
+import { renderAt, sentRequest } from '@/test/router'
 
 let fetchMock: ReturnType<typeof stubFetch>
 
@@ -24,8 +22,7 @@ afterEach(() => {
 })
 
 async function openPage() {
-  const router = createMemoryRouter(routes, { initialEntries: ['/staff/tours/new'] })
-  render(<RouterProvider router={router} />)
+  const router = renderAt('/staff/tours/new')
   expect(await screen.findByRole('heading', { name: '상품 기획' })).toBeInTheDocument()
   return { user: userEvent.setup(), router }
 }
@@ -44,9 +41,8 @@ async function fillGolfTour(user: User) {
   await user.type(screen.getByLabelText('교통 1 1인 추가 요금(원)'), '0')
 }
 
-function sentBody(call = 0): unknown {
-  const init = fetchMock.mock.calls[call][1]
-  return JSON.parse(String(init?.body))
+function sentBody(): unknown {
+  return sentRequest(fetchMock).body
 }
 
 const golfRequest = {
@@ -72,9 +68,7 @@ describe('등록', () => {
 
     expect(await screen.findByText('상품 번호 12')).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/staff/tours')
-    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
-    expect(sentBody()).toEqual(golfRequest)
+    expect(sentRequest(fetchMock)).toEqual({ path: '/api/v1/staff/tours', method: 'POST', body: golfRequest })
   })
 
   it('다른 상품 기획하기를 누르면 빈 입력 화면으로 돌아간다', async () => {

@@ -106,7 +106,8 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
 
   if (form.theme === '') errors.theme = '테마를 골라 주세요.'
   // 날짜 칸은 날짜가 아니면 빈 값을 준다. 네 자리를 넘는 연도는 be가 읽지 못한다
-  if (form.departureDate === '') errors.departureDate = '출발일을 입력해 주세요.'
+  // 연·월·일 가운데 하나라도 비었거나 없는 날짜(2월 30일 등)도 빈 값이다
+  if (form.departureDate === '') errors.departureDate = '출발일을 연·월·일까지 맞게 입력해 주세요.'
   else if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(form.departureDate)) {
     errors.departureDate = '출발일을 9999년 12월 31일까지의 날짜로 입력해 주세요.'
   }
@@ -206,7 +207,8 @@ export function TourPlanPage() {
   const [registered, setRegistered] = useState<{ tourId: number | null } | null>(null)
   // 단추가 막히기 전에 두 번 눌러도 한 번만 보낸다
   const submittingRef = useRef(false)
-  const messageRef = useRef<HTMLParagraphElement>(null)
+  const submitRef = useRef<HTMLButtonElement>(null)
+  const unknownHintRef = useRef<HTMLParagraphElement>(null)
   const addTransportRef = useRef<HTMLButtonElement>(null)
 
   // 보내는 동안 떠나면 등록됐는지 알 수 없으니 화면 이동(뒤로 가기 포함)과 탭 닫기를 막는다
@@ -277,11 +279,15 @@ export function TourPlanPage() {
     }
   }
 
+  // 누른 다른 상품 기획하기 단추가 결과와 함께 사라지니 초점을 새 입력 화면의 첫 칸으로 옮긴다
   function showTourForm() {
-    setForm(emptyForm())
-    setSubmitted(false)
-    setMessage(null)
-    setRegistered(null)
+    flushSync(() => {
+      setForm(emptyForm())
+      setSubmitted(false)
+      setMessage(null)
+      setRegistered(null)
+    })
+    document.getElementById(`theme-${themes[0].value}`)?.focus()
   }
 
   async function registerTour(event: FormEvent<HTMLFormElement>) {
@@ -299,7 +305,9 @@ export function TourPlanPage() {
       return
     }
 
-    const returnTo = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    // 마우스로 누르면 단추에 초점을 주지 않는 브라우저(Safari 등)에서는 돌아갈 곳이 없다
+    const active = document.activeElement
+    const returnTo = active instanceof HTMLElement && active !== document.body ? active : null
     submittingRef.current = true
     setSubmitting(true)
     const settle = await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true }).then(
@@ -307,13 +315,16 @@ export function TourPlanPage() {
       (error: unknown) => () => showRegisterFailure(error),
     )
     submittingRef.current = false
-    // 결과와 풀린 칸·단추를 한 번에 그린 뒤 빠진 초점을 되돌린다. 등록 단추가 계속 막히면(처리됐는지 모름) 문구로 옮긴다
+    // 결과와 풀린 칸·단추를 한 번에 그린 뒤 빠진 초점을 되돌린다. 등록 단추가 계속 막히면(처리됐는지 모름) 그 안내로 옮긴다
+    // (서버 문구는 알림으로 이미 읽히니 초점을 주지 않는다)
     flushSync(() => {
       settle()
       setSubmitting(false)
     })
     if (focusLost()) {
-      const target = returnTo?.isConnected && !returnTo.matches(':disabled') ? returnTo : messageRef.current
+      const target = [returnTo, submitRef.current, unknownHintRef.current].find(
+        (element) => element?.isConnected && !element.matches(':disabled'),
+      )
       target?.focus()
     }
   }
@@ -502,17 +513,17 @@ export function TourPlanPage() {
 
           <div className="flex flex-col gap-3">
             {message && (
-              <p ref={messageRef} role="alert" tabIndex={-1} className="text-sm text-destructive outline-none">
+              <p role="alert" className="text-sm text-destructive">
                 {message}
               </p>
             )}
             {resultUnknown && (
-              <p className="text-sm text-muted-foreground">
+              <p ref={unknownHintRef} tabIndex={-1} className="text-sm text-muted-foreground outline-none">
                 이 화면에서는 상품이 등록됐는지 확인할 수 없어 등록 단추를 막았습니다. 같은 상품이 이미 등록됐을 수
                 있습니다. 그래도 다시 등록하려면 화면을 새로 여세요.
               </p>
             )}
-            <Button type="submit" className="self-start" disabled={submitting || resultUnknown}>
+            <Button ref={submitRef} type="submit" className="self-start" disabled={submitting || resultUnknown}>
               {submitting ? '등록하는 중…' : '등록'}
             </Button>
           </div>

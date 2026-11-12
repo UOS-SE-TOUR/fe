@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -86,6 +86,7 @@ describe('등록', () => {
     await user.click(await screen.findByRole('button', { name: '다른 상품 기획하기' }))
 
     expect(screen.getByRole('radio', { name: '골프 챌린지 투어' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: '허니문 낭만 투어' })).toHaveFocus()
     expect(screen.getByLabelText('기간(일)')).toHaveValue('')
     expect(screen.getByLabelText('교통 1 이름')).toHaveValue('')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -246,7 +247,7 @@ describe('화면에서 막는 것', () => {
     await user.click(screen.getByRole('button', { name: '등록' }))
 
     expect(screen.getByText('테마를 골라 주세요.')).toBeInTheDocument()
-    expect(screen.getByText('출발일을 입력해 주세요.')).toBeInTheDocument()
+    expect(screen.getByText('출발일을 연·월·일까지 맞게 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('기간을 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('정원을 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('교통 이름을 입력해 주세요.')).toBeInTheDocument()
@@ -427,11 +428,29 @@ describe('처리됐는지 모르는 실패', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(message)
     expect(screen.getByText(/확인할 수 없어 등록 단추를 막았습니다/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '등록' })).toBeDisabled()
-    // 눌렀던 단추가 계속 막혀 있으니 초점은 문구로 옮긴다
-    expect(screen.getByRole('alert')).toHaveFocus()
+    // 눌렀던 단추가 계속 막혀 있으니 초점은 막은 까닭을 적은 안내로 옮긴다
+    expect(screen.getByText(/확인할 수 없어 등록 단추를 막았습니다/)).toHaveFocus()
 
     await user.type(screen.getByLabelText('기간(일)'), '0')
     expect(screen.getByRole('button', { name: '등록' })).toBeDisabled()
+  })
+
+  it('마우스로 눌러 단추에 초점이 없었어도(Safari 등) 끝난 뒤 초점을 둘 곳을 찾는다', async () => {
+    const { user } = await openPage()
+    await fillGolfTour(user)
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(400, { message: '정원은 3명 이상이어야 합니다.' }))
+      .mockResolvedValueOnce(jsonResponse(500, {}))
+    const button = screen.getByRole('button', { name: '등록' })
+    act(() => (document.activeElement as HTMLElement | null)?.blur())
+
+    fireEvent.click(button)
+    expect(await screen.findByRole('alert')).toHaveTextContent('정원은 3명 이상이어야 합니다.')
+    expect(button).toHaveFocus()
+
+    act(() => button.blur())
+    fireEvent.click(button)
+    expect(await screen.findByText(/확인할 수 없어 등록 단추를 막았습니다/)).toHaveFocus()
   })
 
   it('연결이 끊기면 처리됐는지 모른다고 알리고 단추를 다시 열지 않는다', async () => {

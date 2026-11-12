@@ -40,10 +40,13 @@ afterEach(() => {
 })
 
 describe('lazyPage', () => {
-  it('화면 파일을 받으면 그 화면을 그린다', async () => {
+  it('화면 파일을 받으면 그 화면을 그리고, 새로고침했다는 표시를 지운다', async () => {
+    sessionStorage.setItem('staleChunkReloaded', '1')
+
     await renderLazyPage(async () => () => <h1>받은 화면</h1>, vi.fn())
 
     expect(await screen.findByRole('heading', { name: '받은 화면' })).toBeInTheDocument()
+    expect(sessionStorage.getItem('staleChunkReloaded')).toBeNull()
   })
 
   it('처음 못 받으면 새로고침하고, 그동안 오류 화면 없이 기다린다', async () => {
@@ -57,7 +60,7 @@ describe('lazyPage', () => {
   })
 
   it('새로고침하고도 못 받으면 오류 화면과 다시 불러오기 단추를 보인다', async () => {
-    sessionStorage.setItem('staleChunkReloadedAt', String(Date.now() - 1_000))
+    sessionStorage.setItem('staleChunkReloaded', '1')
     const reload = vi.fn()
 
     await renderLazyPage(() => Promise.reject(chunkError), reload)

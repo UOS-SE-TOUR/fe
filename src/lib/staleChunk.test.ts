@@ -1,28 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// "이 페이지에서 새로고침을 시작했다"는 모듈 값이라 테스트마다 모듈을 새로 불러온다
+// "이 페이지에서 새로고침을 기다리는 중"은 모듈 값이라 테스트마다 모듈을 새로 불러온다
 async function load() {
   vi.resetModules()
   return import('@/lib/staleChunk')
 }
 
-const NOW = new Date('2026-11-12T09:00:00Z').getTime()
 const chunkError = new Error('Failed to fetch dynamically imported module')
 
-// 끝나지 않는 Promise인지 본다(그사이 settle 되면 true)
+// 그사이 끝났으면(settle) true
 async function settledSoon(promise: Promise<unknown>): Promise<boolean> {
   let settled = false
   promise.then(
     () => (settled = true),
     () => (settled = true),
   )
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  await vi.advanceTimersByTimeAsync(0)
   return settled
 }
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['Date'] })
-  vi.setSystemTime(NOW)
+  vi.useFakeTimers()
   sessionStorage.clear()
 })
 
@@ -55,10 +53,10 @@ describe('recoverFromStaleChunk', () => {
     expect(await settledSoon(second)).toBe(false)
   })
 
-  it('새로고침하고 얼마 안 돼 또 못 받으면 새로고침하지 않고 오류를 넘긴다', async () => {
-    const before = await load()
-    before.recoverFromStaleChunk(chunkError, vi.fn())
-    vi.setSystemTime(NOW + before.STALE_CHUNK_RETRY_MS - 1)
+  it('새로고침했는데 아직 화면 파일을 하나도 못 받았으면, 걸린 시간과 상관없이 다시 새로고침하지 않고 오류를 넘긴다', async () => {
+    // 앞 페이지의 기다림. 실제로는 새로고침되면 사라진다
+    void (await load()).recoverFromStaleChunk(chunkError, vi.fn()).catch(() => {})
+    vi.advanceTimersByTime(60 * 60 * 1000)
     // 새로고침한 뒤의 새 페이지
     const { recoverFromStaleChunk } = await load()
     const reload = vi.fn()
@@ -67,26 +65,31 @@ describe('recoverFromStaleChunk', () => {
     expect(reload).not.toHaveBeenCalled()
   })
 
-  it('새로고침하고 충분히 지난 뒤에 또 못 받으면(다음 배포) 다시 새로고침한다', async () => {
-    const before = await load()
-    before.recoverFromStaleChunk(chunkError, vi.fn())
-    vi.setSystemTime(NOW + before.STALE_CHUNK_RETRY_MS)
-    const { recoverFromStaleChunk } = await load()
+  it('새로고침 뒤 화면 파일을 받았으면 다음에 또 못 받을 때(다음 배포) 다시 새로고침한다', async () => {
+    void (await load()).recoverFromStaleChunk(chunkError, vi.fn()).catch(() => {})
+    const { markChunkLoaded, recoverFromStaleChunk } = await load()
+    markChunkLoaded()
     const reload = vi.fn()
 
-    const result = recoverFromStaleChunk(chunkError, reload)
+    void recoverFromStaleChunk(chunkError, reload).catch(() => {})
 
     expect(reload).toHaveBeenCalledTimes(1)
-    expect(await settledSoon(result)).toBe(false)
   })
 
-  it('시계가 뒤로 가 지난 새로고침 시각이 지금보다 뒤여도 새로고침한다', async () => {
-    sessionStorage.setItem('staleChunkReloadedAt', String(NOW + 60_000))
-    const { recoverFromStaleChunk } = await load()
+  it('새로고침이 일어나지 않으면(떠나기 확인에서 머무르기 등) 기다리기를 그만두고 오류를 넘긴다', async () => {
+    const { recoverFromStaleChunk, RELOAD_WAIT_MS } = await load()
     const reload = vi.fn()
+    const first = recoverFromStaleChunk(chunkError, reload)
+    const second = recoverFromStaleChunk(chunkError, reload)
+    const firstRejected = expect(first).rejects.toBe(chunkError)
+    const secondRejected = expect(second).rejects.toBe(chunkError)
 
-    recoverFromStaleChunk(chunkError, reload)
+    await vi.advanceTimersByTimeAsync(RELOAD_WAIT_MS)
 
+    await firstRejected
+    await secondRejected
+    // 새로고침한 표시가 남아 있어 이제는 오류 화면(다시 불러오기 단추)으로 넘긴다
+    await expect(recoverFromStaleChunk(chunkError, reload)).rejects.toBe(chunkError)
     expect(reload).toHaveBeenCalledTimes(1)
   })
 

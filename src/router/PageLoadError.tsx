@@ -12,7 +12,7 @@ export function PageLoadError() {
 
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-6 text-center">
-      <p className="text-sm text-muted-foreground">화면을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 불러와 주세요.</p>
+      <p className="text-sm text-muted-foreground">화면을 불러오지 못했습니다. 잠시 뒤 다시 불러와 주세요.</p>
       <Button onClick={() => window.location.reload()}>다시 불러오기</Button>
     </main>
   )

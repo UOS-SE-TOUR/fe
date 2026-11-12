@@ -9,7 +9,7 @@ import {
   TourPlanPage,
   TourSelectPage,
   WarehousePage,
-} from '@/router/lazyPages'
+} from '@/router/memberPages'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PageLoadError } from '@/router/PageLoadError'
 

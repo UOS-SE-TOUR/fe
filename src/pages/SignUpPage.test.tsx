@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -212,6 +212,21 @@ describe('SignUpPage', () => {
 
     expect(phone).toHaveValue('010-1234-5678')
     expect(phone.selectionStart).toBe(6)
+  })
+
+  it('값이 그대로인 입력 뒤의 자동 완성은 그 앞 입력의 고른 범위를 쓰지 않는다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234-[5]678의 5를 5로 바꿨다. 값이 그대로라 onChange가 오지 않는다
+    await user.type(phone, '5', { initialSelectionStart: 9, initialSelectionEnd: 10 })
+    expect(phone).toHaveValue('010-1234-5678')
+
+    // beforeinput 없이 들어온 11자리 넘는 자동 완성은 받지 않고, 커서는 넣은 글자 수로 되짚은 자리에 둔다
+    fireEvent.input(phone, { target: { value: '010-1234-56789' } })
+    expect(phone).toHaveValue('010-1234-5678')
+    expect([phone.selectionStart, phone.selectionEnd]).toEqual([13, 13])
   })
 
   it('하이픈 바로 뒤에서 Backspace를 누르면 하이픈 앞의 숫자를 지운다', async () => {

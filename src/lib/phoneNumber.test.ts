@@ -147,13 +147,19 @@ describe('editPhoneNumber', () => {
     expect(editPhoneNumber(full, '010-12345678', 8, 'deleteWordForward')).toEqual({ value: '010-1234-678', caret: 8 })
   })
 
-  it('숫자를 지우거나 바꿔도 01로 시작하는 11자리 넘는 번호가 되면 받지 않는다', () => {
-    // 0|212345678901에서 2를 지웠다(01로 시작하지 않으면 자릿수를 막지 않는다)
-    expect(editPhoneNumber('0212345678901', '012345678901', 1, 'deleteContentForward', { start: 1, end: 1 })).toEqual({
-      value: '0212345678901',
+  it('지우다가 01로 시작하는 11자리 넘는 번호가 되면 숫자만 보이고, 더 지워 11자리가 되면 다시 끊는다', () => {
+    // 0|210123456789에서 2를 지웠다(01로 시작하지 않으면 자릿수를 막지 않는다)
+    expect(editPhoneNumber('0210123456789', '010123456789', 1, 'deleteContentForward', { start: 1, end: 1 })).toEqual({
+      value: '010123456789',
       caret: 1,
-      selectionEnd: 1,
     })
+    expect(editPhoneNumber('010123456789', '01012345678', 11, 'deleteContentBackward', { start: 12, end: 12 })).toEqual({
+      value: '010-1234-5678',
+      caret: 13,
+    })
+  })
+
+  it('바꿔서 01로 시작하는 11자리 넘는 번호가 되면 받지 않는다', () => {
     // 0[2]12345678901의 2를 1로 바꿨다
     expect(editPhoneNumber('0212345678901', '0112345678901', 2, 'insertText', { start: 1, end: 2 })).toEqual({
       value: '0212345678901',

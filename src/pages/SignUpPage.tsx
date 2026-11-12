@@ -47,8 +47,16 @@ export function SignUpPage() {
     const note = () => {
       phoneSelectionBefore.current = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }
     }
+    // 값이 그대로인 입력은 React가 onChange를 건너뛰므로, 문서까지 올라온 input(React가 처리한 뒤)에서 지운다
+    const forget = (event: Event) => {
+      if (event.target === input) phoneSelectionBefore.current = undefined
+    }
     input.addEventListener('beforeinput', note)
-    return () => input.removeEventListener('beforeinput', note)
+    document.addEventListener('input', forget)
+    return () => {
+      input.removeEventListener('beforeinput', note)
+      document.removeEventListener('input', forget)
+    }
   }, [])
 
   // 입력을 바꾸면 앞의 실패 문구는 낡은 것이라 지운다

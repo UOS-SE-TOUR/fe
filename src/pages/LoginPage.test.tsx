@@ -31,12 +31,15 @@ async function logIn(loginId: string, password: string) {
 
 describe('LoginPage', () => {
   it('고객으로 로그인하면 고객 첫 화면으로 가고 "로그인 직후" 표시를 켠다', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
+      // 고객 첫 화면이 부르는 이전 여행은 기다리게 둔다(응답을 받으면 표시를 지운다)
+      .mockReturnValueOnce(new Promise(() => {}))
     const router = renderAt('/login')
 
     await logIn('hong', 'password1')
 
-    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
     expect(sentRequest(fetchMock)).toEqual({
       path: '/api/v1/members/login',
@@ -44,6 +47,7 @@ describe('LoginPage', () => {
       body: { loginId: 'hong', password: 'password1' },
     })
     expect(AuthStore.getState().member).toEqual({ memberType: 'CUSTOMER', name: '홍길동' })
+    expect(sentRequest(fetchMock, 1)).toEqual({ path: '/api/v1/bookings/previous', method: 'GET', body: undefined })
     expect(isFromLogin()).toBe(true)
   })
 
@@ -123,7 +127,7 @@ describe('LoginPage', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     respond(jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }))
-    expect(await screen.findByRole('heading', { name: '고객 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
   })
 
   it('응답 모양이 다르면 로그인하지 않고 공용 알림을 띄운다', async () => {

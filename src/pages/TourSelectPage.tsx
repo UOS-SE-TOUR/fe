@@ -517,7 +517,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">여행 상품 선택</h1>
         <Button variant="ghost" asChild>
-          <Link to={pagePaths.CustomerMainPage}>고객 첫 화면</Link>
+          <Link to={pagePaths.CustomerMainPage}>고객 메뉴</Link>
         </Button>
       </header>
 

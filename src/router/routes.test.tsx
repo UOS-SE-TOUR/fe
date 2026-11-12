@@ -92,11 +92,11 @@ describe('로그인하지 않았을 때', () => {
 
 describe('로그인했을 때', () => {
   it.each([
-    ['CUSTOMER', '/login', '/', '고객 첫 화면'],
-    ['CUSTOMER', '/signup', '/', '고객 첫 화면'],
+    ['CUSTOMER', '/login', '/', '고객 메뉴'],
+    ['CUSTOMER', '/signup', '/', '고객 메뉴'],
     ['STAFF', '/login', '/staff', '직원 메뉴'],
     ['STAFF', '/', '/staff', '직원 메뉴'],
-    ['CUSTOMER', '/staff', '/', '고객 첫 화면'],
+    ['CUSTOMER', '/staff', '/', '고객 메뉴'],
   ] as const)('%s가 %s로 오면 알림 없이 자기 첫 화면(%s)으로 보낸다', async (memberType, path, home, title) => {
     AuthStore.setMember(memberType, '홍길동')
     const router = renderAt(path)
@@ -107,7 +107,7 @@ describe('로그인했을 때', () => {
   })
 
   it.each([
-    ['CUSTOMER', '/staff/items', '/', '고객 첫 화면'],
+    ['CUSTOMER', '/staff/items', '/', '고객 메뉴'],
     ['STAFF', '/tours', '/staff', '직원 메뉴'],
   ] as const)('%s가 다른 회원 구분의 화면 주소(%s)로 오면 권한이 없다고 알리고 자기 첫 화면으로 보낸다', async (memberType, path, home, title) => {
     AuthStore.setMember(memberType, '홍길동')
@@ -118,7 +118,6 @@ describe('로그인했을 때', () => {
     expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
   })
 
-  // 자리표시자가 아닌 화면으로 본다(자리표시자는 화면 이슈마다 실제 화면으로 바뀐다)
   it('자기 화면은 그대로 연다', async () => {
     AuthStore.setMember('STAFF', '김직원')
     const router = renderAt('/staff/tours/new')

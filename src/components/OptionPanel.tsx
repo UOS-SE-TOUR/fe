@@ -199,7 +199,8 @@ export function OptionPanel(props: OptionPanelProps) {
               ? '투어 등급과 인원으로 가격을 다시 계산해 주세요.'
               : `최종 가격 ${formatWon(price)}`}
         </p>
-        <Button variant="outline" onClick={onFinish}>
+        {/* 가격 계산 중에 닫으면 그 결과의 문구(닫힌 패널 안)를 못 본다 */}
+        <Button variant="outline" onClick={onFinish} disabled={disabled}>
           옵션 고르기 끝
         </Button>
       </CardFooter>

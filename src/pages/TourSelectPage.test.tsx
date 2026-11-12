@@ -522,6 +522,20 @@ describe('옵션을 바꿀 때의 가격 계산', () => {
     expect(bodiesOf(APPLY)).toEqual([{ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] }])
   })
 
+  it('가격을 다시 계산하는 동안은 옵션 패널을 닫지 못한다(그 결과의 문구를 놓치지 않게)', async () => {
+    const user = renderPage()
+    await pricedWithOptionsOpen(user)
+    let finish: (response: Response) => void = () => {}
+    replyOnce(QUOTE, () => new Promise<Response>((resolve) => (finish = resolve)))
+    await user.click(screen.getByRole('radio', { name: /^3등급 호텔/ }))
+
+    expect(screen.getByRole('button', { name: '옵션 고르기 끝' })).toBeDisabled()
+    expect(screen.getByText('가격을 다시 계산하는 중입니다.')).toBeInTheDocument()
+    finish(failWith(400, NEGATIVE_PRICE))
+    expect(await screen.findByText(NEGATIVE_PRICE)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '옵션 고르기 끝' })).toBeEnabled()
+  })
+
   it('409면 문구를 보여 주고 그 테마의 상품 목록을 다시 불러온다', async () => {
     const user = renderPage()
     await pricedWithOptionsOpen(user)
@@ -706,6 +720,17 @@ describe('applySelection(음성으로 채운 내용)', () => {
 })
 
 describe('그 밖의 실패', () => {
+  it('상품의 투어 등급을 불러오지 못하면 알리고, 받아 둔 상품 목록으로 돌아간다', async () => {
+    replyOnce('GET /api/v1/tours/1/levels', failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    const user = renderPage()
+    await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
+    await user.click(await screen.findByRole('button', { name: /12\/20 출발 5일/ }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(1)
+  })
+
   it('옵션 목록을 불러오지 못하면 패널에서 다시 불러올 수 있다', async () => {
     const user = renderPage()
     await openTour(user)

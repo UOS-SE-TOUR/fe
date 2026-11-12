@@ -162,6 +162,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const context = useRef(0)
   // 신청 단추를 빠르게 두 번 눌러도 신청은 한 번만 나간다
   const applying = useRef(false)
+  const tourList = tours?.status === 'loaded' ? tours.list : undefined
 
   function newContext(): number {
     context.current += 1
@@ -227,7 +228,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     } catch (error) {
       if (!isCurrent(seq)) return
       showError(error)
-      showTourList(null)
+      // 목록은 그대로이니 다시 불러오지 않는다
+      showTourList(null, tourList)
     } finally {
       if (isCurrent(seq)) setPending(null)
     }
@@ -315,29 +317,34 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     const seq = context.current
     const { summary } = detail.quote
     setPending('apply')
+    const outcome = await ApiClient.post<ApplyTourResponse>(
+      '/api/v1/bookings',
+      {
+        tourId: summary.tourId,
+        level: summary.level,
+        headcount: summary.headcount,
+        optionIds: summary.options.map((option) => option.optionId),
+      } satisfies QuoteRequest,
+      { unsafeToRetry: true },
+    ).then(
+      (result) => ({ ok: true as const, result }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    // 신청 요청은 끝났다. 아래에서 목록을 다시 불러오는 동안 음성 입력을 막지 않는다
+    applying.current = false
+    if (!isCurrent(seq)) return
     try {
-      const result = await ApiClient.post<ApplyTourResponse>(
-        '/api/v1/bookings',
-        {
-          tourId: summary.tourId,
-          level: summary.level,
-          headcount: summary.headcount,
-          optionIds: summary.options.map((option) => option.optionId),
-        } satisfies QuoteRequest,
-        { unsafeToRetry: true },
-      )
-      if (isCurrent(seq)) updateDetail({ applyResult: result, optionPanelOpen: false })
-    } catch (error) {
-      // 신청은 끝났다. 아래에서 목록을 다시 불러오는 동안 음성 입력을 막지 않는다
-      applying.current = false
-      if (!isCurrent(seq)) return
+      if (outcome.ok) {
+        updateDetail({ applyResult: outcome.result, optionPanelOpen: false })
+        return
+      }
+      const { error } = outcome
       // 신청이 이미 됐을 수 있어 단추를 다시 열지 않는다
       if (error instanceof ApiError && error.resultUnknown) showTourList(error.message)
       else if (hasStatus(error, 400)) await askLevelAgain(error.message, summary.tourId, seq)
       else if (hasStatus(error, 409)) showTourList(error.message)
       else showError(error)
     } finally {
-      applying.current = false
       if (isCurrent(seq)) setPending(null)
     }
   }
@@ -384,7 +391,6 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   }
 
   const applyBusy = pending === 'apply'
-  const tourList = tours?.status === 'loaded' ? tours.list : undefined
 
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-6">

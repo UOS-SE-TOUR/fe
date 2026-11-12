@@ -39,13 +39,16 @@ export interface TourSelection {
 
 const UNSUPPORTED_MESSAGE = '이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 아래에서 직접 골라 주세요.'
 const MIC_DENIED_MESSAGE = '마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'
-// 그 밖의 인식 오류(네트워크·마이크 없음 등). 잠깐의 실패일 수도 있어 다시 말할 수도 있게 안내한다
-const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 다시 말하거나 아래에서 직접 골라 주세요.'
+// 그 밖의 인식 오류(네트워크·마이크 없음·정책 차단 등). 잠깐의 실패인지 가릴 수 없어 다시 말하라고도, 쓸 수 없다고도 하지 않는다
+// (말하기 단추는 그대로 있다)
+const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 아래에서 직접 골라 주세요.'
 const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.'
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const MISSING_MESSAGE = '알아듣지 못한 칸이 있습니다. 빈 칸을 채우거나 다시 말해 주세요.'
 const NO_CANDIDATE_MESSAGE = '그 테마와 출발일에 고를 수 있는 상품이 없습니다. 테마나 출발일을 고치거나 다시 말해 주세요.'
 const CHOOSE_MESSAGE = '출발일이 같은 상품이 여럿입니다. 하나를 골라 주세요.'
+// 고른 상품이 거부 뒤 더 고를 수 없게 되어, 남은 후보가 하나여도 대신 고르지 않았을 때
+const PICK_MESSAGE = '후보 상품을 골라 주세요.'
 const SPEAK_AGAIN_MESSAGE = '내용을 고치거나 다시 말해 주세요.'
 const PRICED_MESSAGE = '말한 내용으로 가격을 계산했습니다. 아래에서 확인해 주세요.'
 
@@ -88,10 +91,11 @@ function choosableOf(candidates: ToursState): TourSummary[] {
   return candidates.status === 'loaded' ? candidates.list.filter(canApply) : []
 }
 
-// 고를 수 있는 후보가 하나면 그 상품을 쓴다. 둘 이상이면 고객이 고른다. keep은 고객이 이미 고른 상품으로, 아직 고를 수 있으면 둔다
+// 고를 수 있는 후보가 하나면 그 상품을 쓴다. 둘 이상이면 고객이 고른다.
+// keep은 고객이 이미 고른 상품이다. 아직 고를 수 있으면 두고, 더 고를 수 없으면 다른 상품을 대신 고르지 않는다
 function pickTour(list: TourSummary[], keep: number | null = null): number | null {
   const choosable = list.filter(canApply)
-  if (keep !== null && choosable.some((tour) => tour.tourId === keep)) return keep
+  if (keep !== null) return choosable.some((tour) => tour.tourId === keep) ? keep : null
   return choosable.length === 1 ? choosable[0].tourId : null
 }
 
@@ -271,6 +275,8 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
     const selection = draft && step === 'idle' ? selectionOf(draft) : null
     if (!draft || !selection) return
     const seq = session.current
+    // 앞서 알린 것(말소리 없음 등)은 이 확인의 결과와 섞이지 않게 지운다
+    setNotice(null)
     setStep('applying')
     const outcome = await applySelection(selection)
     if (seq !== session.current) return
@@ -472,8 +478,8 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
               </div>
             ))}
           </RadioGroup>
-          {choosable.length > 1 && draft.tourId === null && (
-            <p className="text-sm text-muted-foreground">{CHOOSE_MESSAGE}</p>
+          {choosable.length > 0 && draft.tourId === null && (
+            <p className="text-sm text-muted-foreground">{choosable.length > 1 ? CHOOSE_MESSAGE : PICK_MESSAGE}</p>
           )}
         </fieldset>
       )}

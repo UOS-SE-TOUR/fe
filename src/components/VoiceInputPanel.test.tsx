@@ -532,6 +532,34 @@ describe('오류', () => {
     expect(countOf(GOLF_TOURS)).toBe(2)
   })
 
+  it('고른 상품이 409로 마감되면 남은 후보가 하나여도 대신 고르지 않는다', async () => {
+    const user = renderPage()
+    await speak(user, { ...heardAll, departureDate: '2026-12-20', candidates: [golf20Long, golf20Full, golf20Short] })
+    await user.click(panel().getByRole('radio', { name: /12\/20 출발 4일/ }))
+    const closed = { ...golf20Short, status: 'FULL' as const, remainingSeats: 0 }
+    replyOnce(GOLF_TOURS, jsonResponse(200, golfTours), jsonResponse(200, [golf20Long, golf20Full, closed, golf27]))
+    replyOnce(QUOTE, failWith(409, CLOSED))
+    await user.click(confirmButton())
+
+    expect(await panel().findByRole('radio', { name: /12\/20 출발 4일/ })).toBeDisabled()
+    expect(panel().getByRole('radio', { name: /12\/20 출발 5일/ })).not.toBeChecked()
+    expect(panel().getByText('후보 상품을 골라 주세요.')).toBeInTheDocument()
+    expect(confirmButton()).toBeDisabled()
+  })
+
+  it('확인하면 앞서 알린 것(말소리 없음 등)을 지운다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    await user.click(panel().getByRole('button', { name: '다시 말하기' }))
+    recognizer.fail('no-speech')
+    expect(panel().getByText('말소리를 듣지 못했습니다. 다시 말해 주세요.')).toBeInTheDocument()
+
+    replyOnce(QUOTE, failWith(400, '골프 챌린지 투어는 2명만 신청할 수 있습니다.'))
+    await user.click(confirmButton())
+    expect(await panel().findByText('골프 챌린지 투어는 2명만 신청할 수 있습니다.')).toBeInTheDocument()
+    expect(panel().queryByText('말소리를 듣지 못했습니다. 다시 말해 주세요.')).not.toBeInTheDocument()
+  })
+
   it('그 밖의 400은 고를 수 있는 후보를 바꾸지 않아 후보를 다시 받지 않는다', async () => {
     const user = renderPage()
     await speak(user, heardAll)
@@ -601,7 +629,7 @@ describe('오류', () => {
 
   it.each([
     ['not-allowed', '마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'],
-    ['other', '음성을 인식하지 못했습니다. 다시 말하거나 아래에서 직접 골라 주세요.'],
+    ['other', '음성을 인식하지 못했습니다. 아래에서 직접 골라 주세요.'],
   ] as const)('인식이 %s로 실패하면 화면에서 직접 고르라고 안내한다', async (reason, message) => {
     const user = renderPage()
     await user.click(panel().getByRole('button', { name: '말하기' }))

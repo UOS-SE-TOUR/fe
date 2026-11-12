@@ -1,12 +1,10 @@
-import { act, render, screen } from '@testing-library/react'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
+import { act, screen } from '@testing-library/react'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
-import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
+import { renderAt } from '@/test/router'
 
 let fetchMock: ReturnType<typeof stubFetch>
 
@@ -20,12 +18,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   AuthStore.clear()
 })
-
-function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return router
-}
 
 describe('ApiClient가 받은 401·403 뒤', () => {
   async function respondWith(...responses: Response[]) {
@@ -52,7 +44,7 @@ describe('ApiClient가 받은 401·403 뒤', () => {
       jsonResponse(403, { message: '권한이 없습니다.' }),
       jsonResponse(200, { memberType: 'STAFF', name: '김직원' }),
     )
-    expect(await screen.findByRole('heading', { name: '직원 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '직원 메뉴' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/staff')
   })
 
@@ -102,8 +94,8 @@ describe('로그인했을 때', () => {
   it.each([
     ['CUSTOMER', '/login', '/', '고객 첫 화면'],
     ['CUSTOMER', '/signup', '/', '고객 첫 화면'],
-    ['STAFF', '/login', '/staff', '직원 첫 화면'],
-    ['STAFF', '/', '/staff', '직원 첫 화면'],
+    ['STAFF', '/login', '/staff', '직원 메뉴'],
+    ['STAFF', '/', '/staff', '직원 메뉴'],
     ['CUSTOMER', '/staff', '/', '고객 첫 화면'],
   ] as const)('%s가 %s로 오면 알림 없이 자기 첫 화면(%s)으로 보낸다', async (memberType, path, home, title) => {
     AuthStore.setMember(memberType, '홍길동')
@@ -116,7 +108,7 @@ describe('로그인했을 때', () => {
 
   it.each([
     ['CUSTOMER', '/staff/items', '/', '고객 첫 화면'],
-    ['STAFF', '/tours', '/staff', '직원 첫 화면'],
+    ['STAFF', '/tours', '/staff', '직원 메뉴'],
   ] as const)('%s가 다른 회원 구분의 화면 주소(%s)로 오면 권한이 없다고 알리고 자기 첫 화면으로 보낸다', async (memberType, path, home, title) => {
     AuthStore.setMember(memberType, '홍길동')
     const router = renderAt(path)
@@ -139,7 +131,7 @@ describe('로그인했을 때', () => {
     AuthStore.setMember('STAFF', '김직원')
     const router = renderAt('/nope')
 
-    expect(await screen.findByRole('heading', { name: '직원 첫 화면' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '직원 메뉴' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/staff')
     expect(toast.error).not.toHaveBeenCalled()
   })

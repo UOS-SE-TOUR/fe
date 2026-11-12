@@ -61,13 +61,14 @@ function parseJson(text: string): { value: unknown } | null {
   }
 }
 
-function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null
+// 배열이 아닌 JSON 객체
+function isRecord(value: unknown): value is object {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function serverMessage(parsed: { value: unknown } | null): string | null {
   const value = parsed?.value
-  if (!isObject(value) || !('message' in value)) return null
+  if (!isRecord(value) || !('message' in value)) return null
   const { message } = value
   return typeof message === 'string' && message.trim() !== '' ? message : null
 }
@@ -131,9 +132,13 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   const parsed = text ? parseJson(text) : null
 
   if (response.ok) {
-    if (text === '' && !options.unsafeToRetry) return undefined as T
-    // unsafeToRetry 요청은 성공하면 결과 객체를 받는다. 본문이 비었거나 객체가 아니면 앞단이 응답을 잘랐을 수 있다
-    if (parsed && (!options.unsafeToRetry || isObject(parsed.value))) return parsed.value as T
+    // unsafeToRetry 요청은 성공하면 결과 객체를 받는다. 본문을 못 받았거나 비었거나 객체가 아니면 앞단이 응답을 잘랐을 수 있다
+    if (options.unsafeToRetry) {
+      if (parsed && isRecord(parsed.value)) return parsed.value as T
+      throw unknownResult(response.status)
+    }
+    if (text === '') return undefined as T
+    if (parsed) return parsed.value as T
     throw connectionLost(response.status, options)
   }
 

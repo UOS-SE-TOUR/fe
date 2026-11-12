@@ -164,7 +164,7 @@ export function WarehousePage() {
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">창고</h1>
         <Button variant="outline" asChild>
-          <Link to={pagePaths.StaffMainPage}>직원 첫 화면</Link>
+          <Link to={pagePaths.StaffMainPage}>직원 메뉴</Link>
         </Button>
       </header>
 

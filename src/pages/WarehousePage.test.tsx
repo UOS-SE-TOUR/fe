@@ -52,6 +52,17 @@ function rowTexts() {
     .map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))
 }
 
+it('직원 메뉴 링크로 직원 첫 화면에 돌아간다', async () => {
+  fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
+  const router = renderPage()
+  await screen.findByText('창고에 물품이 없습니다.')
+
+  await userEvent.setup().click(screen.getByRole('link', { name: '직원 메뉴' }))
+
+  expect(await screen.findByRole('heading', { name: '직원 메뉴' })).toBeInTheDocument()
+  expect(router.state.location.pathname).toBe('/staff')
+})
+
 describe('물품 목록', () => {
   it('서버가 준 순서대로 이름·테마 화면 이름·수량을 보여 준다', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, [tent, golfBall]))

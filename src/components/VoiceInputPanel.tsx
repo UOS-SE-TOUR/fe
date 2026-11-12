@@ -8,8 +8,17 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { themes, tourLevels, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
-import { canApply, getTours, tourSummaryLine, type TourSummary } from '@/lib/tours'
-import { ApiClient, hasStatus, showError } from '@/modules/ApiClient'
+import {
+  canApply,
+  getTours,
+  HEADCOUNT_MESSAGE,
+  parseHeadcount,
+  SEAT_SHORTAGE_MESSAGE,
+  tourSummaryLine,
+  type ToursState,
+  type TourSummary,
+} from '@/lib/tours'
+import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
 import type { ApplySelection, VoiceSelection } from '@/pages/TourSelectPage'
 
@@ -30,7 +39,8 @@ export interface TourSelection {
 
 const UNSUPPORTED_MESSAGE = '이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 아래에서 직접 골라 주세요.'
 const MIC_DENIED_MESSAGE = '마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'
-const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못해 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'
+// 그 밖의 인식 오류(네트워크·마이크 없음 등). 잠깐의 실패일 수도 있어 다시 말할 수도 있게 안내한다
+const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 다시 말하거나 아래에서 직접 골라 주세요.'
 const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.'
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const MISSING_MESSAGE = '알아듣지 못한 칸이 있습니다. 빈 칸을 채우거나 다시 말해 주세요.'
@@ -38,8 +48,6 @@ const NO_CANDIDATE_MESSAGE = '그 테마와 출발일에 고를 수 있는 상�
 const CHOOSE_MESSAGE = '출발일이 같은 상품이 여럿입니다. 하나를 골라 주세요.'
 const SPEAK_AGAIN_MESSAGE = '내용을 고치거나 다시 말해 주세요.'
 const PRICED_MESSAGE = '말한 내용으로 가격을 계산했습니다. 아래에서 확인해 주세요.'
-
-type CandidatesState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; list: TourSummary[] }
 
 // 받은 내용을 고객이 고치는 칸. 뽑지 못한 칸은 빈 값이다
 interface Draft {
@@ -49,7 +57,7 @@ interface Draft {
   departureDate: string
   level: TourLevel | ''
   headcount: string
-  candidates: CandidatesState
+  candidates: ToursState
   tourId: number | null
   // 확인했더니 가격 계산이 거부한 문구. 칸을 고치면 지운다
   rejection: string | null
@@ -63,7 +71,20 @@ interface Notice {
   message: string
 }
 
-function choosableOf(candidates: CandidatesState): TourSummary[] {
+// 받아 둔 테마의 상품 목록. 받는 중이면 list가 null이고, 그동안 출발일을 고쳐도 같은 요청의 답을 기다린다
+interface ThemeTours {
+  theme: Theme
+  tours: Promise<TourSummary[]>
+  list: TourSummary[] | null
+}
+
+// 후보를 새로 받아야 하는 거부. 그 상품의 상태(409 마감·출발)나 남은 자리(400 남은 자리 부족)가 바뀌었다고 서버가 알린 것이다.
+// 화면이 직접 만든 거부(상품에 없는 등급 등)와 그 밖의 400은 고를 수 있는 후보를 바꾸지 않는다
+function changesCandidates(error: ApiError): boolean {
+  return error.status === 409 || (error.status === 400 && error.message === SEAT_SHORTAGE_MESSAGE)
+}
+
+function choosableOf(candidates: ToursState): TourSummary[] {
   return candidates.status === 'loaded' ? candidates.list.filter(canApply) : []
 }
 
@@ -78,14 +99,18 @@ function isMissing(draft: Draft): boolean {
   return !draft.theme || !draft.departureDate || !draft.level || !draft.headcount.trim()
 }
 
-// 확인할 수 있는 내용이면 상품 선택 화면에 넘길 값을 돌려준다. 인원이 정수인지는 상품 선택 화면이 본다 —
-// 숫자만 쓴 인원만 수로 읽고(상품 선택 화면에서 칠 때와 같다, 1e1 등은 받지 않는다) 아니면 NaN을 넘겨 거부받는다
+// 채운 인원이 상품 선택 화면에서 칠 때와 같은 규칙(숫자만 쓴 1 이상의 정수)에 맞지 않는다
+function headcountInvalid(draft: Draft): boolean {
+  return draft.headcount.trim() !== '' && parseHeadcount(draft.headcount) === null
+}
+
+// 확인할 수 있는 내용이면 상품 선택 화면에 넘길 값을 돌려준다
 function selectionOf(draft: Draft): VoiceSelection | null {
   const { theme, departureDate, level, tourId } = draft
-  const headcount = draft.headcount.trim()
-  if (!theme || !departureDate || !level || !headcount || tourId === null) return null
+  const headcount = parseHeadcount(draft.headcount)
+  if (!theme || !departureDate || !level || headcount === null || tourId === null) return null
   if (!choosableOf(draft.candidates).some((tour) => tour.tourId === tourId)) return null
-  return { theme, tourId, level, headcount: /^\d+$/.test(headcount) ? Number(headcount) : Number.NaN }
+  return { theme, tourId, level, headcount }
 }
 
 interface VoiceInputPanelProps {
@@ -110,8 +135,8 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
   const session = useRef(0)
   // 후보 상품을 다시 찾을 때마다 올린다. 마지막에 찾은 것만 쓴다
   const candidatesRequest = useRef(0)
-  // 마지막으로 받은 테마의 상품 목록. 출발일만 고칠 때는 다시 받지 않는다(날짜 칸은 칠 때마다 바뀐다)
-  const themeTours = useRef<{ theme: Theme; list: TourSummary[] } | null>(null)
+  // 마지막으로 받은(받는 중인) 테마의 상품 목록. 출발일만 고칠 때는 다시 받지 않는다(날짜 칸은 칠 때마다 바뀐다)
+  const themeTours = useRef<ThemeTours | null>(null)
   // 마지막으로 듣기 시작한 인식기. 화면을 떠나면 듣기를 그만둔다(마이크를 놓는다)
   const recognizerRef = useRef<Recognizer | null>(null)
 
@@ -203,7 +228,7 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
     findCandidates(theme, departureDate)
   }
 
-  // fresh면 받아 둔 목록을 쓰지 않고 새로 받는다(불러오지 못했거나, 가격 계산이 409로 거부해 상태가 바뀌었을 때).
+  // fresh면 받아 둔 목록을 버리고 새로 받는다(불러오지 못했거나, 가격 계산의 거부로 상태·남은 자리가 바뀌었을 때).
   // keep(고객이 고른 상품)은 받는 동안에도 두어, 받지 못해 다시 찾을 때도 넘길 수 있게 한다
   function findCandidates(
     theme: Theme | '',
@@ -219,19 +244,21 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       show([])
       return
     }
-    const saved = themeTours.current
-    if (!fresh && saved?.theme === theme) {
+    const saved = !fresh && themeTours.current?.theme === theme ? themeTours.current : null
+    if (saved?.list) {
       show(saved.list)
       return
     }
     updateDraft({ candidates: { status: 'loading' }, tourId: keep })
-    getTours(theme).then(
+    const entry: ThemeTours = saved ?? { theme, tours: getTours(theme), list: null }
+    themeTours.current = entry
+    entry.tours.then(
       (tours) => {
-        if (request !== candidatesRequest.current) return
-        themeTours.current = { theme, list: tours }
-        show(tours)
+        entry.list = tours
+        if (request === candidatesRequest.current) show(tours)
       },
       (error: unknown) => {
+        if (themeTours.current === entry) themeTours.current = null
         if (request !== candidatesRequest.current) return
         showError(error)
         updateDraft({ candidates: { status: 'failed' } })
@@ -252,10 +279,9 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       setDraft(null)
       setNotice({ tone: 'info', message: PRICED_MESSAGE })
     } else if (outcome.status === 'rejected') {
-      // 409여도 상품 목록으로 돌아가지 않고 다시 말하게 한다(상품 선택 화면도 그대로 둔다).
-      // 409(마감, 출발일이 오늘이거나 지남)면 그 상품은 더 고를 수 없으니 후보를 새로 받는다. 400은 고를 수 있는지를 바꾸지 않는다
+      // 409여도 상품 목록으로 돌아가지 않고 다시 말하게 한다(상품 선택 화면도 그대로 둔다)
       updateDraft({ rejection: outcome.error.message })
-      if (hasStatus(outcome.error, 409)) {
+      if (changesCandidates(outcome.error)) {
         findCandidates(selection.theme, draft.departureDate, { fresh: true, keep: selection.tourId })
       }
     }
@@ -344,6 +370,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
   const messages = [
     ...(draft.rejection ? [draft.rejection, SPEAK_AGAIN_MESSAGE] : []),
     ...(missing ? [MISSING_MESSAGE] : []),
+    ...(headcountInvalid(draft) ? [HEADCOUNT_MESSAGE] : []),
     ...(noCandidate ? [NO_CANDIDATE_MESSAGE] : []),
   ]
 

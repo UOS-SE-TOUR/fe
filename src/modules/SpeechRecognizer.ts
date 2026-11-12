@@ -72,9 +72,10 @@ export class SpeechRecognizer {
       this.current = null
       report()
     }
+    // 알아들은 글자가 비었으면(잡음 등) 말소리를 듣지 못한 것으로 본다
     recognition.onresult = (event) => {
       const text = event.results[0]?.[0]?.transcript ?? ''
-      finish(() => this.onresult(text))
+      finish(() => (text.trim() === '' ? this.onerror('no-speech') : this.onresult(text)))
     }
     recognition.onerror = (event) => finish(() => this.onerror(failureOf(event.error)))
     // 결과도 오류도 없이 끝나면 말소리를 듣지 못한 것으로 본다

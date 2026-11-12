@@ -138,6 +138,14 @@ describe('recognize', () => {
     expect(onresult).not.toHaveBeenCalled()
   })
 
+  it('알아들은 글자가 비었으면 말소리를 듣지 못한 것으로 알린다', () => {
+    const { onresult, onerror } = listen()
+    latest().result('  ')
+    expect(onerror).toHaveBeenCalledTimes(1)
+    expect(onerror).toHaveBeenCalledWith('no-speech')
+    expect(onresult).not.toHaveBeenCalled()
+  })
+
   it('결과도 오류도 없이 끝나면 말소리를 듣지 못한 것으로 알린다', () => {
     const { onerror } = listen()
     latest().onend?.()

@@ -500,11 +500,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         <h1 className="text-2xl font-semibold">여행 상품 선택</h1>
         {/* 신청하는 동안 떠나면 결과를 못 보고 다시 신청할 수 있어, 화면 안의 "다른 상품 고르기"처럼 막는다 */}
         {applyBusy ? (
-          <Button variant="ghost" disabled>
+          <Button variant="outline" disabled>
             고객 메뉴
           </Button>
         ) : (
-          <Button variant="ghost" asChild>
+          <Button variant="outline" asChild>
             <Link to={pagePaths.CustomerMainPage}>고객 메뉴</Link>
           </Button>
         )}

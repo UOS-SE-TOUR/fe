@@ -152,6 +152,9 @@ describe('다시 보내면 두 번 처리되는 요청(unsafeToRetry)', () => {
     ['성공했는데 본문이 JSON이 아님', new Response('<!doctype html>', { status: 200 })],
     ['성공했는데 본문이 빔(앞단이 응답을 자름)', new Response('', { status: 200 })],
     ['본문 없는 201', new Response(null, { status: 201 })],
+    // 세 요청 모두 성공하면 결과를 돌려주므로 204도 결과를 못 받은 것이다
+    ['204', new Response(null, { status: 204 })],
+    ['성공했는데 본문이 객체가 아닌 JSON', new Response('null', { status: 200 })],
   ])('%s도 문구를 바꿔 처리됐는지 알 수 없다고 던진다', async (_, response) => {
     fetchMock.mockResolvedValue(response)
 

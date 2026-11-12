@@ -7,7 +7,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { themeLabel, themes, type Theme } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
-import { ApiClient, ApiError, showError, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
+import { ApiClient, ApiError, showError, unknownResult } from '@/modules/ApiClient'
 
 const ITEMS_PATH = '/api/v1/staff/items'
 // be가 수량을 int로 받는다
@@ -132,9 +132,9 @@ export function WarehousePage() {
       addingRef.current = false
       setAdding(false)
     }
-    // 성공 응답인데 본문이 물품이 아니면 처리됐는지 알 수 없다(빈 본문은 ApiClient가 이미 던졌다)
+    // 성공 응답인데 본문이 물품이 아니면 처리됐는지 알 수 없다(빈 본문·객체가 아닌 본문은 ApiClient가 이미 던졌다)
     if (!isItem(item)) {
-      showUnknownResult(new ApiError(UNKNOWN_RESULT_MESSAGE, null, { resultUnknown: true }))
+      showUnknownResult(unknownResult(null))
       return
     }
     const added = item

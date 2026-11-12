@@ -205,7 +205,7 @@ function renderPage(voiceInput?: ComponentType<{ applySelection: ApplySelection 
   const router = createMemoryRouter(
     [
       { path: '/tours', element: <TourSelectPage voiceInput={voiceInput} /> },
-      { path: '/', element: <p>고객 첫 화면</p> },
+      { path: '/', element: <h1>고객 메뉴</h1> },
     ],
     { initialEntries: ['/tours'] },
   )

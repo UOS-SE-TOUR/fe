@@ -180,7 +180,7 @@ function renderPage() {
   const router = createMemoryRouter(
     [
       { path: '/tours', element: <TourSelectPage voiceInput={VoiceInput} /> },
-      { path: '/', element: <p>고객 첫 화면</p> },
+      { path: '/', element: <h1>고객 메뉴</h1> },
     ],
     { initialEntries: ['/tours'] },
   )
@@ -294,8 +294,8 @@ describe('말해서 고르기', () => {
   it('화면을 떠나면 듣기를 그만둔다', async () => {
     const user = renderPage()
     await user.click(panel().getByRole('button', { name: '말하기' }))
-    await user.click(screen.getByRole('link', { name: '고객 첫 화면' }))
-    expect(await screen.findByText('고객 첫 화면')).toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: '고객 메뉴' }))
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
     expect(recognizer.aborted).toBe(1)
   })
 })

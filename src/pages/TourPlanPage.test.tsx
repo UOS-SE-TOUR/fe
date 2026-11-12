@@ -412,6 +412,7 @@ describe('처리됐는지 모르는 실패', () => {
     ['504', () => new Response('', { status: 504 }), GATEWAY_TIMEOUT_MESSAGE],
     // be가 보낸 응답인지 알 수 없다(로그인 포털 등)
     ['본문을 읽지 못한 성공 응답', () => new Response('<html>', { status: 200 }), UNKNOWN_RESULT_MESSAGE],
+    ['본문이 빈 성공 응답', () => new Response('', { status: 201 }), UNKNOWN_RESULT_MESSAGE],
   ])('%s면 문구를 보여 주고 등록 단추를 다시 열지 않는다', async (_, response, message) => {
     const { user } = await openPage()
     await fillGolfTour(user)

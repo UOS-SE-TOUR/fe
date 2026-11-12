@@ -288,10 +288,13 @@ describe('물품 추가', () => {
     expect(screen.getByRole('button', { name: '추가' })).toBeEnabled()
   })
 
-  it('성공 응답인데 본문이 비었으면 처리됐는지 모르는 것으로 다룬다', async () => {
+  it.each([
+    ['비었으면', () => new Response('', { status: 200 })],
+    ['물품이 아니면', () => jsonResponse(200, { result: 'ok' })],
+  ])('성공 응답인데 본문이 %s 처리됐는지 모르는 것으로 다룬다', async (_, response) => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
-      .mockResolvedValueOnce(new Response('', { status: 200 }))
+      .mockResolvedValueOnce(response())
       .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, quantity: 30 }]))
     renderPage()
     await screen.findByRole('table')

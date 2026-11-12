@@ -16,6 +16,15 @@ if (!window.matchMedia) {
   })) as typeof window.matchMedia
 }
 
+// jsdom에는 ResizeObserver가 없다. shadcn/ui의 라디오·체크박스(Radix)가 크기를 잴 때 부른다
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
 // Vitest 전역(globals)을 끈 채라 Testing Library가 테스트마다 화면을 스스로 비우지 않는다
 afterEach(() => {
   cleanup()

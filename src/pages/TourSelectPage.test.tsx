@@ -465,6 +465,27 @@ describe('옵션을 바꿀 때의 가격 계산', () => {
     expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 1, optionIds: [] })
   })
 
+  it('다시 받는 중에 그 밖의 400을 받아도 남겨 둔 옵션은 지우지 않는다', async () => {
+    const user = renderPage()
+    await pricedWithOptionsOpen(user)
+    await user.click(screen.getByRole('radio', { name: /^5등급 호텔/ }))
+    await screen.findByText('최종 가격 3,400,000원')
+    replyOnce(QUOTE, failWith(400, SEAT_SHORTAGE))
+    await user.click(screen.getByRole('checkbox', { name: /^커피/ }))
+    await screen.findByText(SEAT_SHORTAGE)
+
+    await openOptions(user)
+    replyOnce(QUOTE, failWith(400, NEGATIVE_PRICE))
+    await user.click(screen.getByRole('radio', { name: /^도시락/ }))
+    expect(await screen.findByText(NEGATIVE_PRICE)).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /^커피/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /^5등급 호텔/ })).toBeChecked()
+
+    await priceWith(user, /^그랜드/, '1')
+    await screen.findByText('가격 요약')
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 1, optionIds: [13, 42] })
+  })
+
   it('그 밖의 400이면 옵션 패널에 문구를 보여 주고 마지막으로 가격이 나온 옵션으로 되돌린다', async () => {
     const user = renderPage()
     await pricedWithOptionsOpen(user)
@@ -635,5 +656,66 @@ describe('applySelection(음성으로 채운 내용)', () => {
 
     expect(await screen.findByText(CLOSED)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+  })
+
+  it('투어 등급을 불러오지 못하면 알리고 상품 목록을 보여 준다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    replyOnce('GET /api/v1/tours/1/levels', failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
+
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    expect(screen.queryByText('상품 목록을 불러오는 중입니다.')).not.toBeInTheDocument()
+  })
+
+  it('신청을 처리하는 중이면 알리고 아무것도 바꾸지 않는다', async () => {
+    let finish: (response: Response) => void = () => {}
+    replyOnce(APPLY, () => new Promise<Response>((resolve) => (finish = resolve)))
+    const user = renderPage(FakeVoiceInput)
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(다른 상품)' }))
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.')
+    expect(countOf('GET /api/v1/tours/3/levels')).toBe(0)
+
+    finish(jsonResponse(201, { bookingId: 7, status: 'CONFIRMED' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+  })
+})
+
+describe('그 밖의 실패', () => {
+  it('상품 목록을 불러오지 못하면 알리고 다시 불러올 수 있다', async () => {
+    replyOnce(TOURS, new Response('', { status: 502 }))
+    const user = renderPage()
+    await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
+
+    expect(await screen.findByText('상품 목록을 불러오지 못했습니다.')).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    await user.click(screen.getByRole('button', { name: '다시 불러오기' }))
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+  })
+
+  it('투어 등급·인원을 바꾼 가격 계산이 400·409 밖의 실패면, 지난 가격으로 신청하지 못하게 한다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    replyOnce(QUOTE, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await priceWith(user, /^그랜드/, '3')
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
+    expect(screen.getByText('바꾼 투어 등급·인원으로 가격을 다시 봐 주세요.')).toBeInTheDocument()
+
+    // 옵션을 바꾸면 지난 가격의 투어 등급·인원(2명)으로 계산한다
+    await openOptions(user)
+    await user.click(screen.getByRole('radio', { name: /^5등급 호텔/ }))
+    await screen.findByText('최종 가격 3,400,000원')
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [13] })
   })
 })

@@ -179,7 +179,11 @@ export function OptionPanel(props: OptionPanelProps) {
       </CardContent>
       <CardFooter className="flex items-center justify-between gap-4">
         <p className="text-sm">
-          {price === null ? '투어 등급과 인원으로 가격을 다시 계산해 주세요.' : `최종 가격 ${formatWon(price)}`}
+          {disabled
+            ? '가격을 다시 계산하는 중입니다.'
+            : price === null
+              ? '투어 등급과 인원으로 가격을 다시 계산해 주세요.'
+              : `최종 가격 ${formatWon(price)}`}
         </p>
         <Button variant="outline" onClick={onFinish}>
           옵션 고르기 끝

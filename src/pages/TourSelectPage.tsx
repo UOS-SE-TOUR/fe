@@ -1,5 +1,6 @@
 import { useRef, useState, type ComponentType, type FormEvent } from 'react'
 import { Link } from 'react-router'
+import { toast } from 'sonner'
 import { OptionPanel } from '@/components/OptionPanel'
 import { PriceSummary } from '@/components/PriceSummary'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -40,6 +41,7 @@ const SEAT_SHORTAGE_MESSAGE = '남은 자리보다 인원이 많습니다.'
 const CANNOT_APPLY_MESSAGE = '더는 신청할 수 없는 상품입니다. 다른 상품을 골라 주세요.'
 const HEADCOUNT_MESSAGE = '인원은 1 이상의 정수로 입력해 주세요.'
 const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
+const APPLYING_MESSAGE = '신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.'
 // be가 받는 인원(Integer)의 최댓값
 const MAX_HEADCOUNT = 2_147_483_647
 
@@ -69,6 +71,8 @@ interface Detail {
 }
 
 type Pending = 'levels' | 'quote' | 'seats' | 'apply' | null
+
+type ToursState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; list: TourSummary[] }
 
 function newDetail(tourId: number): Detail {
   return {
@@ -147,8 +151,8 @@ interface TourSelectPageProps {
 
 export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps = {}) {
   const [theme, setTheme] = useState<Theme | null>(null)
-  // null이면 불러오는 중이다
-  const [tours, setTours] = useState<TourSummary[] | null>(null)
+  // null이면 아직 테마를 고르지 않았다
+  const [tours, setTours] = useState<ToursState | null>(null)
   const [listMessage, setListMessage] = useState<string | null>(null)
   // null이면 상품 목록을 보여 준다
   const [detail, setDetail] = useState<Detail | null>(null)
@@ -172,39 +176,44 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     setDetail((current) => (current ? { ...current, ...patch } : current))
   }
 
+  // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다
   async function loadTours(forTheme: Theme, seq: number): Promise<TourSummary[] | null> {
     try {
       const list = await getTours(forTheme)
-      if (isCurrent(seq)) setTours(list)
+      if (isCurrent(seq)) setTours({ status: 'loaded', list })
       return list
     } catch (error) {
-      if (isCurrent(seq)) showError(error)
+      if (isCurrent(seq)) {
+        showError(error)
+        setTours((current) => (current?.status === 'loaded' ? current : { status: 'failed' }))
+      }
       return null
     }
   }
 
+  // 테마를 고르거나, 목록으로 돌아가거나, 음성으로 채운 내용을 받을 때. 목록은 받은 것이 없으면 새로 불러온다
+  function resetTo(next: { theme: Theme; detail: Detail | null; message?: string | null; list?: TourSummary[] }) {
+    const seq = newContext()
+    setTheme(next.theme)
+    setDetail(next.detail)
+    setListMessage(next.message ?? null)
+    setPending(null)
+    if (next.list) {
+      setTours({ status: 'loaded', list: next.list })
+    } else {
+      setTours({ status: 'loading' })
+      void loadTours(next.theme, seq)
+    }
+    return seq
+  }
+
   // 상품 목록으로 돌아가 목록을 새로 보여 준다(처음 받은 목록이면 방금 마감된 상품을 또 고를 수 있다)
   function showTourList(message: string | null, list?: TourSummary[]) {
-    const seq = newContext()
-    setDetail(null)
-    setListMessage(message)
-    setPending(null)
-    if (list) {
-      setTours(list)
-    } else if (theme) {
-      setTours(null)
-      void loadTours(theme, seq)
-    }
+    if (theme) resetTo({ theme, detail: null, message, list })
   }
 
   function selectTheme(next: Theme) {
-    const seq = newContext()
-    setTheme(next)
-    setTours(null)
-    setListMessage(null)
-    setDetail(null)
-    setPending(null)
-    void loadTours(next, seq)
+    resetTo({ theme: next, detail: null })
   }
 
   async function selectTour(tourId: number) {
@@ -253,7 +262,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     }
     const seq = context.current
     const selection = { level: detail.levelInput, headcount }
-    const { tourId, optionIds } = detail
+    const { tourId, optionIds, submitted: previous } = detail
     updateDetail({ submitted: selection, levelMessage: null })
     setPending('quote')
     try {
@@ -261,9 +270,15 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       if (isCurrent(seq)) priceArrived(result, optionIds)
     } catch (error) {
       if (!isCurrent(seq)) return
-      if (hasStatus(error, 400)) await askLevelAgain(error.message, tourId, seq)
-      else if (hasStatus(error, 409)) showTourList(error.message)
-      else showError(error)
+      if (hasStatus(error, 400)) {
+        await askLevelAgain(error.message, tourId, seq)
+      } else if (hasStatus(error, 409)) {
+        showTourList(error.message)
+      } else {
+        // 가격이 나오지 않았으니 지난 가격의 투어 등급·인원으로 되돌린다(그대로 두면 옛 가격으로 신청 단추가 열린다)
+        updateDetail({ submitted: previous })
+        showError(error)
+      }
     } finally {
       if (isCurrent(seq)) setPending(null)
     }
@@ -272,8 +287,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   async function changeOptions(optionIds: number[]) {
     if (!detail?.submitted || pending) return
     const seq = context.current
-    const { tourId, submitted } = detail
-    const lastPricedIds = detail.quote?.summary.options.map((option) => option.optionId) ?? []
+    // 가격이 나와 있으면 마지막으로 가격이 나온 옵션, 다시 받는 중이면 남겨 둔 옵션이다
+    const { tourId, submitted, optionIds: previousIds } = detail
     updateDetail({ optionIds, optionMessage: null })
     setPending('quote')
     try {
@@ -286,7 +301,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       } else if (hasStatus(error, 409)) {
         showTourList(error.message)
       } else {
-        updateDetail({ optionIds: lastPricedIds, optionMessage: hasStatus(error, 400) ? error.message : null })
+        updateDetail({ optionIds: previousIds, optionMessage: hasStatus(error, 400) ? error.message : null })
         if (!hasStatus(error, 400)) showError(error)
       }
     } finally {
@@ -327,21 +342,19 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   // 음성으로 채운 내용을 받아 칸을 채우고 가격을 계산한다. 이 가격 계산의 400·409는 부른 쪽에 넘긴다
   const applySelection: ApplySelection = async (selection) => {
-    if (applying.current) return { status: 'failed' }
-    const seq = newContext()
-    setTheme(selection.theme)
-    setTours(null)
-    setListMessage(null)
-    setDetail({
-      ...newDetail(selection.tourId),
-      levelInput: selection.level,
-      headcountInput: String(selection.headcount),
+    if (applying.current) {
+      toast.error(APPLYING_MESSAGE)
+      return { status: 'failed' }
+    }
+    const seq = resetTo({
+      theme: selection.theme,
+      detail: { ...newDetail(selection.tourId), levelInput: selection.level, headcountInput: String(selection.headcount) },
     })
     setPending('levels')
     try {
-      let loaded: [TourSummary[], TourLevelsResponse]
+      let levels: TourLevelsResponse
       try {
-        loaded = await Promise.all([getTours(selection.theme), getLevels(selection.tourId)])
+        levels = await getLevels(selection.tourId)
       } catch (error) {
         if (!isCurrent(seq)) return { status: 'failed' }
         showError(error)
@@ -349,9 +362,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         return { status: 'failed' }
       }
       if (!isCurrent(seq)) return { status: 'failed' }
-      const [list, levels] = loaded
       const priced = { level: selection.level, headcount: selection.headcount }
-      setTours(list)
       updateDetail({ levels, submitted: priced })
       setPending('quote')
       try {
@@ -371,6 +382,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   }
 
   const applyBusy = pending === 'apply'
+  const tourList = tours?.status === 'loaded' ? tours.list : undefined
 
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-6">
@@ -405,15 +417,23 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
             </Alert>
           )}
           {!theme && <p className="text-sm text-muted-foreground">테마를 고르면 상품 목록이 나옵니다.</p>}
-          {theme && !tours && <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중입니다.</p>}
-          {theme && tours && <TourList tours={tours} onSelect={(tourId) => void selectTour(tourId)} />}
+          {tours?.status === 'loading' && <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중입니다.</p>}
+          {tours?.status === 'failed' && (
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-muted-foreground">상품 목록을 불러오지 못했습니다.</p>
+              <Button variant="outline" onClick={() => showTourList(listMessage)}>
+                다시 불러오기
+              </Button>
+            </div>
+          )}
+          {tourList && <TourList tours={tourList} onSelect={(tourId) => void selectTour(tourId)} />}
         </section>
       )}
 
       {detail && (
         <TourDetail
           detail={detail}
-          tour={tours?.find((item) => item.tourId === detail.tourId)}
+          tour={tourList?.find((item) => item.tourId === detail.tourId)}
           theme={theme}
           pending={pending}
           onBack={() => showTourList(null)}

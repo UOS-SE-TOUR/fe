@@ -118,12 +118,12 @@ describe('로그인했을 때', () => {
     expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
   })
 
-  it('자기 화면은 그대로 열고 로그인한 이름을 보여 준다', async () => {
+  // 자리표시자가 아닌 화면으로 본다(자리표시자는 화면 이슈마다 실제 화면으로 바뀐다)
+  it('자기 화면은 그대로 연다', async () => {
     AuthStore.setMember('STAFF', '김직원')
     const router = renderAt('/staff/tours/new')
 
     expect(await screen.findByRole('heading', { name: '상품 기획' })).toBeInTheDocument()
-    expect(screen.getByText('김직원님으로 로그인했습니다.')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/staff/tours/new')
   })
 

@@ -3,6 +3,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiClient } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
@@ -25,6 +26,50 @@ function renderAt(path: string) {
   render(<RouterProvider router={router} />)
   return router
 }
+
+describe('ApiClient가 받은 401·403 뒤', () => {
+  async function respondWith(...responses: Response[]) {
+    responses.forEach((response) => fetchMock.mockResolvedValueOnce(response))
+    await act(() => ApiClient.get('/api/v1/tours?theme=GOLF').catch(() => undefined))
+  }
+
+  it('401이면 로그인 화면으로 보낸다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    const router = renderAt('/tours')
+    expect(await screen.findByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
+
+    await respondWith(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
+  it('403 뒤 회원 구분이 바뀌었으면 새 회원 구분의 첫 화면으로 보낸다', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    const router = renderAt('/tours')
+    expect(await screen.findByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
+
+    await respondWith(
+      jsonResponse(403, { message: '권한이 없습니다.' }),
+      jsonResponse(200, { memberType: 'STAFF', name: '김직원' }),
+    )
+    expect(await screen.findByRole('heading', { name: '직원 첫 화면' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/staff')
+  })
+
+  it('403 뒤 회원 구분이 그대로면 지금 화면에 둔다(입력하던 것을 잃지 않게)', async () => {
+    AuthStore.setMember('CUSTOMER', '홍길동')
+    const router = renderAt('/tours')
+    expect(await screen.findByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
+
+    await respondWith(
+      jsonResponse(403, { message: '권한이 없습니다.' }),
+      jsonResponse(200, { memberType: 'CUSTOMER', name: '홍길동' }),
+    )
+    expect(screen.getByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/tours')
+    expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
+  })
+})
 
 describe('로그인하지 않았을 때', () => {
   it.each(['/', '/tours', '/staff', '/staff/tours/new', '/staff/items'])('%s는 로그인 화면으로 보낸다', async (path) => {
@@ -58,6 +103,7 @@ describe('로그인했을 때', () => {
     ['CUSTOMER', '/login', '/', '고객 첫 화면'],
     ['CUSTOMER', '/signup', '/', '고객 첫 화면'],
     ['STAFF', '/login', '/staff', '직원 첫 화면'],
+    ['STAFF', '/', '/staff', '직원 첫 화면'],
   ] as const)('%s가 %s로 오면 알림 없이 자기 첫 화면(%s)으로 보낸다', async (memberType, path, home, title) => {
     AuthStore.setMember(memberType, '홍길동')
     const router = renderAt(path)

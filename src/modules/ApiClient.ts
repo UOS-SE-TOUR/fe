@@ -1,11 +1,10 @@
 import { toast } from 'sonner'
-import { currentPath, navigateTo } from '@/lib/navigation'
-import { landingPath, pagePaths, type MemberType } from '@/lib/pages'
+import type { MemberType } from '@/lib/pages'
 
 // 504 문구는 서버 앞단 Nginx가 504에 주는 문구와 같다
 export const CONNECTION_FAILED_MESSAGE = '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'
 export const GATEWAY_TIMEOUT_MESSAGE = '서버 응답이 늦어 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
-export const UNKNOWN_RESULT_MESSAGE = '서버와 연결이 끊겨 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
+export const UNKNOWN_RESULT_MESSAGE = '요청이 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
 const UNAUTHORIZED_MESSAGE = '로그인이 필요합니다.'
 export const FORBIDDEN_MESSAGE = '권한이 없습니다.'
 const UNEXPECTED_MESSAGE = '문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.'
@@ -15,7 +14,7 @@ export const REQUEST_TIMEOUT_MS = 65_000
 export class ApiError extends Error {
   // 응답 없이 실패했으면 null
   readonly status: number | null
-  // ApiClient가 이미 처리했다(401·403). 화면은 보여 주지 않는다
+  // ApiClient가 이미 알렸다(401·403). 화면은 보여 주지 않는다
   readonly handled: boolean
   // unsafeToRetry 요청을 서버가 처리했는지 알 수 없다. 화면은 단추를 다시 열지 않고 결과를 다시 읽는다
   readonly resultUnknown: boolean
@@ -40,7 +39,8 @@ interface RequestOptions {
   unsafeToRetry?: boolean
 }
 
-// AuthStore가 불러와질 때 등록한다. ApiClient는 AuthStore를 import하지 않는다(설계의 의존 방향)
+// AuthStore가 불러와질 때 등록한다. ApiClient는 AuthStore를 import하지 않는다(설계의 의존 방향).
+// 화면 이동은 하지 않는다 — 로그인 상태가 바뀌면 라우터(PageGate)가 로그인 화면이나 자기 첫 화면으로 보낸다
 interface AuthHandlers {
   clear(): void
   // confirmed가 false면 서버 실패로 회원 구분을 확인하지 못했다
@@ -68,15 +68,9 @@ function serverMessage(parsed: { value: unknown } | null): string | null {
   return typeof message === 'string' && message.trim() !== '' ? message : null
 }
 
-// 이미 그 화면이면 옮기지 않는다(옮기면 그 화면이 다시 불러 같은 오류가 되풀이된다)
-function moveTo(path: string) {
-  if (currentPath() !== path) navigateTo(path)
-}
-
 function handleUnauthorized(message: string): never {
   authHandlers?.clear()
   toast.error(message, { id: 'unauthorized' })
-  moveTo(pagePaths.LoginPage)
   throw new ApiError(message, 401, { handled: true })
 }
 
@@ -85,19 +79,13 @@ export function notifyForbidden(message = FORBIDDEN_MESSAGE) {
   toast.error(message, { id: 'forbidden' })
 }
 
-// 다른 탭에서 계정이 바뀌었을 수 있어 회원 구분을 다시 읽고 그 첫 화면으로 보낸다
+// 다른 탭에서 계정이 바뀌었을 수 있어 회원 구분을 다시 읽는다. 바뀌었으면 라우터가 그 첫 화면으로 보내고,
+// 그대로면 지금 화면에 둔다(입력하던 것을 잃지 않게)
 async function handleForbidden(message: string): Promise<never> {
-  const handled = new ApiError(message, 403, { handled: true })
   const result = authHandlers ? await authHandlers.restore() : null
-  // 다시 읽지 못했으면(그 문구는 restore가 알렸다) 낡은 회원 구분으로 옮기지 않는다
-  if (!result?.confirmed) {
-    notifyForbidden(message)
-    throw handled
-  }
-  if (result.memberType) notifyForbidden(message)
-  else toast.error(UNAUTHORIZED_MESSAGE, { id: 'unauthorized' })
-  moveTo(landingPath(result.memberType))
-  throw handled
+  if (result?.confirmed && !result.memberType) toast.error(UNAUTHORIZED_MESSAGE, { id: 'unauthorized' })
+  else notifyForbidden(message)
+  throw new ApiError(message, 403, { handled: true })
 }
 
 function unknownResult(status: number | null): ApiError {
@@ -107,11 +95,6 @@ function unknownResult(status: number | null): ApiError {
 // 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음)
 function connectionLost(status: number | null, options: RequestOptions): ApiError {
   return options.unsafeToRetry ? unknownResult(status) : new ApiError(CONNECTION_FAILED_MESSAGE, status)
-}
-
-// 서버 앞단이 낸 5xx. be의 Nginx는 502·503을 문구 붙인 503으로 주고, 서버가 처리한 뒤 끊겨도 그렇게 온다(be가 직접 503을 내는 것은 음성뿐)
-function isGatewayFailure(status: number, message: string | null): boolean {
-  return status === 502 || status === 503 || (status >= 500 && !message)
 }
 
 async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, options: RequestOptions): Promise<T> {
@@ -153,7 +136,9 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   if (response.status === 504) {
     throw new ApiError(message ?? GATEWAY_TIMEOUT_MESSAGE, 504, { resultUnknown: options.unsafeToRetry === true })
   }
-  if (options.unsafeToRetry && isGatewayFailure(response.status, message)) throw unknownResult(response.status)
+  // 5xx는 서버가 저장한 뒤에도 온다(be가 반환값 검증에서 500을 내거나, 응답 중에 끊겨 Nginx가 503을 낸다).
+  // 그 문구("다시 시도")를 그대로 보이면 두 번 처리될 수 있어 바꾼다
+  if (options.unsafeToRetry && response.status >= 500) throw unknownResult(response.status)
   if (message) throw new ApiError(message, response.status)
   // 문구가 없으면 호스팅·개발 서버 프록시가 낸 실패다(be가 꺼짐 등)
   throw new ApiError(CONNECTION_FAILED_MESSAGE, response.status)

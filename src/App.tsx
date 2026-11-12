@@ -1,14 +1,9 @@
 import { createBrowserRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { Toaster } from '@/components/ui/sonner'
-import { setNavigator } from '@/lib/navigation'
 import { routes } from '@/router/routes'
 
 const router = createBrowserRouter(routes)
-setNavigator({
-  navigate: (path) => void router.navigate(path, { replace: true }),
-  currentPath: () => router.state.location.pathname,
-})
 
 function App() {
   return (

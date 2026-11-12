@@ -1,25 +1,20 @@
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setNavigator } from '@/lib/navigation'
 import { pagePaths, type PageName } from '@/lib/pages'
 import { CONNECTION_FAILED_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { jsonResponse, stubFetch } from '@/test/http'
 
 let fetchMock: ReturnType<typeof stubFetch>
-const navigate = vi.fn()
 
 beforeEach(() => {
   fetchMock = stubFetch()
-  setNavigator({ navigate, currentPath: () => '/tours' })
   vi.spyOn(toast, 'error').mockImplementation(() => 'toast')
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
-  navigate.mockReset()
-  setNavigator(null)
   AuthStore.clear()
 })
 
@@ -45,13 +40,12 @@ describe('AuthStore.restore', () => {
     expect(AuthStore.getState().restoring).toBe(false)
   })
 
-  it('401이면 로그인하지 않은 것으로만 두고 화면을 옮기거나 알리지 않는다', async () => {
+  it('401이면 로그인하지 않은 것으로만 두고 알리지 않는다', async () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
     fetchMock.mockResolvedValue(jsonResponse(401, { message: '로그인이 필요합니다.' }))
 
-    await AuthStore.restore()
+    await expect(AuthStore.restore()).resolves.toBe(true)
     expect(AuthStore.memberType).toBeNull()
-    expect(navigate).not.toHaveBeenCalled()
     expect(toast.error).not.toHaveBeenCalled()
   })
 
@@ -65,10 +59,9 @@ describe('AuthStore.restore', () => {
   ])('새로고침 직후 401이 아닌 실패(%s)도 로그인하지 않은 것으로 두고 그 문구를 알린다', async (_, response, message) => {
     fetchMock.mockResolvedValue(response)
 
-    await AuthStore.restore()
+    await expect(AuthStore.restore()).resolves.toBe(false)
     expect(AuthStore.memberType).toBeNull()
     expect(toast.error).toHaveBeenCalledWith(message)
-    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('이미 로그인한 상태에서 다시 읽다 401이 아닌 실패가 나면 로그인 상태를 그대로 두고 문구를 알린다', async () => {

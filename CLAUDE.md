@@ -22,8 +22,8 @@
 - 예외: `.claude/skills/` 스크립트는 판정 기준과 그 근거(실측·겪은 사고)를 머리말과 판정 옆 주석에 남긴다.
 - 스타일은 Tailwind 클래스와 shadcn/ui 부품으로만 쓴다. `src/index.css` 밖에 CSS 파일·인라인 `style`을 만들지 않는다.
 - 색은 `bg-primary`·`text-muted-foreground` 같은 테마 이름으로 쓴다. `bg-zinc-900` 같은 색 값은 쓰지 않는다(바꿀 땐 `src/index.css`의 CSS 변수).
-- 서버 오류 본문의 `message`는 그대로 화면에 보여 준다. 화면 이슈가 따로 정하지 않은 실패는 `showError`(공용 알림)로 보여 준다. 화면 문구는 사용자가 읽을 한국어로 쓴다.
-- 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)은 `ApiClient.post(..., { unsafeToRetry: true })`로 부르고, `ApiError.resultUnknown`이면 단추를 다시 열지 않고 결과를 다시 읽는다.
+- 서버 오류 본문의 `message`(`ApiError.message`)는 그대로 화면에 보여 준다. `ApiError.handled`(401·403, `ApiClient`가 이미 알림)는 보여 주지 않고, 화면 이슈가 따로 정하지 않은 실패는 `showError`(공용 알림)로 보여 준다. 화면 문구는 사용자가 읽을 한국어로 쓴다.
+- 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)은 `ApiClient.post(..., { unsafeToRetry: true })`로 부른다. 그 요청의 5xx·연결 끊김은 `ApiClient`가 "처리됐는지 알 수 없음" 문구로 바꿔 `ApiError.resultUnknown`을 붙이니, 화면은 단추를 다시 열지 않고 결과를 다시 읽는다.
 - import는 `@/` 별칭으로 쓴다.
 - 테스트는 Vitest + Testing Library로 쓰고, 화면 요소는 사용자가 보는 문구·역할(`getByRole`·`getByText`)로 찾는다.
 

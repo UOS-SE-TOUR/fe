@@ -25,7 +25,8 @@ export function PageGate({ page, children }: { page: PageName; children: ReactNo
   if (restoring && !member) return <Restoring />
   if (canOpenPage(page, member?.memberType ?? null)) return children
   if (!member) return <Navigate to={pagePaths.LoginPage} replace />
-  if (pageAccess[page] === 'GUEST') return <Navigate to={homePath(member.memberType)} replace />
+  // 사이트 첫 주소(/)는 누구나 여는 주소라 다른 회원 구분이어도 알리지 않는다
+  if (pageAccess[page] === 'GUEST' || pagePaths[page] === '/') return <Navigate to={homePath(member.memberType)} replace />
   return <Forbidden to={homePath(member.memberType)} />
 }
 

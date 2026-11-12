@@ -130,35 +130,70 @@ describe('editPhoneNumber', () => {
   })
 
   it('하이픈 하나만 골라 지우면 숫자는 그대로 두고 하이픈을 다시 붙인다', () => {
-    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentBackward', false)).toEqual({ value: full, caret: 8 })
-    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentForward', false)).toEqual({ value: full, caret: 8 })
+    const hyphen = { start: 8, end: 9 }
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentBackward', hyphen)).toEqual({ value: full, caret: 8 })
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentForward', hyphen)).toEqual({ value: full, caret: 8 })
   })
 
-  it('숫자를 지워 01로 시작하는 11자리 넘는 번호가 되면 막지 않고 숫자만 보인다', () => {
+  it('커서만 있던 자리에서 지웠다고 적혀 있으면 하이픈 너머의 숫자를 지운다', () => {
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteContentBackward', { start: 9, end: 9 })).toEqual({
+      value: '010-1235-678',
+      caret: 7,
+    })
+  })
+
+  it('단어 지우기로 하이픈만 지워져도 하이픈 너머의 숫자를 지운다', () => {
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteWordBackward')).toEqual({ value: '010-1235-678', caret: 7 })
+    expect(editPhoneNumber(full, '010-12345678', 8, 'deleteWordForward')).toEqual({ value: '010-1234-678', caret: 8 })
+  })
+
+  it('숫자를 지우거나 바꿔도 01로 시작하는 11자리 넘는 번호가 되면 받지 않는다', () => {
     // 0|212345678901에서 2를 지웠다(01로 시작하지 않으면 자릿수를 막지 않는다)
-    expect(editPhoneNumber('0212345678901', '012345678901', 1, 'deleteContentForward')).toEqual({
-      value: '012345678901',
+    expect(editPhoneNumber('0212345678901', '012345678901', 1, 'deleteContentForward', { start: 1, end: 1 })).toEqual({
+      value: '0212345678901',
       caret: 1,
+      selectionEnd: 1,
+    })
+    // 0[2]12345678901의 2를 1로 바꿨다
+    expect(editPhoneNumber('0212345678901', '0112345678901', 2, 'insertText', { start: 1, end: 2 })).toEqual({
+      value: '0212345678901',
+      caret: 1,
+      selectionEnd: 2,
     })
   })
 
   it('11자리를 넘겨 치면 칸이 늘지 않고 커서도 그 자리에 남는다', () => {
     // 끝에 더 쳤다
-    expect(editPhoneNumber(full, '010-1234-56789', 14, 'insertText')).toEqual({ value: full, caret: 13 })
-    // 010-12|34-5678에 9를 넣었다
-    expect(editPhoneNumber(full, '010-12934-5678', 7, 'insertText')).toEqual({ value: full, caret: 6 })
+    expect(editPhoneNumber(full, '010-1234-56789', 14, 'insertText', { start: 13, end: 13 })).toEqual({
+      value: full,
+      caret: 13,
+      selectionEnd: 13,
+    })
+    // 010-12|34-5678에 9를 넣었다. 입력 전 범위가 적혀 있지 않으면 넣은 글자 수로 되짚는다
+    expect(editPhoneNumber(full, '010-12934-5678', 7, 'insertText')).toEqual({ value: full, caret: 6, selectionEnd: 6 })
   })
 
   it('쓰던 번호에 붙여 넣어 11자리를 넘으면 붙여 넣기를 받지 않는다', () => {
     // 010-12|에 01099998888을 붙여 넣었다 — 잘라 남기면 010-1201-0999가 된다
-    expect(editPhoneNumber('010-12', '010-1201099998888', 17, 'insertFromPaste')).toEqual({
+    expect(editPhoneNumber('010-12', '010-1201099998888', 17, 'insertFromPaste', { start: 6, end: 6 })).toEqual({
       value: '010-12',
       caret: 6,
+      selectionEnd: 6,
     })
     // 010-1|에 +82 10-9999-8888을 붙여 넣었다
-    expect(editPhoneNumber('010-1', '010-1+82 10-9999-8888', 21, 'insertFromPaste')).toEqual({
+    expect(editPhoneNumber('010-1', '010-1+82 10-9999-8888', 21, 'insertFromPaste', { start: 5, end: 5 })).toEqual({
       value: '010-1',
       caret: 5,
+      selectionEnd: 5,
+    })
+  })
+
+  it('고른 범위에 붙여 넣어 받지 않으면 고른 범위를 되살린다', () => {
+    // 010-1234[-5678]에 999999를 붙여 넣었다
+    expect(editPhoneNumber(full, '010-1234999999', 14, 'insertFromPaste', { start: 8, end: 13 })).toEqual({
+      value: full,
+      caret: 8,
+      selectionEnd: 13,
     })
   })
 })

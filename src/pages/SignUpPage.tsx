@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { memberTypeLabels } from '@/lib/labels'
 import { isMemberType, memberTypes, pagePaths, type MemberType } from '@/lib/pages'
-import { editPhoneNumber } from '@/lib/phoneNumber'
+import { editPhoneNumber, type PhoneNumberSelection } from '@/lib/phoneNumber'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 설계의 form. 칸 이름은 be의 회원가입 요청(SignUpRequest)과 같다
@@ -37,7 +37,19 @@ export function SignUpPage() {
   const [form, setForm] = useState<SignUpForm>(emptyForm)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const phoneSelectionCollapsed = useRef(true)
+  const phoneInput = useRef<HTMLInputElement>(null)
+  const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
+
+  // 입력 이벤트에서는 입력 전에 고른 범위를 알 수 없어 바로 앞의 beforeinput에서 적어 둔다(React의 onBeforeInput은 지우기에 오지 않는다)
+  useEffect(() => {
+    const input = phoneInput.current
+    if (!input) return
+    const note = () => {
+      phoneSelectionBefore.current = { start: input.selectionStart ?? 0, end: input.selectionEnd ?? 0 }
+    }
+    input.addEventListener('beforeinput', note)
+    return () => input.removeEventListener('beforeinput', note)
+  }, [])
 
   // 입력을 바꾸면 앞의 실패 문구는 낡은 것이라 지운다
   function update<K extends keyof SignUpForm>(key: K, value: SignUpForm[K]) {
@@ -50,18 +62,12 @@ export function SignUpPage() {
     const input = event.currentTarget
     const { inputType } = event.nativeEvent as Partial<InputEvent>
     const caret = input.selectionStart ?? input.value.length
-    const next = editPhoneNumber(form.phone, input.value, caret, inputType, phoneSelectionCollapsed.current)
-    phoneSelectionCollapsed.current = true
+    const next = editPhoneNumber(form.phone, input.value, caret, inputType, phoneSelectionBefore.current)
+    phoneSelectionBefore.current = undefined
     if (input.value !== next.value) input.value = next.value
     // 자동 완성은 초점이 없는 칸에도 값을 넣는다. 그 칸으로 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
-    if (document.activeElement === input) input.setSelectionRange(next.caret, next.caret)
-    update('phone', next.value)
-  }
-
-  // 입력 이벤트에서는 입력 전에 고른 글자가 있었는지 알 수 없어, 키를 누를 때 본다
-  function notePhoneSelection(event: KeyboardEvent<HTMLInputElement>) {
-    const input = event.currentTarget
-    phoneSelectionCollapsed.current = input.selectionStart === input.selectionEnd
+    if (document.activeElement === input) input.setSelectionRange(next.caret, next.selectionEnd ?? next.caret)
+    if (next.value !== form.phone) update('phone', next.value)
   }
 
   function showSignUpResult() {
@@ -149,7 +155,7 @@ export function SignUpPage() {
                   placeholder="010-1234-5678"
                   aria-describedby="signup-phone-help"
                   value={form.phone}
-                  onKeyDown={notePhoneSelection}
+                  ref={phoneInput}
                   onChange={updatePhone}
                 />
                 <FieldDescription id="signup-phone-help">여행이 확정되면 이 휴대폰 번호로 문자를 보냅니다.</FieldDescription>

@@ -130,6 +130,22 @@ describe('SignUpPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('연락처 칸이 받지 않은 입력으로는 실패 문구를 지우지 않는다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '연락처는 휴대폰 번호로 입력해 주세요(예: 010-1234-5678).' }))
+    renderAt('/signup')
+
+    await fillForm()
+    await submit()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('연락처'), '9')
+    expect(screen.getByLabelText('연락처')).toHaveValue('010-1234-5678')
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('연락처'), '{Backspace}')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('400이 아닌 실패는 공용 알림으로 보인다', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
     const router = renderAt('/signup')

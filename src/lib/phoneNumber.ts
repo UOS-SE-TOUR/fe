@@ -8,6 +8,13 @@ const COUNTRY_CODE = /^\s*\+82/
 export interface PhoneNumberInput {
   value: string
   caret: number
+  // 받지 않은 입력이면 입력 전에 고른 범위의 끝
+  selectionEnd?: number
+}
+
+export interface PhoneNumberSelection {
+  start: number
+  end: number
 }
 
 function digitsOf(text: string) {
@@ -31,7 +38,7 @@ function positionAfterDigits(value: string, count: number) {
   return value.length
 }
 
-// 커서는 같은 숫자 바로 뒤에 둔다. 01로 시작하는데 11자리를 넘으면 null
+// 01로 시작하는데 11자리를 넘으면 null
 export function formatPhoneNumber(text: string, caret = text.length): PhoneNumberInput | null {
   let digits = digitsOf(text)
   let caretDigits = digitsOf(text.slice(0, caret)).length
@@ -46,33 +53,35 @@ export function formatPhoneNumber(text: string, caret = text.length): PhoneNumbe
   return { value, caret: positionAfterDigits(value, caretDigits) }
 }
 
-// 연락처 칸의 입력 하나를 반영한다. previous는 칸에 보이던 값, text·caret은 입력 뒤의 글자와 커서 자리,
-// selectionWasCollapsed는 입력 전에 고른 글자 없이 커서만 있었는지다
+function deleteStep(inputType?: string) {
+  if (!inputType?.startsWith('delete')) return null
+  if (inputType.endsWith('Backward')) return -1
+  return inputType.endsWith('Forward') ? 0 : null
+}
+
 export function editPhoneNumber(
   previous: string,
   text: string,
   caret: number,
   inputType?: string,
-  selectionWasCollapsed = true,
+  selectionBefore?: PhoneNumberSelection,
 ): PhoneNumberInput {
   const digits = digitsOf(text)
-  const caretDigits = digitsOf(text.slice(0, caret)).length
   // 커서에서 지우기 키로 하이픈만 지웠으면 그 너머의 숫자를 지운다 — 하이픈이 다시 붙어 아무 일도 안 일어난 것처럼 보이지 않게
-  const step = inputType === 'deleteContentBackward' ? -1 : inputType === 'deleteContentForward' ? 0 : null
-  if (step !== null && selectionWasCollapsed && text.length === previous.length - 1 && digits === digitsOf(previous)) {
-    const index = caretDigits + step
-    if (index >= 0 && index < digits.length) {
-      const shortened = digits.slice(0, index) + digits.slice(index + 1)
-      return formatPhoneNumber(shortened, index) ?? { value: shortened, caret: index }
-    }
+  const step = deleteStep(inputType)
+  const collapsed = !selectionBefore || selectionBefore.start === selectionBefore.end
+  if (step !== null && collapsed && text.length === previous.length - 1 && digits === digitsOf(previous)) {
+    const index = digitsOf(text.slice(0, caret)).length + step
+    const next = index >= 0 && index < digits.length ? formatPhoneNumber(digits.slice(0, index) + digits.slice(index + 1), index) : null
+    if (next) return next
   }
   const next = formatPhoneNumber(text, caret)
+  // 11자리를 넘기는 입력은 받지 않는다 — 잘라 남기면 쓰던 번호에 붙여 넣은 번호가 섞여 엉뚱한 번호가 된다
   if (!next) {
-    // 숫자를 더해 11자리를 넘기면(꽉 찬 번호에 더 치기, 쓰던 번호에 붙여 넣기) 받지 않는다 — 잘라 남기면 엉뚱한 번호가 된다
-    if (digits.length > digitsOf(previous).length) {
-      return { value: previous, caret: Math.max(0, Math.min(previous.length, caret - (text.length - previous.length))) }
-    }
-    return { value: digits, caret: caretDigits }
+    const caretBefore = caret - (text.length - previous.length)
+    const { start, end } = selectionBefore ?? { start: caretBefore, end: caretBefore }
+    const clamp = (position: number) => Math.max(0, Math.min(previous.length, position))
+    return { value: previous, caret: clamp(start), selectionEnd: clamp(end) }
   }
   // 하이픈 바로 뒤의 숫자를 지웠으면 커서도 하이픈 뒤에 남긴다
   if (inputType?.startsWith('delete') && caret > 0 && !/[0-9]/.test(text[caret - 1]) && next.value[next.caret] === '-') {

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { memberTypeLabels } from '@/lib/labels'
 import { isMemberType, memberTypes, pagePaths, type MemberType } from '@/lib/pages'
+import { editPhoneNumber } from '@/lib/phoneNumber'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 설계의 form. 칸 이름은 be의 회원가입 요청(SignUpRequest)과 같다
@@ -41,6 +42,17 @@ export function SignUpPage() {
   function update<K extends keyof SignUpForm>(key: K, value: SignUpForm[K]) {
     setForm((current) => ({ ...current, [key]: value }))
     setError(null)
+  }
+
+  // 연락처는 치는 대로 하이픈을 붙여 보인다. 칸의 값과 커서를 여기서 바로 맞춘다 — React가 나중에 값만 바꾸면 커서가 끝으로 튄다
+  function updatePhone(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const { inputType } = event.nativeEvent as Partial<InputEvent>
+    const next = editPhoneNumber(form.phone, input.value, input.selectionStart ?? input.value.length, inputType)
+    if (input.value !== next.value) input.value = next.value
+    // 자동 완성은 초점이 없는 칸에도 값을 넣는다. 그 칸으로 초점을 끌어오지 않게 커서는 초점이 있을 때만 둔다
+    if (document.activeElement === input) input.setSelectionRange(next.caret, next.caret)
+    update('phone', next.value)
   }
 
   function showSignUpResult() {
@@ -128,7 +140,7 @@ export function SignUpPage() {
                   placeholder="010-1234-5678"
                   aria-describedby="signup-phone-help"
                   value={form.phone}
-                  onChange={(event) => update('phone', event.target.value)}
+                  onChange={updatePhone}
                 />
                 <FieldDescription id="signup-phone-help">여행이 확정되면 이 휴대폰 번호로 문자를 보냅니다.</FieldDescription>
               </Field>

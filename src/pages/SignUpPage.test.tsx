@@ -142,6 +142,74 @@ describe('SignUpPage', () => {
     expect(router.state.location.pathname).toBe('/signup')
   })
 
+  it('연락처를 숫자만 쳐도 하이픈을 붙여 보이고, 보이는 꼴 그대로 보낸다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { memberId: 4 }))
+    renderAt('/signup')
+
+    await fillForm()
+    const phone = screen.getByLabelText('연락처')
+    await user.clear(phone)
+    await user.type(phone, '010')
+    expect(phone).toHaveValue('010')
+    await user.type(phone, '1')
+    expect(phone).toHaveValue('010-1')
+    await user.type(phone, '23456789')
+    expect(phone).toHaveValue('010-1234-5678')
+    await submit()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(sentRequest(fetchMock).body).toEqual({ ...customer, memberType: 'CUSTOMER' })
+  })
+
+  it('+82 번호를 붙여 넣으면 국내 번호로 바꿔 보인다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText('연락처')
+
+    await user.click(phone)
+    await user.paste('+82 10-1234-5678')
+
+    expect(phone).toHaveValue('010-1234-5678')
+  })
+
+  it('가운데 숫자를 고쳐도 커서가 고친 자리에 남는다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-12|34-5678에서 2를 지우고 9를 친다
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 6, initialSelectionEnd: 6 })
+    expect(phone).toHaveValue('010-1345-678')
+    expect(phone.selectionStart).toBe(5)
+    await user.type(phone, '9', { skipClick: true })
+
+    expect(phone).toHaveValue('010-1934-5678')
+    expect(phone.selectionStart).toBe(6)
+  })
+
+  it('하이픈 바로 뒤에서 Backspace를 누르면 하이픈 앞의 숫자를 지운다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234-|5678
+    await user.type(phone, '{Backspace}', { initialSelectionStart: 9, initialSelectionEnd: 9 })
+
+    expect(phone).toHaveValue('010-1235-678')
+    expect(phone.selectionStart).toBe(7)
+  })
+
+  it('하이픈 바로 앞에서 Delete를 누르면 하이픈 뒤의 숫자를 지운다', async () => {
+    renderAt('/signup')
+    const phone = screen.getByLabelText<HTMLInputElement>('연락처')
+    await user.type(phone, '01012345678')
+
+    // 010-1234|-5678
+    await user.type(phone, '{Delete}', { initialSelectionStart: 8, initialSelectionEnd: 8 })
+
+    expect(phone).toHaveValue('010-1234-678')
+    expect(phone.selectionStart).toBe(8)
+  })
+
   it('로그인 링크로 로그인 화면에 간다', async () => {
     const router = renderAt('/signup')
 

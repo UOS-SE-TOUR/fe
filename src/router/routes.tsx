@@ -6,6 +6,7 @@ import { SignUpPage } from '@/pages/SignUpPage'
 import { StaffMainPage } from '@/pages/StaffMainPage'
 import { TourPlanPage } from '@/pages/TourPlanPage'
 import { TourSelectPage } from '@/pages/TourSelectPage'
+import { WarehousePage } from '@/pages/WarehousePage'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PlaceholderPage } from '@/router/PlaceholderPage'
 
@@ -17,7 +18,7 @@ const pageElements: Record<PageName, ReactNode> = {
   TourSelectPage: <TourSelectPage />,
   StaffMainPage: <StaffMainPage />,
   TourPlanPage: <TourPlanPage />,
-  WarehousePage: <PlaceholderPage title="창고" />,
+  WarehousePage: <WarehousePage />,
 }
 
 export const routes: RouteObject[] = [

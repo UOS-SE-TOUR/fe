@@ -7,15 +7,14 @@ import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { themeLabel, themes, tourLevelLabel, tourLevels, type Theme, type TourLevel } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
-import { ApiClient, ApiError, showError, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
+import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 허니문·효도 투어는 그랜드와 프리미엄만 판다(be Theme.allows)
 const grandAndPremiumOnly: readonly Theme[] = ['HONEYMOON', 'PARENTS']
 
-// be가 기간·정원은 Java int로, 가격·추가 요금은 Java long으로 읽는다. 소수나 범위를 넘는 수는 "요청 본문을 읽을 수 없습니다"로
-// 거부돼 화면에서 막는다. long은 JavaScript 수가 정확히 담는 데까지만 받는다
+// be가 읽는 범위(기간·정원은 Java int, 가격·추가 요금은 Java long을 JavaScript가 정확히 담는 데까지). 넘으면 본문을 읽지 못해 400이다
 const INT_MAX = 2_147_483_647
-const LONG_MAX = Number.MAX_SAFE_INTEGER
+const SAFE_LONG_MAX = Number.MAX_SAFE_INTEGER
 
 interface TransportRow {
   id: number
@@ -101,7 +100,7 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
   // 날짜 칸은 날짜가 아니면 빈 값을 준다. 네 자리를 넘는 연도는 be가 읽지 못한다
   if (form.departureDate === '') errors.departureDate = '출발일을 입력해 주세요.'
   else if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(form.departureDate)) {
-    errors.departureDate = '출발일을 확인해 주세요. 9999년 12월 31일까지 입력할 수 있습니다.'
+    errors.departureDate = '출발일을 9999년 12월 31일까지의 날짜로 입력해 주세요.'
   }
 
   const duration = parseInteger(form.duration, '기간', INT_MAX)
@@ -112,7 +111,7 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
   const prices: RegisterTourRequest['prices'] = []
   if (form.theme !== '') {
     for (const level of levelsOf(form.theme)) {
-      const price = parseInteger(form.prices[level], `${tourLevelLabel(level)} 가격`, LONG_MAX)
+      const price = parseInteger(form.prices[level], `${tourLevelLabel(level)} 가격`, SAFE_LONG_MAX)
       if (price.error) errors.prices[level] = price.error
       else if (price.value !== undefined) prices.push({ level, price: price.value })
     }
@@ -122,7 +121,7 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
   for (const row of form.transports) {
     const name = row.name.trim()
     const nameError = name === '' ? '교통 이름을 입력해 주세요.' : undefined
-    const unitPrice = parseInteger(row.unitPrice, '추가 요금', LONG_MAX)
+    const unitPrice = parseInteger(row.unitPrice, '추가 요금', SAFE_LONG_MAX)
     if (nameError || unitPrice.error) errors.transports[row.id] = { name: nameError, unitPrice: unitPrice.error }
     else if (unitPrice.value !== undefined) transports.push({ name, unitPrice: unitPrice.value })
   }
@@ -143,6 +142,22 @@ function validate(form: TourForm): { errors: FormErrors; request: RegisterTourRe
   }
 }
 
+// 막힌 칸 가운데 화면에서 가장 먼저 나오는 칸의 id
+function firstInvalidId(form: TourForm, errors: FormErrors): string | null {
+  if (errors.theme) return `theme-${themes[0].value}`
+  for (const id of ['departureDate', 'duration', 'capacity'] as const) {
+    if (errors[id]) return id
+  }
+  const level = tourLevels.map(({ value }) => value).find((value) => errors.prices[value])
+  if (level) return `price-${level}`
+  for (const row of form.transports) {
+    const rowErrors = errors.transports[row.id]
+    if (rowErrors?.name) return `transport-${row.id}-name`
+    if (rowErrors?.unitPrice) return `transport-${row.id}-price`
+  }
+  return null
+}
+
 function tourIdOf(body: unknown): number | null {
   if (typeof body !== 'object' || body === null || !('tourId' in body)) return null
   return typeof body.tourId === 'number' ? body.tourId : null
@@ -157,21 +172,21 @@ function errorIdOf(id: string, error: string | undefined): string | undefined {
 
 export function TourPlanPage() {
   const [form, setForm] = useState(emptyForm)
-  // 등록을 한 번 누른 뒤부터 칸마다 막은 이유를 보여 주고, 고치면 바로 지운다
+  // 등록을 한 번 누른 뒤부터 칸마다 막은 이유를 보여 준다
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  // 서버가 거부한 문구나 처리됐는지 모르는 실패의 문구
   const [message, setMessage] = useState<string | null>(null)
-  // 상품이 이미 생겼을 수 있어 등록 단추를 다시 열지 않는다. 직원용 상품 목록 API가 없어 다시 읽어 확인할 수 없다
+  // 상품이 이미 생겼을 수 있어 등록 단추를 다시 열지 않는다(직원용 상품 목록 API가 없어 다시 읽을 수 없다)
   const [resultUnknown, setResultUnknown] = useState(false)
-  const [registeredTourId, setRegisteredTourId] = useState<number | null>(null)
+  // 등록했다. 성공 응답에서 상품 번호를 읽지 못했으면 tourId가 null
+  const [registered, setRegistered] = useState<{ tourId: number | null } | null>(null)
   // 단추가 막히기 전에 두 번 눌러도 한 번만 보낸다
   const submittingRef = useRef(false)
 
   const validation = useMemo(() => validate(form), [form])
   const errors = submitted ? validation.errors : noErrors
 
-  // 입력을 고치면 지난 등록의 서버 문구는 지운다. 처리됐는지 모르는 실패의 문구는 남긴다
+  // 입력을 고치면 지난 서버 문구를 지운다. 처리됐는지 모르는 실패의 문구는 남긴다
   function edit(change: (current: TourForm) => TourForm) {
     setForm(change)
     if (!resultUnknown) setMessage(null)
@@ -200,15 +215,15 @@ export function TourPlanPage() {
     edit((current) => ({ ...current, transports: current.transports.filter((row) => row.id !== id) }))
   }
 
-  function showRegisterResult(tourId: number) {
-    setRegisteredTourId(tourId)
+  function showRegisterResult(tourId: number | null) {
+    setRegistered({ tourId })
   }
 
   function showTourForm() {
     setForm(emptyForm())
     setSubmitted(false)
     setMessage(null)
-    setRegisteredTourId(null)
+    setRegistered(null)
   }
 
   async function registerTour(event: FormEvent<HTMLFormElement>) {
@@ -216,21 +231,22 @@ export function TourPlanPage() {
     if (submittingRef.current || resultUnknown) return
     setSubmitted(true)
     setMessage(null)
-    const { request } = validation
-    if (!request) return
+    const { request, errors: blocked } = validation
+    if (!request) {
+      const id = firstInvalidId(form, blocked)
+      if (id) document.getElementById(id)?.focus()
+      return
+    }
 
     submittingRef.current = true
     setSubmitting(true)
     try {
-      const tourId = tourIdOf(await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true }))
-      if (tourId === null) {
-        setResultUnknown(true)
-        setMessage(UNKNOWN_RESULT_MESSAGE)
-      } else {
-        showRegisterResult(tourId)
-      }
+      showRegisterResult(tourIdOf(await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true })))
     } catch (error) {
-      if (error instanceof ApiError) {
+      // 성공 응답의 본문만 못 읽었으면 상품은 생겼다
+      if (error instanceof ApiError && error.resultUnknown && error.status !== null && error.status < 300) {
+        showRegisterResult(null)
+      } else if (error instanceof ApiError) {
         if (error.resultUnknown) setResultUnknown(true)
         if (!error.handled) setMessage(error.message)
       } else {
@@ -251,160 +267,168 @@ export function TourPlanPage() {
         </Button>
       </header>
 
-      {registeredTourId !== null ? (
+      {registered ? (
         <Card role="status">
           <CardHeader>
             <CardTitle>상품을 등록했습니다</CardTitle>
-            <CardDescription>{`상품 번호 ${registeredTourId}`}</CardDescription>
+            <CardDescription>
+              {registered.tourId === null ? '상품 번호를 받지 못했습니다.' : `상품 번호 ${registered.tourId}`}
+            </CardDescription>
           </CardHeader>
           <CardFooter>
-            <Button onClick={showTourForm}>다른 상품 기획하기</Button>
+            {/* 눌렀던 등록 단추가 사라지니 다음 단추로 옮긴다 */}
+            <Button autoFocus onClick={showTourForm}>
+              다른 상품 기획하기
+            </Button>
           </CardFooter>
         </Card>
       ) : (
         <form noValidate onSubmit={registerTour} className="flex flex-col gap-8">
-          <FieldGroup>
-            <FieldSet data-invalid={!!errors.theme}>
-              <FieldLegend>테마</FieldLegend>
-              <RadioGroup
-                value={form.theme}
-                onValueChange={(theme) => update({ theme: theme as Theme })}
-                aria-describedby={errorIdOf('theme', errors.theme)}
-                className="sm:grid-cols-2"
-              >
-                {themes.map((theme) => (
-                  <Field key={theme.value} orientation="horizontal">
-                    <RadioGroupItem value={theme.value} id={`theme-${theme.value}`} aria-invalid={!!errors.theme} />
-                    <FieldLabel htmlFor={`theme-${theme.value}`} className="font-normal">
-                      {theme.label}
-                    </FieldLabel>
-                  </Field>
-                ))}
-              </RadioGroup>
-              <FieldError id="theme-error">{errors.theme}</FieldError>
-            </FieldSet>
+          {/* 보내는 동안 고친 값은 등록되지 않으니 입력을 막는다 */}
+          <fieldset disabled={submitting} className="min-w-0">
+            <FieldGroup>
+              <FieldSet data-invalid={!!errors.theme}>
+                <FieldLegend>테마</FieldLegend>
+                <RadioGroup
+                  value={form.theme}
+                  onValueChange={(theme) => update({ theme: theme as Theme })}
+                  aria-describedby={errorIdOf('theme', errors.theme)}
+                  className="sm:grid-cols-2"
+                >
+                  {themes.map((theme) => (
+                    <Field key={theme.value} orientation="horizontal">
+                      <RadioGroupItem value={theme.value} id={`theme-${theme.value}`} aria-invalid={!!errors.theme} />
+                      <FieldLabel htmlFor={`theme-${theme.value}`} className="font-normal">
+                        {theme.label}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </RadioGroup>
+                <FieldError id="theme-error">{errors.theme}</FieldError>
+              </FieldSet>
 
-            <Field data-invalid={!!errors.departureDate}>
-              <FieldLabel htmlFor="departureDate">출발일</FieldLabel>
-              <Input
-                id="departureDate"
-                type="date"
-                max="9999-12-31"
-                value={form.departureDate}
-                onChange={(event) => update({ departureDate: event.target.value })}
-                aria-invalid={!!errors.departureDate}
-                aria-describedby={errorIdOf('departureDate', errors.departureDate)}
-              />
-              <FieldError id="departureDate-error">{errors.departureDate}</FieldError>
-            </Field>
-
-            <div className="grid gap-7 sm:grid-cols-2">
-              <Field data-invalid={!!errors.duration}>
-                <FieldLabel htmlFor="duration">기간(일)</FieldLabel>
+              <Field data-invalid={!!errors.departureDate}>
+                <FieldLabel htmlFor="departureDate">출발일</FieldLabel>
                 <Input
-                  id="duration"
-                  inputMode="numeric"
-                  value={form.duration}
-                  onChange={(event) => update({ duration: event.target.value })}
-                  aria-invalid={!!errors.duration}
-                  aria-describedby={errorIdOf('duration', errors.duration)}
+                  id="departureDate"
+                  type="date"
+                  max="9999-12-31"
+                  value={form.departureDate}
+                  onChange={(event) => update({ departureDate: event.target.value })}
+                  aria-invalid={!!errors.departureDate}
+                  aria-describedby={errorIdOf('departureDate', errors.departureDate)}
                 />
-                <FieldError id="duration-error">{errors.duration}</FieldError>
+                <FieldError id="departureDate-error">{errors.departureDate}</FieldError>
               </Field>
-              <Field data-invalid={!!errors.capacity}>
-                <FieldLabel htmlFor="capacity">정원(명)</FieldLabel>
-                <Input
-                  id="capacity"
-                  inputMode="numeric"
-                  value={form.capacity}
-                  onChange={(event) => update({ capacity: event.target.value })}
-                  aria-invalid={!!errors.capacity}
-                  aria-describedby={errorIdOf('capacity', errors.capacity)}
-                />
-                <FieldDescription>3명 이상, 허니문 낭만 투어는 짝수</FieldDescription>
-                <FieldError id="capacity-error">{errors.capacity}</FieldError>
-              </Field>
-            </div>
 
-            <FieldSet>
-              <FieldLegend>투어 등급별 1인 가격(원)</FieldLegend>
-              {form.theme === '' ? (
-                <FieldDescription>테마를 고르면 가격을 입력할 투어 등급이 나옵니다.</FieldDescription>
-              ) : (
-                <>
-                  {grandAndPremiumOnly.includes(form.theme) && (
-                    <FieldDescription>{`${themeLabel(form.theme)}는 그랜드와 프리미엄 가격만 받습니다.`}</FieldDescription>
-                  )}
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    {levelsOf(form.theme).map((level) => (
-                      <Field key={level} data-invalid={!!errors.prices[level]}>
-                        <FieldLabel htmlFor={`price-${level}`}>{tourLevelLabel(level)}</FieldLabel>
+              <div className="grid gap-7 sm:grid-cols-2">
+                <Field data-invalid={!!errors.duration}>
+                  <FieldLabel htmlFor="duration">기간(일)</FieldLabel>
+                  <Input
+                    id="duration"
+                    inputMode="numeric"
+                    value={form.duration}
+                    onChange={(event) => update({ duration: event.target.value })}
+                    aria-invalid={!!errors.duration}
+                    aria-describedby={errorIdOf('duration', errors.duration)}
+                  />
+                  <FieldError id="duration-error">{errors.duration}</FieldError>
+                </Field>
+                <Field data-invalid={!!errors.capacity}>
+                  <FieldLabel htmlFor="capacity">정원(명)</FieldLabel>
+                  <Input
+                    id="capacity"
+                    inputMode="numeric"
+                    value={form.capacity}
+                    onChange={(event) => update({ capacity: event.target.value })}
+                    aria-invalid={!!errors.capacity}
+                    aria-describedby={errorIdOf('capacity', errors.capacity)}
+                  />
+                  <FieldDescription>3명 이상, 허니문 낭만 투어는 짝수</FieldDescription>
+                  <FieldError id="capacity-error">{errors.capacity}</FieldError>
+                </Field>
+              </div>
+
+              <FieldSet>
+                <FieldLegend>투어 등급별 1인 가격(원)</FieldLegend>
+                {form.theme === '' ? (
+                  <FieldDescription>테마를 고르면 가격을 입력할 투어 등급이 나옵니다.</FieldDescription>
+                ) : (
+                  <>
+                    {grandAndPremiumOnly.includes(form.theme) && (
+                      <FieldDescription>{`${themeLabel(form.theme)}는 그랜드와 프리미엄 가격만 받습니다.`}</FieldDescription>
+                    )}
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      {levelsOf(form.theme).map((level) => (
+                        <Field key={level} data-invalid={!!errors.prices[level]}>
+                          <FieldLabel htmlFor={`price-${level}`}>{tourLevelLabel(level)}</FieldLabel>
+                          <Input
+                            id={`price-${level}`}
+                            inputMode="numeric"
+                            value={form.prices[level]}
+                            onChange={(event) => updatePrice(level, event.target.value)}
+                            aria-invalid={!!errors.prices[level]}
+                            aria-describedby={errorIdOf(`price-${level}`, errors.prices[level])}
+                          />
+                          <FieldError id={`price-${level}-error`}>{errors.prices[level]}</FieldError>
+                        </Field>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </FieldSet>
+
+              <FieldSet>
+                <FieldLegend>교통 선택지</FieldLegend>
+                <FieldDescription>
+                  1인 추가 요금이 0원인 기본 교통을 하나 넣고, 다른 교통에는 기본 교통보다 더 받는 1인 요금을 적습니다.
+                </FieldDescription>
+                {form.transports.map((row, index) => {
+                  const rowErrors = errors.transports[row.id]
+                  return (
+                    <div key={row.id} className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-start">
+                      <Field data-invalid={!!rowErrors?.name}>
+                        <FieldLabel htmlFor={`transport-${row.id}-name`}>{`교통 ${index + 1} 이름`}</FieldLabel>
                         <Input
-                          id={`price-${level}`}
-                          inputMode="numeric"
-                          value={form.prices[level]}
-                          onChange={(event) => updatePrice(level, event.target.value)}
-                          aria-invalid={!!errors.prices[level]}
-                          aria-describedby={errorIdOf(`price-${level}`, errors.prices[level])}
+                          id={`transport-${row.id}-name`}
+                          value={row.name}
+                          onChange={(event) => updateTransport(row.id, { name: event.target.value })}
+                          aria-invalid={!!rowErrors?.name}
+                          aria-describedby={errorIdOf(`transport-${row.id}-name`, rowErrors?.name)}
                         />
-                        <FieldError id={`price-${level}-error`}>{errors.prices[level]}</FieldError>
+                        <FieldError id={`transport-${row.id}-name-error`}>{rowErrors?.name}</FieldError>
                       </Field>
-                    ))}
-                  </div>
-                </>
-              )}
-            </FieldSet>
-
-            <FieldSet>
-              <FieldLegend>교통 선택지</FieldLegend>
-              <FieldDescription>
-                1인 추가 요금이 0원인 기본 교통을 하나 넣고, 다른 교통에는 기본 교통보다 더 받는 1인 요금을 적습니다.
-              </FieldDescription>
-              {form.transports.map((row, index) => {
-                const rowErrors = errors.transports[row.id]
-                return (
-                  <div key={row.id} className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-start">
-                    <Field data-invalid={!!rowErrors?.name}>
-                      <FieldLabel htmlFor={`transport-${row.id}-name`}>{`교통 ${index + 1} 이름`}</FieldLabel>
-                      <Input
-                        id={`transport-${row.id}-name`}
-                        value={row.name}
-                        onChange={(event) => updateTransport(row.id, { name: event.target.value })}
-                        aria-invalid={!!rowErrors?.name}
-                        aria-describedby={errorIdOf(`transport-${row.id}-name`, rowErrors?.name)}
-                      />
-                      <FieldError id={`transport-${row.id}-name-error`}>{rowErrors?.name}</FieldError>
-                    </Field>
-                    <Field data-invalid={!!rowErrors?.unitPrice}>
-                      <FieldLabel htmlFor={`transport-${row.id}-price`}>{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
-                      <Input
-                        id={`transport-${row.id}-price`}
-                        inputMode="numeric"
-                        value={row.unitPrice}
-                        onChange={(event) => updateTransport(row.id, { unitPrice: event.target.value })}
-                        aria-invalid={!!rowErrors?.unitPrice}
-                        aria-describedby={errorIdOf(`transport-${row.id}-price`, rowErrors?.unitPrice)}
-                      />
-                      <FieldError id={`transport-${row.id}-price-error`}>{rowErrors?.unitPrice}</FieldError>
-                    </Field>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="sm:mt-6"
-                      aria-label={`교통 ${index + 1} 빼기`}
-                      disabled={form.transports.length === 1}
-                      onClick={() => removeTransport(row.id)}
-                    >
-                      빼기
-                    </Button>
-                  </div>
-                )
-              })}
-              <Button type="button" variant="outline" className="self-start" onClick={addTransport}>
-                교통 선택지 더하기
-              </Button>
-            </FieldSet>
-          </FieldGroup>
+                      <Field data-invalid={!!rowErrors?.unitPrice}>
+                        <FieldLabel htmlFor={`transport-${row.id}-price`}>{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
+                        <Input
+                          id={`transport-${row.id}-price`}
+                          inputMode="numeric"
+                          value={row.unitPrice}
+                          onChange={(event) => updateTransport(row.id, { unitPrice: event.target.value })}
+                          aria-invalid={!!rowErrors?.unitPrice}
+                          aria-describedby={errorIdOf(`transport-${row.id}-price`, rowErrors?.unitPrice)}
+                        />
+                        <FieldError id={`transport-${row.id}-price-error`}>{rowErrors?.unitPrice}</FieldError>
+                      </Field>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="sm:mt-6"
+                        aria-label={`교통 ${index + 1} 빼기`}
+                        disabled={form.transports.length === 1}
+                        onClick={() => removeTransport(row.id)}
+                      >
+                        빼기
+                      </Button>
+                    </div>
+                  )
+                })}
+                <Button type="button" variant="outline" className="self-start" onClick={addTransport}>
+                  교통 선택지 더하기
+                </Button>
+              </FieldSet>
+            </FieldGroup>
+          </fieldset>
 
           <div className="flex flex-col gap-3">
             {message && (

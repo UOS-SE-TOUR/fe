@@ -83,8 +83,11 @@ export function notifyForbidden(message = FORBIDDEN_MESSAGE) {
 // 그대로면 지금 화면에 둔다(입력하던 것을 잃지 않게)
 async function handleForbidden(message: string): Promise<never> {
   const result = authHandlers ? await authHandlers.restore() : null
-  if (result?.confirmed && !result.memberType) toast.error(UNAUTHORIZED_MESSAGE, { id: 'unauthorized' })
-  else notifyForbidden(message)
+  // 다시 읽지 못했으면 그 실패 문구(restore가 알렸다) 하나만 둔다
+  if (!result || result.confirmed) {
+    if (result && !result.memberType) toast.error(UNAUTHORIZED_MESSAGE, { id: 'unauthorized' })
+    else notifyForbidden(message)
+  }
   throw new ApiError(message, 403, { handled: true })
 }
 
@@ -92,9 +95,10 @@ function unknownResult(status: number | null): ApiError {
   return new ApiError(UNKNOWN_RESULT_MESSAGE, status, { resultUnknown: true })
 }
 
-// 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음)
+// 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음). 오프라인이었으면 요청이 나가지 않았다
 function connectionLost(status: number | null, options: RequestOptions): ApiError {
-  return options.unsafeToRetry ? unknownResult(status) : new ApiError(CONNECTION_FAILED_MESSAGE, status)
+  const unsent = status === null && !navigator.onLine
+  return options.unsafeToRetry && !unsent ? unknownResult(status) : new ApiError(CONNECTION_FAILED_MESSAGE, status)
 }
 
 async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, options: RequestOptions): Promise<T> {

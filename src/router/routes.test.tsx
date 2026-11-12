@@ -104,6 +104,7 @@ describe('로그인했을 때', () => {
     ['CUSTOMER', '/signup', '/', '고객 첫 화면'],
     ['STAFF', '/login', '/staff', '직원 첫 화면'],
     ['STAFF', '/', '/staff', '직원 첫 화면'],
+    ['CUSTOMER', '/staff', '/', '고객 첫 화면'],
   ] as const)('%s가 %s로 오면 알림 없이 자기 첫 화면(%s)으로 보낸다', async (memberType, path, home, title) => {
     AuthStore.setMember(memberType, '홍길동')
     const router = renderAt(path)

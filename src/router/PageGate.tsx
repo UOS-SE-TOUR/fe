@@ -1,8 +1,8 @@
 import { useEffect, type ReactNode } from 'react'
 import { Navigate } from 'react-router'
-import { canOpenPage, homePath, landingPath, pageAccess, pagePaths, type PageName } from '@/lib/pages'
+import { homePages, homePath, landingPath, pageAccess, pagePaths, type PageName } from '@/lib/pages'
 import { notifyForbidden } from '@/modules/ApiClient'
-import { useAuthState } from '@/modules/AuthStore'
+import { AuthStore, useAuthState } from '@/modules/AuthStore'
 
 function Restoring() {
   return (
@@ -23,10 +23,11 @@ function Forbidden({ to }: { to: string }) {
 export function PageGate({ page, children }: { page: PageName; children: ReactNode }) {
   const { member, restoring } = useAuthState()
   if (restoring && !member) return <Restoring />
-  if (canOpenPage(page, member?.memberType ?? null)) return children
+  if (AuthStore.canOpen(page, member?.memberType ?? null)) return children
   if (!member) return <Navigate to={pagePaths.LoginPage} replace />
-  // 사이트 첫 주소(/)는 누구나 여는 주소라 다른 회원 구분이어도 알리지 않는다
-  if (pageAccess[page] === 'GUEST' || pagePaths[page] === '/') return <Navigate to={homePath(member.memberType)} replace />
+  // 로그인·회원가입 화면과 다른 회원 구분의 첫 화면(사이트 첫 주소 / 포함)은 알리지 않고 보낸다
+  const quiet = pageAccess[page] === 'GUEST' || Object.values(homePages).includes(page)
+  if (quiet) return <Navigate to={homePath(member.memberType)} replace />
   return <Forbidden to={homePath(member.memberType)} />
 }
 

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { canOpenPage, memberTypes, type MemberType, type PageName } from '@/lib/pages'
+import { memberTypes, pageAccess, type MemberType, type PageName } from '@/lib/pages'
 import { ApiClient, ApiError, setAuthHandlers, showError } from '@/modules/ApiClient'
 
 // members/login·members/me 응답 본문
@@ -84,9 +84,10 @@ export const AuthStore = {
     return pendingRestore
   },
 
-  // 막는 규칙은 canOpenPage 한 곳에 있다(라우터도 그것을 쓴다)
-  canOpen(page: PageName): boolean {
-    return canOpenPage(page, state.member?.memberType ?? null)
+  // 라우터(PageGate)는 렌더 중에 읽은 회원 구분을 넘긴다
+  canOpen(page: PageName, memberType: MemberType | null = state.member?.memberType ?? null): boolean {
+    const access = pageAccess[page]
+    return access === 'GUEST' ? memberType === null : access === memberType
   },
 
   clear() {

@@ -136,6 +136,14 @@ describe('다시 보내면 두 번 처리되는 요청(unsafeToRetry)', () => {
     expect(error).toMatchObject({ status: null, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
   })
 
+  it('오프라인이라 요청이 나가지 않았으면 연결 실패 문구로 던진다', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const error = await caught(ApiClient.post('/api/v1/bookings', { tourId: 1 }, unsafe))
+    expect(error).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE, resultUnknown: false })
+  })
+
   it.each([
     ['본문이 빈 502(개발 서버 프록시)', new Response('', { status: 502 })],
     ['HTML 본문의 502(호스팅)', new Response('<html>Bad Gateway</html>', { status: 502 })],
@@ -232,7 +240,7 @@ describe('ApiClient 401·403 처리', () => {
     expect(toast.error).not.toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
   })
 
-  it('403 뒤 다시 읽기가 서버 실패로 끝나면 로그인 상태를 그대로 두고 두 문구를 알린다', async () => {
+  it('403 뒤 다시 읽기가 서버 실패로 끝나면 로그인 상태를 그대로 두고 그 실패 문구 하나만 알린다', async () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
     fetchMock
       .mockResolvedValueOnce(jsonResponse(403, { message: '권한이 없습니다.' }))
@@ -240,7 +248,7 @@ describe('ApiClient 401·403 처리', () => {
 
     const error = await caught(ApiClient.get('/api/v1/bookings/previous'))
     expect(error).toMatchObject({ status: 403, handled: true })
-    expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
+    expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.error).toHaveBeenCalledWith('서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.')
     expect(AuthStore.memberType).toBe('CUSTOMER')
   })

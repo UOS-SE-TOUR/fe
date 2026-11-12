@@ -32,6 +32,10 @@ export class ApiError extends Error {
   }
 }
 
+export function hasStatus(error: unknown, status: number): error is ApiError {
+  return error instanceof ApiError && error.status === status
+}
+
 interface RequestOptions {
   // false면 401·403도 처리하지 않는다(AuthStore.restore)
   handleAuthErrors?: boolean

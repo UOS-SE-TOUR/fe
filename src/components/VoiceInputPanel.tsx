@@ -9,8 +9,8 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { formatDate } from '@/lib/format'
 import { themes, tourLevels, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
-import { canApply, type TourSummary } from '@/lib/tours'
-import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
+import { canApply, getTours, type TourSummary } from '@/lib/tours'
+import { ApiClient, hasStatus, showError } from '@/modules/ApiClient'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
 import type { ApplySelection, VoiceSelection } from '@/pages/TourSelectPage'
 
@@ -62,17 +62,14 @@ interface Notice {
   message: string
 }
 
-function hasStatus(error: unknown, status: number): error is ApiError {
-  return error instanceof ApiError && error.status === status
-}
-
 function choosableOf(candidates: CandidatesState): TourSummary[] {
   return candidates.status === 'loaded' ? candidates.list.filter(canApply) : []
 }
 
-// 고를 수 있는 후보가 하나면 그 상품을 쓴다. 둘 이상이면 고객이 고른다
-function autoPick(list: TourSummary[]): number | null {
-  const choosable = list.filter(canApply)
+// 고를 수 있는 후보가 하나면 그 상품을 쓴다. 둘 이상이면 고객이 고른다. keep은 고객이 이미 고른 상품으로, 아직 고를 수 있으면 둔다
+function pickTour(list: TourSummary[], keep: number | null = null): number | null {
+  const choosable = choosableOf({ status: 'loaded', list })
+  if (keep !== null && choosable.some((tour) => tour.tourId === keep)) return keep
   return choosable.length === 1 ? choosable[0].tourId : null
 }
 
@@ -108,6 +105,8 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
   const session = useRef(0)
   // 후보 상품을 다시 찾을 때마다 올린다. 마지막에 찾은 것만 쓴다
   const candidatesRequest = useRef(0)
+  // 마지막으로 받은 테마의 상품 목록. 출발일만 고칠 때는 다시 받지 않는다(날짜 칸은 칠 때마다 바뀐다)
+  const themeTours = useRef<{ theme: Theme; list: TourSummary[] } | null>(null)
   // 마지막으로 듣기 시작한 인식기. 화면을 떠나면 듣기를 그만둔다(마이크를 놓는다)
   const recognizerRef = useRef<Recognizer | null>(null)
 
@@ -128,6 +127,7 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
   function startVoiceInput() {
     const seq = ++session.current
     candidatesRequest.current += 1
+    themeTours.current = null
     setDraft(null)
     setNotice(null)
     recognizerRef.current?.abort()
@@ -146,6 +146,13 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
 
   function showVoiceGuide() {
     setStep('listening')
+  }
+
+  // 듣기를 그만둔다(권한 창을 닫지 않았거나 인식이 끝나지 않아도 다시 말하거나 직접 고를 수 있게)
+  function stopVoiceInput() {
+    session.current += 1
+    recognizerRef.current?.abort()
+    setStep('idle')
   }
 
   function recognitionFailed(reason: RecognitionFailure) {
@@ -178,44 +185,58 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       theme: selection.theme ?? '',
       departureDate: selection.departureDate ?? '',
       level: selection.level ?? '',
-      headcount: selection.headcount === null ? '' : String(selection.headcount),
+      headcount: String(selection.headcount ?? ''),
       candidates: { status: 'loaded', list: selection.candidates },
-      tourId: autoPick(selection.candidates),
+      tourId: pickTour(selection.candidates),
       rejection: null,
     })
   }
 
   // 테마나 출발일을 고치면 받은 후보가 맞지 않는다. 그 테마의 상품 목록에서 출발일이 같은 상품으로 후보를 다시 정한다
   function changeTarget(theme: Theme | '', departureDate: string) {
-    const request = ++candidatesRequest.current
-    const ready = theme !== '' && departureDate !== ''
-    updateDraft({
-      theme,
-      departureDate,
-      tourId: null,
-      candidates: ready ? { status: 'loading' } : { status: 'loaded', list: [] },
-      rejection: null,
-    })
-    if (ready) void findCandidates(theme, departureDate, request)
+    updateDraft({ theme, departureDate, rejection: null })
+    findCandidates(theme, departureDate)
   }
 
-  async function findCandidates(theme: Theme, departureDate: string, request: number) {
-    try {
-      const tours = await ApiClient.get<TourSummary[]>(`/api/v1/tours?theme=${theme}`)
-      if (request !== candidatesRequest.current) return
+  // fresh면 받아 둔 목록을 쓰지 않고 새로 받는다(불러오지 못했거나, 가격 계산이 거부해 남은 자리·상태가 바뀌었을 수 있을 때)
+  function findCandidates(
+    theme: Theme | '',
+    departureDate: string,
+    { fresh = false, keep = null }: { fresh?: boolean; keep?: number | null } = {},
+  ) {
+    const request = ++candidatesRequest.current
+    const show = (tours: TourSummary[]) => {
       const list = tours.filter((tour) => tour.departureDate === departureDate)
-      updateDraft({ candidates: { status: 'loaded', list }, tourId: autoPick(list) })
-    } catch (error) {
-      if (request !== candidatesRequest.current) return
-      showError(error)
-      updateDraft({ candidates: { status: 'failed' } })
+      updateDraft({ candidates: { status: 'loaded', list }, tourId: pickTour(list, keep) })
     }
+    if (theme === '' || departureDate === '') {
+      show([])
+      return
+    }
+    const saved = themeTours.current
+    if (!fresh && saved?.theme === theme) {
+      show(saved.list)
+      return
+    }
+    updateDraft({ candidates: { status: 'loading' }, tourId: null })
+    getTours(theme).then(
+      (tours) => {
+        if (request !== candidatesRequest.current) return
+        themeTours.current = { theme, list: tours }
+        show(tours)
+      },
+      (error: unknown) => {
+        if (request !== candidatesRequest.current) return
+        showError(error)
+        updateDraft({ candidates: { status: 'failed' } })
+      },
+    )
   }
 
   // 고객이 확인한 내용으로 상품 선택 화면이 가격을 계산한다(설계 5.5 confirmSelection → applySelection)
   async function confirmSelection() {
     const selection = draft && step === 'idle' ? selectionOf(draft) : null
-    if (!selection) return
+    if (!draft || !selection) return
     const seq = session.current
     setStep('applying')
     const outcome = await applySelection(selection)
@@ -225,8 +246,10 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       setDraft(null)
       setNotice({ tone: 'info', message: PRICED_MESSAGE })
     } else if (outcome.status === 'rejected') {
-      // 409여도 상품 목록으로 돌아가지 않고 다시 말하게 한다(상품 선택 화면도 그대로 둔다)
+      // 409여도 상품 목록으로 돌아가지 않고 다시 말하게 한다(상품 선택 화면도 그대로 둔다).
+      // 그사이 마감되었거나 남은 자리가 줄었을 수 있어 후보를 새로 받는다(고른 상품은 아직 고를 수 있으면 둔다)
       updateDraft({ rejection: outcome.error.message })
+      findCandidates(selection.theme, draft.departureDate, { fresh: true, keep: selection.tourId })
     }
     // failed는 상품 선택 화면이 이미 알렸다. 칸을 그대로 두어 다시 확인할 수 있다
   }
@@ -276,13 +299,21 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
                   applying={step === 'applying'}
                   onChangeTarget={changeTarget}
                   onChange={(patch) => updateDraft({ ...patch, rejection: null })}
-                  onRetryCandidates={() => changeTarget(draft.theme, draft.departureDate)}
+                  onRetryCandidates={() =>
+                    findCandidates(draft.theme, draft.departureDate, { fresh: true, keep: draft.tourId })
+                  }
                   onConfirm={() => void confirmSelection()}
                 />
               )}
-              <Button variant={draft ? 'outline' : 'default'} onClick={startVoiceInput} disabled={busy}>
-                {step === 'listening' ? '듣는 중' : draft ? '다시 말하기' : '말하기'}
-              </Button>
+              {step === 'listening' ? (
+                <Button variant="outline" onClick={stopVoiceInput}>
+                  그만 듣기
+                </Button>
+              ) : (
+                <Button variant={draft ? 'outline' : 'default'} onClick={startVoiceInput} disabled={busy}>
+                  {draft ? '다시 말하기' : '말하기'}
+                </Button>
+              )}
             </>
           )}
         </CardContent>

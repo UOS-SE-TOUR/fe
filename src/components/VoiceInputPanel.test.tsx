@@ -214,7 +214,7 @@ describe('말해서 고르기', () => {
     await user.click(panel().getByRole('button', { name: '말하기' }))
     expect(recognizer.started).toBe(1)
     expect(panel().getByText('듣고 있습니다. 테마, 출발일, 투어 등급, 인원을 말해 주세요.')).toBeInTheDocument()
-    expect(panel().getByRole('button', { name: '듣는 중' })).toBeDisabled()
+    expect(panel().queryByRole('button', { name: '말하기' })).not.toBeInTheDocument()
 
     recognizer.say('12월 27일 골프 투어 그랜드로 두 명')
     expect(await panel().findByLabelText('테마')).toHaveDisplayValue('골프 챌린지 투어')
@@ -246,6 +246,17 @@ describe('말해서 고르기', () => {
     expect(await screen.findByText(CLOSED)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /12\/27 출발 4일/ })).toBeInTheDocument()
     expect(panel().queryByText(SPEAK_AGAIN)).not.toBeInTheDocument()
+  })
+
+  it('듣는 중에 그만 듣기를 누르면 듣기를 끊고, 그 뒤에 온 말은 버린다', async () => {
+    const user = renderPage()
+    await user.click(panel().getByRole('button', { name: '말하기' }))
+    await user.click(panel().getByRole('button', { name: '그만 듣기' }))
+
+    expect(recognizer.aborted).toBe(1)
+    expect(panel().getByRole('button', { name: '말하기' })).toBeEnabled()
+    recognizer.say('늦게 온 말')
+    expect(countOf(PARSE)).toBe(0)
   })
 
   it('화면을 떠나면 듣기를 그만둔다', async () => {
@@ -314,6 +325,17 @@ describe('후보 상품 가르기', () => {
     expect(countOf(PARSE)).toBe(1)
   })
 
+  it('응답에 칸이 빠져 있어도 뽑지 못한 칸으로 비워 둔다', async () => {
+    const user = renderPage()
+    const withoutHeadcount: Partial<TourSelection> = { ...heardAll }
+    delete withoutHeadcount.headcount
+    await speak(user, withoutHeadcount as TourSelection)
+
+    expect(panel().getByLabelText('인원')).toHaveValue(null)
+    expect(panel().getByText(MISSING)).toBeInTheDocument()
+    expect(confirmButton()).toBeDisabled()
+  })
+
   it('테마·출발일을 뽑지 못했으면 고객이 채운 테마의 상품 목록에서 출발일이 같은 상품을 후보로 쓴다', async () => {
     const user = renderPage()
     await speak(user, { ...heardAll, theme: null, departureDate: null, candidates: [] })
@@ -339,7 +361,16 @@ describe('테마나 출발일을 고치면', () => {
     expect(await panel().findByRole('radio', { name: /12\/20 출발 5일/ })).not.toBeChecked()
     expect(panel().queryByRole('radio', { name: /12\/27/ })).not.toBeInTheDocument()
     expect(panel().getByText(CHOOSE)).toBeInTheDocument()
+    expect(countOf(GOLF_TOURS)).toBe(1)
 
+    // 출발일만 고치면 받아 둔 그 테마의 목록을 다시 쓴다(날짜 칸은 칠 때마다 바뀐다)
+    fireEvent.change(panel().getByLabelText('출발일'), { target: { value: '0202-12-27' } })
+    expect(panel().getByText(NO_CANDIDATE)).toBeInTheDocument()
+    fireEvent.change(panel().getByLabelText('출발일'), { target: { value: '2026-12-27' } })
+    expect(panel().getByRole('radio', { name: /12\/27 출발 4일/ })).toBeChecked()
+    expect(countOf(GOLF_TOURS)).toBe(1)
+
+    fireEvent.change(panel().getByLabelText('출발일'), { target: { value: '2026-12-20' } })
     await user.selectOptions(panel().getByLabelText('테마'), 'TREKKING')
     expect(await panel().findByRole('radio', { name: /트레킹 투어 12\/20/ })).toBeChecked()
     await user.click(confirmButton())
@@ -418,6 +449,37 @@ describe('오류', () => {
     await user.click(confirmButton())
     expect(await screen.findByText('가격 요약')).toBeInTheDocument()
     expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 4, level: 'GRAND', headcount: 1, optionIds: [] })
+  })
+
+  it('확인한 상품이 그사이 마감됐으면(409) 후보를 새로 받아 마감으로 보이고 확인을 막는다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    const closed = { ...golf27, status: 'FULL' as const, remainingSeats: 0 }
+    // 앞의 것은 상품 선택 화면이, 뒤의 것은 거부 뒤 음성 패널이 받는다
+    replyOnce(GOLF_TOURS, jsonResponse(200, golfTours), jsonResponse(200, [golf20Long, golf20Full, golf20Short, closed]))
+    replyOnce(QUOTE, failWith(409, CLOSED))
+    await user.click(confirmButton())
+
+    expect(await panel().findByText(CLOSED)).toBeInTheDocument()
+    const radio = await panel().findByRole('radio', { name: /12\/27 출발 4일/ })
+    expect(radio).toBeDisabled()
+    expect(within(radio.parentElement!).getByText('마감')).toBeInTheDocument()
+    expect(panel().getByText(NO_CANDIDATE)).toBeInTheDocument()
+    expect(confirmButton()).toBeDisabled()
+    expect(countOf(GOLF_TOURS)).toBe(2)
+  })
+
+  it('확인이 400으로 거부되면 후보를 새로 받되 고객이 고른 상품은 그대로 둔다', async () => {
+    const user = renderPage()
+    await speak(user, { ...heardAll, departureDate: '2026-12-20', candidates: [golf20Long, golf20Full, golf20Short] })
+    await user.click(panel().getByRole('radio', { name: /12\/20 출발 4일/ }))
+    replyOnce(QUOTE, failWith(400, '남은 자리보다 인원이 많습니다.'))
+    await user.click(confirmButton())
+
+    expect(await panel().findByText('남은 자리보다 인원이 많습니다.')).toBeInTheDocument()
+    await waitFor(() => expect(countOf(GOLF_TOURS)).toBe(2))
+    expect(await panel().findByRole('radio', { name: /12\/20 출발 4일/ })).toBeChecked()
+    expect(panel().queryByText(CHOOSE)).not.toBeInTheDocument()
   })
 
   it('아무 말도 하지 않아 인식이 끝나면 다시 말하게 한다', async () => {

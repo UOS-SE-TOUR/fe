@@ -15,13 +15,14 @@ import { themeLabel, themes, tourStatusLabel, type Theme, type TourLevel } from 
 import { pagePaths } from '@/lib/pages'
 import {
   canApply,
+  getTours,
   type ApplyTourResponse,
   type PriceQuote,
   type QuoteRequest,
   type TourLevelsResponse,
   type TourSummary,
 } from '@/lib/tours'
-import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
+import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 
 // 음성(VoiceInputPanel)이 채운 내용
 export interface VoiceSelection {
@@ -123,14 +124,6 @@ function checkSelection(
   if (level && !levels?.levels.some((item) => item.level === level)) return { message: text ? LEVEL_MESSAGE : null }
   if (!level || headcount === null) return { message: null }
   return { selection: { level, headcount } }
-}
-
-function hasStatus(error: unknown, status: number): error is ApiError {
-  return error instanceof ApiError && error.status === status
-}
-
-function getTours(theme: Theme): Promise<TourSummary[]> {
-  return ApiClient.get<TourSummary[]>(`/api/v1/tours?theme=${theme}`)
 }
 
 function getLevels(tourId: number): Promise<TourLevelsResponse> {

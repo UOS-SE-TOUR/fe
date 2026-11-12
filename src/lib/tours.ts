@@ -1,4 +1,5 @@
-import type { TourLevel, TourStatus } from '@/lib/labels'
+import type { Theme, TourLevel, TourStatus } from '@/lib/labels'
+import { ApiClient } from '@/modules/ApiClient'
 
 // 상품 조회·가격 계산·신청 API의 본문 모양. 이름은 be record·Swagger 스키마와 같다
 
@@ -84,4 +85,9 @@ export interface ApplyTourResponse {
 // 지금 신청할 수 있는 상품인지. 아니면 목록에 상태(마감 등)로 보이고 고를 수 없다
 export function canApply(tour: TourSummary): boolean {
   return (tour.status === 'RECRUITING' || tour.status === 'CONFIRMED') && tour.remainingSeats > 0
+}
+
+// 그 테마의 상품 목록. 출발일이 오늘보다 뒤인 상품을 마감 상품까지 출발일 순으로 준다
+export function getTours(theme: Theme): Promise<TourSummary[]> {
+  return ApiClient.get<TourSummary[]>(`/api/v1/tours?theme=${theme}`)
 }

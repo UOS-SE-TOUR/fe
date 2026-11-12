@@ -11,6 +11,7 @@ import {
   WarehousePage,
 } from '@/router/lazyPages'
 import { GoHome, PageGate } from '@/router/PageGate'
+import { PageLoadError } from '@/router/PageLoadError'
 
 // 화면마다 보여 줄 것. 주소는 pagePaths, 열 수 있는 사람은 pageAccess가 정한다
 const pageElements: Record<PageName, ReactNode> = {
@@ -26,6 +27,7 @@ const pageElements: Record<PageName, ReactNode> = {
 export const routes: RouteObject[] = [
   ...(Object.keys(pageElements) as PageName[]).map((page) => ({
     path: pagePaths[page],
+    errorElement: <PageLoadError />,
     // 화면 파일은 작아 보통 순간에 받으므로, 받는 동안 문구를 띄우면 깜빡이기만 한다
     element: (
       <PageGate page={page}>
@@ -33,5 +35,5 @@ export const routes: RouteObject[] = [
       </PageGate>
     ),
   })),
-  { path: '*', element: <GoHome /> },
+  { path: '*', element: <GoHome />, errorElement: <PageLoadError /> },
 ]

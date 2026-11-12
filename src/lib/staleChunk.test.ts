@@ -1,13 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { handleStaleChunk, reloadOnStaleChunk, STALE_CHUNK_RETRY_MS } from '@/lib/staleChunk'
 
-function preloadError() {
-  return new Event('vite:preloadError', { cancelable: true })
+// "이 페이지에서 새로고침을 시작했다"는 모듈 값이라 테스트마다 모듈을 새로 불러온다
+async function load() {
+  vi.resetModules()
+  return import('@/lib/staleChunk')
+}
+
+const NOW = new Date('2026-11-12T09:00:00Z').getTime()
+const chunkError = new Error('Failed to fetch dynamically imported module')
+
+// 끝나지 않는 Promise인지 본다(그사이 settle 되면 true)
+async function settledSoon(promise: Promise<unknown>): Promise<boolean> {
+  let settled = false
+  promise.then(
+    () => (settled = true),
+    () => (settled = true),
+  )
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  return settled
 }
 
 beforeEach(() => {
-  vi.useFakeTimers()
-  vi.setSystemTime(new Date('2026-11-12T09:00:00Z'))
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(NOW)
   sessionStorage.clear()
 })
 
@@ -17,65 +32,84 @@ afterEach(() => {
   sessionStorage.clear()
 })
 
-describe('handleStaleChunk', () => {
-  it('화면 파일을 못 받으면 새로고침하고, 오류를 화면에 넘기지 않는다', () => {
+describe('recoverFromStaleChunk', () => {
+  it('화면 파일을 처음 못 받으면 새로고침하고, 새로고침이 끝날 때까지 기다린다', async () => {
+    const { recoverFromStaleChunk } = await load()
     const reload = vi.fn()
-    const event = preloadError()
 
-    handleStaleChunk(event, reload)
+    const result = recoverFromStaleChunk(chunkError, reload)
 
     expect(reload).toHaveBeenCalledTimes(1)
-    expect(event.defaultPrevented).toBe(true)
+    expect(await settledSoon(result)).toBe(false)
   })
 
-  it('새로고침한 지 얼마 안 돼 또 실패하면 다시 새로고침하지 않고 오류를 넘긴다', () => {
+  it('한 화면의 파일 여럿이 함께 실패해도 새로고침은 한 번이고 모두 기다린다', async () => {
+    const { recoverFromStaleChunk } = await load()
     const reload = vi.fn()
-    handleStaleChunk(preloadError(), reload)
-    vi.advanceTimersByTime(STALE_CHUNK_RETRY_MS - 1)
-    const again = preloadError()
 
-    handleStaleChunk(again, reload)
+    const first = recoverFromStaleChunk(chunkError, reload)
+    const second = recoverFromStaleChunk(chunkError, reload)
 
     expect(reload).toHaveBeenCalledTimes(1)
-    expect(again.defaultPrevented).toBe(false)
+    expect(await settledSoon(first)).toBe(false)
+    expect(await settledSoon(second)).toBe(false)
   })
 
-  it('충분히 지난 뒤에 또 실패하면(다음 배포) 다시 새로고침한다', () => {
+  it('새로고침하고 얼마 안 돼 또 못 받으면 새로고침하지 않고 오류를 넘긴다', async () => {
+    const before = await load()
+    before.recoverFromStaleChunk(chunkError, vi.fn())
+    vi.setSystemTime(NOW + before.STALE_CHUNK_RETRY_MS - 1)
+    // 새로고침한 뒤의 새 페이지
+    const { recoverFromStaleChunk } = await load()
     const reload = vi.fn()
-    handleStaleChunk(preloadError(), reload)
-    vi.advanceTimersByTime(STALE_CHUNK_RETRY_MS)
 
-    handleStaleChunk(preloadError(), reload)
-
-    expect(reload).toHaveBeenCalledTimes(2)
+    await expect(recoverFromStaleChunk(chunkError, reload)).rejects.toBe(chunkError)
+    expect(reload).not.toHaveBeenCalled()
   })
 
-  it('세션 저장소를 쓸 수 없어도 새로고침한다', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+  it('새로고침하고 충분히 지난 뒤에 또 못 받으면(다음 배포) 다시 새로고침한다', async () => {
+    const before = await load()
+    before.recoverFromStaleChunk(chunkError, vi.fn())
+    vi.setSystemTime(NOW + before.STALE_CHUNK_RETRY_MS)
+    const { recoverFromStaleChunk } = await load()
+    const reload = vi.fn()
+
+    const result = recoverFromStaleChunk(chunkError, reload)
+
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(await settledSoon(result)).toBe(false)
+  })
+
+  it('시계가 뒤로 가 지난 새로고침 시각이 지금보다 뒤여도 새로고침한다', async () => {
+    sessionStorage.setItem('staleChunkReloadedAt', String(NOW + 60_000))
+    const { recoverFromStaleChunk } = await load()
+    const reload = vi.fn()
+
+    recoverFromStaleChunk(chunkError, reload)
+
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('연결이 끊겨 못 받았으면 새로고침하지 않고 오류를 넘긴다', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const { recoverFromStaleChunk } = await load()
+    const reload = vi.fn()
+
+    await expect(recoverFromStaleChunk(chunkError, reload)).rejects.toBe(chunkError)
+    expect(reload).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['읽기', 'getItem'],
+    ['쓰기', 'setItem'],
+  ] as const)('세션 저장소 %s가 막혔으면 되풀이를 막을 수 없어 새로고침하지 않고 오류를 넘긴다', async (_, method) => {
+    vi.spyOn(Storage.prototype, method).mockImplementation(() => {
       throw new DOMException('막힘', 'SecurityError')
     })
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('막힘', 'SecurityError')
-    })
+    const { recoverFromStaleChunk } = await load()
     const reload = vi.fn()
 
-    handleStaleChunk(preloadError(), reload)
-
-    expect(reload).toHaveBeenCalledTimes(1)
-  })
-})
-
-describe('reloadOnStaleChunk', () => {
-  it('vite:preloadError를 들으면 새로고침하고, 그만두면 더 듣지 않는다', () => {
-    const reload = vi.fn()
-    const stop = reloadOnStaleChunk(reload)
-
-    window.dispatchEvent(preloadError())
-    expect(reload).toHaveBeenCalledTimes(1)
-
-    stop()
-    vi.advanceTimersByTime(STALE_CHUNK_RETRY_MS)
-    window.dispatchEvent(preloadError())
-    expect(reload).toHaveBeenCalledTimes(1)
+    await expect(recoverFromStaleChunk(chunkError, reload)).rejects.toBe(chunkError)
+    expect(reload).not.toHaveBeenCalled()
   })
 })

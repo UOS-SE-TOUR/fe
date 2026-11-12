@@ -1,6 +1,6 @@
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setNavigate } from '@/lib/navigation'
+import { setNavigator } from '@/lib/navigation'
 import { pagePaths, type PageName } from '@/lib/pages'
 import { CONNECTION_FAILED_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
@@ -11,7 +11,7 @@ const navigate = vi.fn()
 
 beforeEach(() => {
   fetchMock = stubFetch()
-  setNavigate(navigate)
+  setNavigator({ navigate, currentPath: () => '/tours' })
   vi.spyOn(toast, 'error').mockImplementation(() => 'toast')
 })
 
@@ -19,7 +19,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   navigate.mockReset()
-  setNavigate(null)
+  setNavigator(null)
   AuthStore.clear()
 })
 

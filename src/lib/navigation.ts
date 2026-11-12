@@ -1,12 +1,19 @@
-// React 밖의 코드(ApiClient)가 화면을 옮길 때 쓴다. 라우터를 만든 App이 이동 함수를 등록한다
-type Navigate = (path: string) => void
+// React 밖의 코드(ApiClient)가 화면을 옮길 때 쓴다. 라우터를 만든 App이 등록한다
+interface Navigator {
+  navigate(path: string): void
+  currentPath(): string
+}
 
-let navigate: Navigate | null = null
+let registered: Navigator | null = null
 
-export function setNavigate(next: Navigate | null) {
-  navigate = next
+export function setNavigator(next: Navigator | null) {
+  registered = next
 }
 
 export function navigateTo(path: string) {
-  navigate?.(path)
+  registered?.navigate(path)
+}
+
+export function currentPath(): string | null {
+  return registered?.currentPath() ?? null
 }

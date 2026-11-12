@@ -33,6 +33,11 @@ export const pageAccess: Record<PageName, 'GUEST' | MemberType> = {
   WarehousePage: 'STAFF',
 }
 
+export function canOpenPage(page: PageName, memberType: MemberType | null): boolean {
+  const access = pageAccess[page]
+  return access === 'GUEST' ? memberType === null : access === memberType
+}
+
 // 회원 구분마다 로그인하면 처음 보는 화면의 주소
 export function homePath(memberType: MemberType): string {
   return pagePaths[memberType === 'STAFF' ? 'StaffMainPage' : 'CustomerMainPage']

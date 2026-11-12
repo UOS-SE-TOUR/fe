@@ -1,10 +1,9 @@
 import { useEffect, type ReactNode } from 'react'
 import { Navigate } from 'react-router'
-import { homePath, landingPath, pageAccess, pagePaths, type PageName } from '@/lib/pages'
+import { canOpenPage, homePath, landingPath, pageAccess, pagePaths, type PageName } from '@/lib/pages'
 import { notifyForbidden } from '@/modules/ApiClient'
-import { AuthStore, useAuthState } from '@/modules/AuthStore'
+import { useAuthState } from '@/modules/AuthStore'
 
-// 새로고침 직후 로그인 상태를 되살리는 동안 보인다(서버가 늦으면 길어질 수 있다)
 function Restoring() {
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
@@ -24,7 +23,7 @@ function Forbidden({ to }: { to: string }) {
 export function PageGate({ page, children }: { page: PageName; children: ReactNode }) {
   const { member, restoring } = useAuthState()
   if (restoring && !member) return <Restoring />
-  if (AuthStore.canOpen(page)) return children
+  if (canOpenPage(page, member?.memberType ?? null)) return children
   if (!member) return <Navigate to={pagePaths.LoginPage} replace />
   if (pageAccess[page] === 'GUEST') return <Navigate to={homePath(member.memberType)} replace />
   return <Forbidden to={homePath(member.memberType)} />

@@ -55,7 +55,7 @@ Chrome에서 http://localhost:5173 으로 엽니다. 로그인 쿠키는 HTTPS�
 | `src/components/` | 화면 안의 부품(설계의 «Component») — `OptionPanel.tsx` 등 |
 | `src/modules/` | 화면들이 함께 쓰는 코드(설계의 «Module») — `ApiClient.ts` 등 |
 | `src/router/` | 화면 주소와 막기(로그인하지 않았거나 다른 회원 구분의 화면이면 다른 화면으로 보내기) |
-| `src/lib/` | 설계 클래스가 아닌 공용 코드 — 화면 주소(`pages.ts`), 회원 구분·테마·등급·상태의 화면 이름(`labels.ts`), 로그인 직후 표시(`fromLogin.ts`), 고객·직원 첫 화면의 로그아웃(`logOut.ts`), 회원가입 연락처의 하이픈(`phoneNumber.ts`) |
+| `src/lib/` | 설계 클래스가 아닌 공용 코드 — 화면 주소(`pages.ts`), 회원 구분·테마·등급·상태의 화면 이름(`labels.ts`), 로그인 직후 표시(`fromLogin.ts`), 고객·직원 첫 화면의 로그아웃(`logOut.ts`), 회원가입 연락처의 하이픈(`phoneNumber.ts`), 등록·신청·창고 추가를 보내는 동안 화면을 떠나지 못하게 하기(`useBlockLeaving.ts`) |
 | `src/components/ui/`, `src/hooks/`, `src/lib/utils.ts` | shadcn/ui가 만든 기본 부품(버튼·입력칸·팝업 등). 설계 클래스도에는 그리지 않습니다 |
 
 shadcn/ui 부품은 명령으로 더합니다(예: 팝업).

@@ -489,7 +489,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         showError(error)
         showTourList(null)
       } else {
-        // 결과 확인이 나가지 못했거나 거부됐으면 앞 신청의 결과는 아직 모르니 신청 키를 둔다
+        // 결과 확인이 거부됐으면(403 등) 앞 신청의 결과는 아직 모르니 신청 키를 둔다
         showError(error)
       }
     } finally {

@@ -122,6 +122,21 @@ describe('AddressSearch.load', () => {
     await expect(retried).resolves.toBeUndefined()
   })
 
+  it('다시 받는 중에 버린 스크립트가 늦게 돌았으면, 시간이 지나도 실패로 보지 않는다', async () => {
+    vi.useFakeTimers()
+    const first = module.AddressSearch.load()
+    const firstRejected = expect(first).rejects.toThrow()
+    const stalled = postcodeScripts()[0]
+    vi.advanceTimersByTime(module.POSTCODE_LOAD_TIMEOUT_MS)
+    await firstRejected
+
+    const retried = module.AddressSearch.load()
+    finishLoading(stalled)
+    vi.advanceTimersByTime(module.POSTCODE_LOAD_TIMEOUT_MS)
+
+    await expect(retried).resolves.toBeUndefined()
+  })
+
   it('버린 스크립트가 늦게 돌면, 다음에 부를 때 새로 붙이지 않고 바로 끝난다', async () => {
     vi.useFakeTimers()
     const loading = module.AddressSearch.load()

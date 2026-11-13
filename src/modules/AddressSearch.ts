@@ -46,8 +46,8 @@ function loadScript(): Promise<void> {
       script.remove()
       reject(new Error('카카오 우편번호 서비스를 불러오지 못했다'))
     }
-    // 응답 없이 멈춘 요청은 버리고 다음에 새로 붙인다. 늦게 받아 돌아도 kakao.Postcode를 다시 둘 뿐이다
-    const timer = window.setTimeout(() => finish(false), POSTCODE_LOAD_TIMEOUT_MS)
+    // 응답 없이 멈춘 요청은 버리고 다음에 새로 붙인다. 버린 스크립트가 늦게 돌면 kakao.Postcode가 생기니 그때는 그대로 쓴다
+    const timer = window.setTimeout(() => finish(postcodeClass() !== null), POSTCODE_LOAD_TIMEOUT_MS)
     script.src = POSTCODE_SCRIPT_URL
     script.async = true
     script.onload = () => finish(postcodeClass() !== null)

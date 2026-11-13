@@ -64,6 +64,14 @@ describe('ApiClient 요청', () => {
     expect(init?.headers).toMatchObject({ 'Idempotency-Key': idempotencyKey, 'Content-Type': 'application/json' })
   })
 
+  it('신청 키는 unsafeToRetry와 함께만 줄 수 있다(타입 검사)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { bookingId: 1, status: 'RECRUITING' }))
+
+    // @ts-expect-error unsafeToRetry 없이 신청 키만 주면 결과를 모를 때 resultUnknown이 붙지 않는다
+    await ApiClient.post('/api/v1/bookings', { tourId: 1 }, { idempotencyKey: '0b5f8c1e-7a2d-4c3b-9e6f-1d2c3b4a5f60' })
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('신청 키를 주지 않으면 Idempotency-Key를 보내지 않는다', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { finalPrice: 1 }))
 

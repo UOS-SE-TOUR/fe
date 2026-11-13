@@ -17,8 +17,8 @@ export class ApiError extends Error {
   readonly status: number | null
   // ApiClient가 이미 알렸다(401·403). 화면은 보여 주지 않는다
   readonly handled: boolean
-  // unsafeToRetry 요청을 서버가 처리했는지 알 수 없다. 화면은 단추를 다시 열지 않고 결과를 다시 읽는다
-  // (신청은 같은 신청 키로 다시 보내 결과를 받는다)
+  // unsafeToRetry 요청을 서버가 처리했는지 알 수 없다. 화면은 단추를 다시 열지 않는다
+  // (신청은 같은 신청 키로 다시 보내고, 상품 등록·창고 추가는 결과를 다시 읽는다)
   readonly resultUnknown: boolean
 
   constructor(
@@ -38,15 +38,22 @@ export function hasStatus(error: unknown, status: number): error is ApiError {
   return error instanceof ApiError && error.status === status
 }
 
-interface RequestOptions {
+type RequestOptions = {
   // false면 401·403도 처리하지 않는다(AuthStore.restore)
   handleAuthErrors?: boolean
-  // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)
-  unsafeToRetry?: boolean
-  // 신청 키. 요청 머리 Idempotency-Key로 보낸다. 같은 키로 다시 보낸 신청은 서버가 두 번 신청하지 않는다.
-  // unsafeToRetry와 함께 준다(결과를 모를 때 resultUnknown을 받아야 같은 키로 다시 보낼 수 있다)
-  idempotencyKey?: string
-}
+} & (
+  | {
+      // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)
+      unsafeToRetry?: boolean
+      idempotencyKey?: undefined
+    }
+  | {
+      unsafeToRetry: true
+      // 신청 키. 요청 머리 Idempotency-Key로 보낸다. 같은 키로 다시 보낸 신청은 서버가 두 번 신청하지 않는다.
+      // 결과를 모를 때 resultUnknown을 받아야 같은 키로 다시 보낼 수 있어 unsafeToRetry와 함께만 준다
+      idempotencyKey: string
+    }
+)
 
 // AuthStore가 불러와질 때 등록한다. ApiClient는 AuthStore를 import하지 않는다(설계의 의존 방향).
 // 화면 이동은 하지 않는다 — 로그인 상태가 바뀌면 라우터(PageGate)가 로그인 화면이나 자기 첫 화면으로 보낸다

@@ -66,7 +66,8 @@ interface UnknownApply extends ApplyRequest {
   message: string
 }
 
-// 새 신청 키(UUID v4). crypto.randomUUID가 없는 브라우저(Safari 15.4 이전)에서는 getRandomValues로 같은 모양을 만든다
+// 새 신청 키(UUID v4). crypto.randomUUID가 없는 브라우저(Safari 15.4 이전)에서는 getRandomValues로 같은 모양을 만든다.
+// randomUUID가 없는 http 주소(https·localhost 밖)는 로그인 쿠키가 Secure라 로그인부터 되지 않는다(be README)
 function newIdempotencyKey(): string {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
   const bytes = crypto.getRandomValues(new Uint8Array(16))

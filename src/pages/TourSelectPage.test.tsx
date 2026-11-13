@@ -801,9 +801,12 @@ describe('신청', () => {
 
     finish(jsonResponse(201, { bookingId: 7, status: 'RECRUITING' }))
     expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
-    const leavingAfter = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(leavingAfter)
-    expect(leavingAfter.defaultPrevented).toBe(false)
+    // 막기를 푸는 effect는 화면이 바뀐 다음에 돌 수 있어(느린 CI에서 실패), 풀릴 때까지 기다린다
+    await waitFor(() => {
+      const leavingAfter = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(leavingAfter)
+      expect(leavingAfter.defaultPrevented).toBe(false)
+    })
     await act(() => router.navigate(-1))
     expect(router.state.location.pathname).toBe('/')
   })

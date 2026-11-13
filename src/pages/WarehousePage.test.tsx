@@ -266,9 +266,12 @@ describe('물품 추가', () => {
     respond(jsonResponse(200, { ...golfBall, quantity: 10 }))
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 10개)'))
     expect(screen.getByRole('link', { name: '직원 메뉴' })).toBeInTheDocument()
-    const leavingAfter = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(leavingAfter)
-    expect(leavingAfter.defaultPrevented).toBe(false)
+    // 막기를 푸는 effect는 화면이 바뀐 다음에 돌 수 있어(느린 CI에서 실패), 풀릴 때까지 기다린다
+    await waitFor(() => {
+      const leavingAfter = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(leavingAfter)
+      expect(leavingAfter.defaultPrevented).toBe(false)
+    })
     await act(() => router.navigate(-1))
     expect(router.state.location.pathname).toBe('/staff')
   })

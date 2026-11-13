@@ -5,6 +5,7 @@ import { ApiClient } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { jsonResponse, stubFetch } from '@/test/http'
 import { renderAt } from '@/test/router'
+import { routes } from '@/router/routes'
 
 let fetchMock: ReturnType<typeof stubFetch>
 
@@ -173,4 +174,9 @@ describe('로그인한 채 다시 읽을 때(403 뒤)', () => {
     await act(() => restoring)
     expect(screen.getByRole('heading', { name: '여행 상품 선택' })).toBeInTheDocument()
   })
+})
+
+// 로그인한 뒤 화면은 처음 열 때 파일을 받으므로, 못 받으면 라우터의 영어 개발자 화면 대신 오류 화면이 보여야 한다
+it('모든 화면 주소에 오류 화면이 있다', () => {
+  expect(routes.every((route) => route.errorElement)).toBe(true)
 })

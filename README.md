@@ -2,7 +2,7 @@
 
 미스터 월드 테마 여행 서비스(MWT)의 화면입니다. 소프트웨어공학(26-2) 팀 최백문 과제입니다.
 
-- 운영 화면: https://uos-mwt.vercel.app — 운영 서버에 붙어 있어서 읽기만 시험합니다([서버 연결](#서버-연결)의 "운영 서버에 붙이기")
+- 운영 화면: https://uos-mwt.vercel.app — 운영 서버에 붙어 있어서 가입·신청처럼 데이터를 남기는 일은 시험하지 않습니다([서버 연결](#서버-연결)의 "운영 서버에 붙이기")
 - 서버: [UOS-SE-TOUR/be](https://github.com/UOS-SE-TOUR/be) — API 문서는 운영 서버의 [Swagger](https://uos-mwt.duckdns.org/api/swagger-ui.html)
 - 설계·분석 산출물: [UOS-SE-TOUR/docs](https://github.com/UOS-SE-TOUR/docs) — 화면 클래스는 설계산출물 3장, 서버 API 표는 4.9
 
@@ -34,7 +34,7 @@ Chrome에서 http://localhost:5173 으로 엽니다. 로그인 쿠키는 HTTPS�
 화면 코드는 서버 주소 없이 `/api/v1/tours`처럼 경로만 씁니다. 서버에 CORS 설정이 없어서, 화면을 띄운 쪽의 프록시가 `/api`로 시작하는 요청을 서버로 넘깁니다. 이때 `/api`를 떼지 않고 그대로 넘깁니다(떼면 서버가 404를 냅니다).
 
 - **로컬:** 개발 서버가 `/api` 요청을 `http://localhost:8080`(내 컴퓨터에서 띄운 be)으로 넘깁니다. be를 띄우는 법은 be README의 "실행"을 봅니다.
-- **운영 서버에 붙이기:** 테스트 서버가 따로 없어서, 운영 서버에 붙인 화면(아래처럼 붙인 로컬, 운영 화면, 프리뷰)에서는 읽기만 시험합니다. 가입·신청·상품 등록·창고 추가는 운영 DB에 그대로 남고, 신청하면 실제 확정 문자가 나갈 수도 있습니다. 음성으로 고르기는 요청마다 서버가 OpenAI API를 부르니 되풀이해 시험하지 않습니다. 로컬을 운영 서버에 붙이려면 `.env.local`을 만들고 `API_PROXY_TARGET`에 운영 서버 주소를 넣은 뒤 개발 서버를 다시 띄웁니다.
+- **운영 서버에 붙이기:** 테스트 서버가 따로 없어서, 운영 서버에 붙인 화면(아래처럼 붙인 로컬, 운영 화면, 프리뷰)에서는 데이터를 남기는 일을 시험하지 않습니다. 가입·신청·상품 등록·창고 추가가 그런 일입니다. 운영 DB에 그대로 남고, 신청하면 실제 확정 문자가 나갈 수도 있습니다. 로그인·조회·가격 계산은 데이터를 남기지 않아 괜찮습니다. 음성으로 고르기는 요청마다 서버가 OpenAI API를 부르니 꼭 필요할 때만 합니다. 로컬을 운영 서버에 붙이려면 `.env.local`을 만들고 `API_PROXY_TARGET`에 운영 서버 주소를 넣은 뒤 개발 서버를 다시 띄웁니다.
 
   ```bash
   cp .env.example .env.local
@@ -44,9 +44,9 @@ Chrome에서 http://localhost:5173 으로 엽니다. 로그인 쿠키는 HTTPS�
   API_PROXY_TARGET=https://uos-mwt.duckdns.org
   ```
 
-- **배포:** 운영 화면(맨 위의 주소)은 Vercel 프로젝트 `uos-mwt`에 올라가 있습니다. `main`에 머지하면 Vercel이 운영 화면을 새로 배포합니다. `vercel.json`이 `/api` 요청을 운영 서버로 넘기고, `/tours` 같은 화면 주소에서 새로고침해도 `index.html`을 돌려줍니다(빌드 파일이 든 `/assets/`만 빼고). 두 규칙의 순서는 바꾸지 않습니다. Node 버전은 `package.json`의 `engines`를 따릅니다.
+- **배포:** 운영 화면(맨 위의 주소)은 Vercel 프로젝트 `uos-mwt`에 올라가 있습니다. `main`에 머지하면 Vercel이 운영 화면을 재배포합니다. `vercel.json`이 `/api` 요청을 운영 서버로 넘기고, `/tours` 같은 화면 주소에서 새로고침해도 `index.html`을 돌려줍니다(빌드 파일이 든 `/assets/`만 빼고). 두 규칙의 순서는 바꾸지 않습니다. Node 버전은 `package.json`의 `engines`를 따릅니다.
 
-  PR마다 생기는 프리뷰 배포도 같은 규칙으로 운영 서버에 붙습니다. 운영 화면과 프리뷰에서도 위 "운영 서버에 붙이기"대로 읽기만 시험합니다.
+  PR마다 생기는 프리뷰 배포도 같은 규칙으로 운영 서버에 붙습니다.
 
 서버 쪽 규칙(오류 응답 `{"message": "…"}`, 로그인과 권한)은 be README의 [화면과 연결](https://github.com/UOS-SE-TOUR/be#화면과-연결)·[오류 응답](https://github.com/UOS-SE-TOUR/be#오류-응답)·[로그인과 권한](https://github.com/UOS-SE-TOUR/be#로그인과-권한)에 있습니다.
 

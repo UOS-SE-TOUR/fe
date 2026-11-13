@@ -275,7 +275,7 @@ export function VoiceInputPanel({ applySelection, disabled = false, createRecogn
 
   // 고객이 확인한 내용으로 상품 선택 화면이 가격을 계산한다(설계 5.5 confirmSelection → applySelection)
   async function confirmSelection() {
-    const selection = draft && step === 'idle' && !disabled ? selectionOf(draft) : null
+    const selection = draft && step === 'idle' ? selectionOf(draft) : null
     if (!draft || !selection) return
     const seq = session.current
     // 앞서 알린 것(말소리 없음, 지난 확인의 거부 등)은 이 확인의 결과와 섞이지 않게 지운다

@@ -791,6 +791,24 @@ describe('신청', () => {
     expect(second).not.toBe(first)
   })
 
+  it('crypto.randomUUID가 없는 곳(https·localhost가 아닌 주소)에서도 UUID 모양의 신청 키를 만든다', async () => {
+    const { getRandomValues } = crypto
+    vi.stubGlobal('crypto', { getRandomValues: getRandomValues.bind(crypto) })
+    const user = renderPage()
+    await priced(user)
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await screen.findByText(SEAT_SHORTAGE)
+    await priceWith(user, /^그랜드/, '1')
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+
+    const [first, second] = idempotencyKeysOf(APPLY)
+    expect(first).toMatch(UUID)
+    expect(second).toMatch(UUID)
+    expect(second).not.toBe(first)
+  })
+
   it('요청이 끝날 때까지 단추를 막아 두 번 눌러도 한 번만 신청한다', async () => {
     let finish: (response: Response) => void = () => {}
     replyOnce(APPLY, () => new Promise<Response>((resolve) => (finish = resolve)))
@@ -862,6 +880,7 @@ describe('신청 결과를 모를 때', () => {
       await screen.findByText('가격 요약')
 
       replyOnce(APPLY, response)
+      replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 8 }, ...golfTours.slice(1)]))
       await user.click(screen.getByRole('button', { name: '신청하기' }))
 
       expect(await screen.findByText(message)).toBeInTheDocument()
@@ -872,7 +891,9 @@ describe('신청 결과를 모를 때', () => {
       expect(screen.getByLabelText('인원')).toBeDisabled()
       expect(screen.getByRole('button', { name: '옵션 바꾸기' })).toBeDisabled()
       expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeEnabled()
-      expect(countOf(TOURS)).toBe(1)
+      // 신청이 됐으면 줄었을 남은 자리를 다시 불러와 보인다
+      expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
+      expect(countOf(TOURS)).toBe(2)
       expect(countOf(APPLY)).toBe(1)
       await waitUntilLeaveAllowed()
     },
@@ -975,7 +996,7 @@ describe('신청 결과를 모를 때', () => {
     expect(await screen.findByText(CLOSED)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
-    expect(countOf(TOURS)).toBe(2)
+    expect(countOf(TOURS)).toBe(3)
   })
 
   it('결과 확인이 404면(상품이 없어져 신청이 되지 않음) 알리고 상품 목록을 다시 불러온다', async () => {
@@ -990,7 +1011,7 @@ describe('신청 결과를 모를 때', () => {
     expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
     expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
-    expect(countOf(TOURS)).toBe(2)
+    expect(countOf(TOURS)).toBe(3)
   })
 
   it('결과 확인이 나가지 못했으면(오프라인) 알리고, 들고 있던 신청 키로 다시 확인할 수 있다', async () => {

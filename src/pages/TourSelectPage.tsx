@@ -66,6 +66,17 @@ interface UnknownApply extends ApplyRequest {
   message: string
 }
 
+// 새 신청 키(UUID v4). crypto.randomUUID는 https·localhost에서만 있어, 같은 망의 http 주소로 연 개발 서버 등에서는
+// crypto.getRandomValues로 같은 모양을 만든다
+function newIdempotencyKey(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 // 고른 상품 하나의 상태. 상품을 다시 고르면 새로 만들어, 고른 옵션과 지난 가격이 함께 비워진다
 interface Detail {
   tourId: number
@@ -435,7 +446,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       if (!current.quote || !current.priced) return
       const { summary } = current.quote
       apply = {
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: newIdempotencyKey(),
         request: {
           tourId: summary.tourId,
           level: summary.level,
@@ -467,8 +478,10 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       }
       const { error } = outcome
       if (error instanceof ApiError && error.resultUnknown) {
-        // 신청이 이미 됐을 수 있어 신청하기를 다시 열지 않고, 이 화면에서 같은 신청 키로 결과를 확인하게 한다
+        // 신청이 이미 됐을 수 있어 신청하기를 다시 열지 않고, 이 화면에서 같은 신청 키로 결과를 확인하게 한다.
+        // 신청이 됐으면 줄었을 남은 자리를 보인다
         updateDetail({ unknownApply: { ...apply, message: error.message }, optionPanelOpen: false })
+        if (theme) void loadTours(theme, seq)
       } else if (hasStatus(error, 400)) {
         updateDetail({ unknownApply: null })
         await askLevelAgain(error.message, apply.request.tourId, seq)
@@ -480,6 +493,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         showTourList(null)
       } else {
         // 결과 확인이 나가지 못했거나 거부됐으면 앞 신청의 결과는 아직 모른다. 들고 있던 신청 키는 그대로 둔다
+        // (401이면 로그인 화면으로 가며 이 화면과 함께 버려진다)
         showError(error)
       }
     } finally {

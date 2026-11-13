@@ -441,7 +441,7 @@ export function TourPlanPage() {
                   return (
                     <div key={row.id} className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-start">
                       <Field data-invalid={!!rowErrors?.name}>
-                        <FieldLabel htmlFor={`transport-${row.id}-name`}>{`교통 ${index + 1} 이름`}</FieldLabel>
+                        <FieldLabel htmlFor={`transport-${row.id}-name`}>교통 {index + 1} 이름</FieldLabel>
                         <Input
                           id={`transport-${row.id}-name`}
                           value={row.name}
@@ -452,9 +452,9 @@ export function TourPlanPage() {
                         <BlockedReason fieldId={`transport-${row.id}-name`}>{rowErrors?.name}</BlockedReason>
                       </Field>
                       <Field data-invalid={!!rowErrors?.unitPrice}>
-                        <FieldLabel
-                          htmlFor={`transport-${row.id}-price`}
-                        >{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
+                        <FieldLabel htmlFor={`transport-${row.id}-price`}>
+                          교통 {index + 1} 1인 추가 요금(원)
+                        </FieldLabel>
                         <Input
                           id={`transport-${row.id}-price`}
                           inputMode="numeric"

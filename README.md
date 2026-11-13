@@ -50,7 +50,7 @@ Chrome에서 http://localhost:5173 으로 엽니다. 로그인 쿠키는 HTTPS�
 
 - **배포:** 운영 화면(맨 위의 주소)은 Vercel 프로젝트 `uos-mwt`에 올라가 있습니다. `main`에 머지하면 Vercel이 운영 화면을 재배포합니다. `vercel.json`이 `/api` 요청을 운영 서버로 넘기고, `/tours` 같은 화면 주소에서 새로고침해도 `index.html`을 돌려줍니다(빌드 파일이 든 `/assets/`만 빼고). 두 규칙의 순서는 바꾸지 않습니다. Node 버전은 `package.json`의 `engines`를 따릅니다.
 
-  PR마다 생기는 프리뷰 배포도 같은 규칙으로 운영 서버에 붙습니다.
+  브랜치를 올리면 Vercel이 프리뷰 배포를 만들고, 프리뷰도 같은 규칙으로 운영 서버에 붙습니다. 다만 프리뷰 주소는 이 Vercel 프로젝트에 로그인한 사람만 열 수 있습니다(Vercel의 기본 보호 설정). 다른 팀원은 PR 브랜치를 로컬에서 띄워 확인합니다.
 
 서버 쪽 규칙(오류 응답 `{"message": "…"}`, 로그인과 권한)은 be README의 [화면과 연결](https://github.com/UOS-SE-TOUR/be#화면과-연결)·[오류 응답](https://github.com/UOS-SE-TOUR/be#오류-응답)·[로그인과 권한](https://github.com/UOS-SE-TOUR/be#로그인과-권한)에 있습니다.
 

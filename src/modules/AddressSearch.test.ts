@@ -103,38 +103,37 @@ describe('AddressSearch.load', () => {
     expect(postcodeScripts()).toHaveLength(0)
   })
 
-  it('정한 시간 안에 받지 못하면 거절하고, 다시 부르면 받던 스크립트를 새로 붙이지 않고 기다린다', async () => {
+  it('정한 시간 안에 받지 못하면 그 스크립트를 버리고 거절하며, 다시 부르면 새로 붙인다', async () => {
     vi.useFakeTimers()
     const loading = module.AddressSearch.load()
     const rejected = expect(loading).rejects.toThrow()
 
     vi.advanceTimersByTime(module.POSTCODE_LOAD_TIMEOUT_MS - 1)
-    expect(postcodeScripts()).toHaveLength(1)
+    const stalled = postcodeScripts()[0]
+    expect(stalled.isConnected).toBe(true)
     vi.advanceTimersByTime(1)
     await rejected
+    expect(stalled.isConnected).toBe(false)
 
     const retried = module.AddressSearch.load()
     expect(postcodeScripts()).toHaveLength(1)
+    expect(postcodeScripts()[0]).not.toBe(stalled)
     finishLoading(postcodeScripts()[0])
     await expect(retried).resolves.toBeUndefined()
   })
 
-  it('시간이 지난 뒤 받던 스크립트가 실패하면, 다음에 부를 때 새로 붙인다', async () => {
+  it('버린 스크립트가 늦게 돌면, 다음에 부를 때 새로 붙이지 않고 바로 끝난다', async () => {
     vi.useFakeTimers()
     const loading = module.AddressSearch.load()
     const rejected = expect(loading).rejects.toThrow()
+    const stalled = postcodeScripts()[0]
     vi.advanceTimersByTime(module.POSTCODE_LOAD_TIMEOUT_MS)
     await rejected
 
-    const late = postcodeScripts()[0]
-    late.dispatchEvent(new Event('error'))
-    expect(late.isConnected).toBe(false)
+    finishLoading(stalled)
 
-    const retried = module.AddressSearch.load()
-    expect(postcodeScripts()).toHaveLength(1)
-    expect(postcodeScripts()[0]).not.toBe(late)
-    finishLoading(postcodeScripts()[0])
-    await expect(retried).resolves.toBeUndefined()
+    await expect(module.AddressSearch.load()).resolves.toBeUndefined()
+    expect(postcodeScripts()).toHaveLength(0)
   })
 })
 

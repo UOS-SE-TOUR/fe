@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type RefObject } from 'react'
 import { XIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
@@ -62,7 +62,8 @@ export function SignUpPage() {
   const addressDetailInput = useRef<HTMLInputElement>(null)
   const addressSearchButton = useRef<HTMLButtonElement>(null)
   const addressSearchTarget = useRef<HTMLElement | null>(null)
-  const addressSelected = useRef(false)
+  // 팝업이 닫힌 뒤 초점을 둘 곳. 주소를 고르면 상세 주소, 직접 입력하기면 주소, 그냥 닫으면 "주소 검색" 단추
+  const addressSearchExit = useRef<RefObject<HTMLElement | null>>(addressSearchButton)
   const phoneInput = useRef<HTMLInputElement>(null)
   const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
 
@@ -117,7 +118,7 @@ export function SignUpPage() {
     } finally {
       setAddressSearchLoading(false)
     }
-    addressSelected.current = false
+    addressSearchExit.current = addressSearchButton
     setAddressSearchCount((count) => count + 1)
     setAddressSearchOpen(true)
   }
@@ -130,17 +131,22 @@ export function SignUpPage() {
       setForm((current) => ({ ...current, address }))
       setError(null)
       setAddressByHand(false)
-      addressSelected.current = true
+      addressSearchExit.current = addressDetailInput
       setAddressSearchOpen(false)
     })
   }, [])
 
-  // 주소를 골라 닫으면 상세 주소를 바로 치게 하고, 그냥 닫으면 "주소 검색" 단추로 돌아간다.
-  // 불러오는 동안 단추를 막아 초점이 풀리므로 팝업이 스스로 돌려보낼 자리가 없다
+  // 검색 화면이 뜨지 않거나 찾는 주소가 없을 때 쓴다. 스크립트는 받았어도 검색 화면은 막힐 수 있다
+  function typeAddressByHand() {
+    setAddressByHand(true)
+    addressSearchExit.current = addressInput
+    setAddressSearchOpen(false)
+  }
+
+  // 불러오는 동안 단추를 막아 초점이 풀리므로, 팝업이 스스로 돌려보낼 자리가 없어 직접 정한다
   function focusAfterAddressSearch(event: Event) {
     event.preventDefault()
-    if (addressSelected.current) addressDetailInput.current?.focus()
-    else addressSearchButton.current?.focus()
+    addressSearchExit.current.current?.focus()
   }
 
   function showSignUpResult() {
@@ -329,6 +335,9 @@ export function SignUpPage() {
             <div className="flex flex-col gap-2">
               <DialogTitle>주소 검색</DialogTitle>
               <DialogDescription>도로명·건물명·지번으로 찾은 뒤, 나온 주소를 누르면 주소 칸에 들어갑니다.</DialogDescription>
+              <Button variant="link" size="sm" className="h-auto w-fit p-0" onClick={typeAddressByHand}>
+                검색이 안 되면 주소를 직접 입력하기
+              </Button>
             </div>
             <DialogClose asChild>
               <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="닫기">
@@ -336,7 +345,7 @@ export function SignUpPage() {
               </Button>
             </DialogClose>
           </DialogHeader>
-          <div key={addressSearchCount} ref={showAddressSearch} className="-mx-4 h-[clamp(400px,calc(100svh-10rem),500px)] sm:mx-0" />
+          <div key={addressSearchCount} ref={showAddressSearch} className="-mx-4 h-[clamp(400px,calc(100svh-11rem),500px)] sm:mx-0" />
         </DialogContent>
       </Dialog>
     </main>

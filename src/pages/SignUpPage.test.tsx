@@ -479,6 +479,30 @@ describe('SignUpPage', () => {
     expect(address).toHaveValue('서울시 동대문구 서울시립대로 163')
   })
 
+  it('검색 팝업에서 직접 입력하기를 누르면 팝업을 닫고 주소 칸을 열어, 친 주소로 가입할 수 있다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { memberId: 7 }))
+    renderAt('/signup')
+    await fillForm({ address: null })
+
+    await openAddressSearch()
+    await user.click(screen.getByRole('button', { name: '검색이 안 되면 주소를 직접 입력하기' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    const address = screen.getByLabelText('주소')
+    expect(address).not.toHaveAttribute('readonly')
+    expect(address).toHaveFocus()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    await user.type(address, '서울시 동대문구 서울시립대로 163')
+    await submit()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(sentRequest(fetchMock).body).toEqual({
+      ...customer,
+      address: '서울시 동대문구 서울시립대로 163',
+      memberType: 'CUSTOMER',
+    })
+  })
+
   it('StrictMode로 띄워도 검색 화면은 한 번만 띄운다', async () => {
     renderAt('/signup', { strict: true })
 

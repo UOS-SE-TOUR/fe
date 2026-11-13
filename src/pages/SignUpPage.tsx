@@ -39,7 +39,7 @@ const emptyForm: SignUpForm = {
 
 const ADDRESS_SEARCH_FAILED_MESSAGE = '주소 검색을 불러오지 못했습니다. 주소를 직접 입력해 주세요.'
 
-// 서버는 주소를 한 칸으로 받는다. 주소가 없으면 상세 주소만 보내지 않고 비워 서버가 주소를 달라고 하게 둔다
+// 주소가 없으면 상세 주소만 보내지 않는다(서버가 주소를 달라고 한다)
 function joinAddress(address: string, detail: string): string {
   const base = address.trim()
   const rest = detail.trim()
@@ -53,16 +53,16 @@ export function SignUpPage() {
   const [submitting, setSubmitting] = useState(false)
   const [addressSearchLoading, setAddressSearchLoading] = useState(false)
   const [addressSearchOpen, setAddressSearchOpen] = useState(false)
-  // 열 때마다 검색 자리를 새로 만든다. 닫히는 중에 다시 열어 남은 자리를 그대로 쓰면, 주소를 고르며 비워진 자리라 빈 팝업이 된다
+  // 열 때마다 새 자리에 띄운다. 닫히는 중에 다시 열면 주소를 고르며 비워진 자리가 남는다
   const [addressSearchCount, setAddressSearchCount] = useState(0)
   const [addressSearchFailed, setAddressSearchFailed] = useState(false)
-  // 우편번호 서비스를 불러오지 못하면 주소를 직접 입력하게 연다. 다시 불러와도 검색에서 주소를 고르기 전까지는 연 채로 둔다
+  // 검색에서 주소를 고르기 전까지는 다시 불러와도 연 채로 둔다
   const [addressByHand, setAddressByHand] = useState(false)
   const addressInput = useRef<HTMLInputElement>(null)
   const addressDetailInput = useRef<HTMLInputElement>(null)
   const addressSearchButton = useRef<HTMLButtonElement>(null)
   const addressSearchTarget = useRef<HTMLElement | null>(null)
-  // 팝업이 닫힌 뒤 초점을 둘 곳. 주소를 고르면 상세 주소, 직접 입력하기면 주소, 그냥 닫으면 "주소 검색" 단추
+  // 팝업이 닫힌 뒤 초점을 둘 곳
   const addressSearchExit = useRef<RefObject<HTMLElement | null>>(addressSearchButton)
   const phoneInput = useRef<HTMLInputElement>(null)
   const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
@@ -104,14 +104,14 @@ export function SignUpPage() {
 
   async function openAddressSearch() {
     setAddressSearchLoading(true)
-    // 다시 실패해도 화면 낭독기가 읽게, 불러오는 동안은 실패 문구를 비운다
+    // 다시 실패해도 화면 낭독기가 읽게 비웠다가 넣는다
     setAddressSearchFailed(false)
     try {
       await AddressSearch.load()
     } catch {
       setAddressSearchFailed(true)
       setAddressByHand(true)
-      // 기다리는 사이 다른 칸으로 옮겼으면 초점을 빼앗지 않는다(막힌 단추에 있던 초점은 body로 풀린다)
+      // 기다리는 사이 다른 칸으로 옮겼으면 초점을 빼앗지 않는다
       const focused = document.activeElement
       if (!focused || focused === document.body || focused === addressSearchButton.current) addressInput.current?.focus()
       return
@@ -123,27 +123,35 @@ export function SignUpPage() {
     setAddressSearchOpen(true)
   }
 
-  // 팝업이 열려 검색 화면 자리가 생기면 띄운다. StrictMode는 같은 자리에 ref를 두 번 붙이니 이미 띄운 자리는 그대로 둔다
+  // StrictMode는 같은 자리에 ref를 두 번 붙인다
   const showAddressSearch = useCallback((element: HTMLDivElement | null) => {
     if (!element || element === addressSearchTarget.current) return
     addressSearchTarget.current = element
-    AddressSearch.embed(element, (address) => {
-      setForm((current) => ({ ...current, address }))
-      setError(null)
-      setAddressByHand(false)
-      addressSearchExit.current = addressDetailInput
+    try {
+      AddressSearch.embed(element, (address) => {
+        setForm((current) => ({ ...current, address }))
+        setError(null)
+        setAddressByHand(false)
+        addressSearchExit.current = addressDetailInput
+        setAddressSearchOpen(false)
+      })
+    } catch {
+      // 화면 전체가 내려가지 않게, 띄우지 못하면 불러오지 못한 것처럼 직접 입력하게 연다
+      setAddressSearchFailed(true)
+      setAddressByHand(true)
+      addressSearchExit.current = addressInput
       setAddressSearchOpen(false)
-    })
+    }
   }, [])
 
-  // 검색 화면이 뜨지 않거나 찾는 주소가 없을 때 쓴다. 스크립트는 받았어도 검색 화면은 막힐 수 있다
+  // 스크립트는 받았어도 검색 화면이 막히거나, 찾는 주소가 없을 때
   function typeAddressByHand() {
     setAddressByHand(true)
     addressSearchExit.current = addressInput
     setAddressSearchOpen(false)
   }
 
-  // 불러오는 동안 단추를 막아 초점이 풀리므로, 팝업이 스스로 돌려보낼 자리가 없어 직접 정한다
+  // 불러오는 동안 막힌 단추에서 초점이 풀려, 팝업이 돌려보낼 자리를 직접 정한다
   function focusAfterAddressSearch(event: Event) {
     event.preventDefault()
     addressSearchExit.current.current?.focus()
@@ -244,7 +252,7 @@ export function SignUpPage() {
                 {addressSearchFailed && (
                   <FieldDescription id="signup-address-help">{ADDRESS_SEARCH_FAILED_MESSAGE}</FieldDescription>
                 )}
-                {/* 화면 낭독기는 미리 있던 알림 자리에 새로 든 글자만 읽어 준다 */}
+                {/* 화면 낭독기는 미리 있던 알림 자리에 든 글자만 읽는다 */}
                 <p role="status" className="sr-only">
                   {addressSearchFailed ? ADDRESS_SEARCH_FAILED_MESSAGE : ''}
                 </p>
@@ -323,8 +331,7 @@ export function SignUpPage() {
           </form>
         </CardContent>
       </Card>
-      {/* 검색 화면은 폭 300px·높이 400px 이상이어야 하고, 아래 카카오 로고가 가려지면 안 된다.
-          좁은 휴대폰에선 검색 자리를 팝업 좌우 끝까지 넓히고, 낮은 화면에선 팝업을 굴려 본다 */}
+      {/* 카카오 검색 화면은 300×400px 이상이어야 하고 아래 로고가 가려지면 안 된다 */}
       <Dialog open={addressSearchOpen} onOpenChange={setAddressSearchOpen}>
         <DialogContent
           showCloseButton={false}

@@ -503,6 +503,22 @@ describe('SignUpPage', () => {
     })
   })
 
+  it('검색 화면을 띄우다 오류가 나도 가입 화면은 그대로이고, 팝업을 닫고 주소를 직접 입력하게 연다', async () => {
+    vi.mocked(AddressSearch.embed).mockImplementation(() => {
+      throw new Error('broken bundle')
+    })
+    renderAt('/signup')
+    await user.type(screen.getByLabelText('아이디'), customer.loginId)
+
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+
+    await expectAddressSearchFailed()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('아이디')).toHaveValue(customer.loginId)
+    expect(screen.getByLabelText('주소')).not.toHaveAttribute('readonly')
+    expect(screen.getByLabelText('주소')).toHaveFocus()
+  })
+
   it('StrictMode로 띄워도 검색 화면은 한 번만 띄운다', async () => {
     renderAt('/signup', { strict: true })
 

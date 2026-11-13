@@ -51,7 +51,11 @@ function rowTexts() {
   return screen
     .getAllByRole('row')
     .slice(1)
-    .map((row) => within(row).getAllByRole('cell').map((cell) => cell.textContent))
+    .map((row) =>
+      within(row)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    )
 }
 
 it('직원 메뉴 링크로 직원 첫 화면에 돌아간다', async () => {

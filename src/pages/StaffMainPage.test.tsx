@@ -59,7 +59,11 @@ describe('StaffMainPage', () => {
   })
 
   it.each([
-    ['서버가 실패를 알리면', () => fetchMock.mockResolvedValue(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다.' })), '서버에 잠시 연결할 수 없습니다.'],
+    [
+      '서버가 실패를 알리면',
+      () => fetchMock.mockResolvedValue(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다.' })),
+      '서버에 잠시 연결할 수 없습니다.',
+    ],
     ['연결이 끊기면', () => fetchMock.mockRejectedValue(new TypeError('Failed to fetch')), CONNECTION_FAILED_MESSAGE],
   ])('로그아웃 요청이 실패하면(%s) 문구를 보여 주고 로그인 상태를 그대로 둔다', async (_, respond, message) => {
     markFromLogin()

@@ -408,7 +408,11 @@ describe('서버에 맡기는 것', () => {
 
 describe('처리됐는지 모르는 실패', () => {
   it.each([
-    ['500', () => jsonResponse(500, { message: '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.' }), UNKNOWN_RESULT_MESSAGE],
+    [
+      '500',
+      () => jsonResponse(500, { message: '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.' }),
+      UNKNOWN_RESULT_MESSAGE,
+    ],
     ['504', () => new Response('', { status: 504 }), GATEWAY_TIMEOUT_MESSAGE],
     // be가 보낸 응답인지 알 수 없다(로그인 포털 등)
     ['본문을 읽지 못한 성공 응답', () => new Response('<html>', { status: 200 }), UNKNOWN_RESULT_MESSAGE],

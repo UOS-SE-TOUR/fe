@@ -3,13 +3,7 @@ import type { RouteObject } from 'react-router'
 import { pagePaths, type PageName } from '@/lib/pages'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
-import {
-  CustomerMainPage,
-  StaffMainPage,
-  TourPlanPage,
-  TourSelectPage,
-  WarehousePage,
-} from '@/router/memberPages'
+import { CustomerMainPage, StaffMainPage, TourPlanPage, TourSelectPage, WarehousePage } from '@/router/memberPages'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PageLoadError } from '@/router/PageLoadError'
 

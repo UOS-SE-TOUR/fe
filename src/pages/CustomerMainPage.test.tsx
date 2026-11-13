@@ -157,7 +157,11 @@ describe('이전 여행 팝업', () => {
   })
 
   it.each([
-    ['서버가 실패를 알리면', () => fetchMock.mockResolvedValue(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다.' })), '서버에 잠시 연결할 수 없습니다.'],
+    [
+      '서버가 실패를 알리면',
+      () => fetchMock.mockResolvedValue(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다.' })),
+      '서버에 잠시 연결할 수 없습니다.',
+    ],
     ['연결이 끊기면', () => fetchMock.mockRejectedValue(new TypeError('Failed to fetch')), CONNECTION_FAILED_MESSAGE],
   ])('이전 여행을 못 읽으면(%s) 문구를 보여 주고 "로그인 직후" 표시를 지운다', async (_, respond, message) => {
     markFromLogin()

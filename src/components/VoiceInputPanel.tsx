@@ -45,7 +45,8 @@ const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 아�
 const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.'
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const MISSING_MESSAGE = '알아듣지 못한 칸이 있습니다. 빈 칸을 채우거나 다시 말해 주세요.'
-const NO_CANDIDATE_MESSAGE = '그 테마와 출발일에 고를 수 있는 상품이 없습니다. 테마나 출발일을 고치거나 다시 말해 주세요.'
+const NO_CANDIDATE_MESSAGE =
+  '그 테마와 출발일에 고를 수 있는 상품이 없습니다. 테마나 출발일을 고치거나 다시 말해 주세요.'
 const CHOOSE_MESSAGE = '출발일이 같은 상품이 여럿입니다. 하나를 골라 주세요.'
 // 고른 상품이 거부 뒤 더 고를 수 없게 되어, 남은 후보가 하나여도 대신 고르지 않았을 때
 const PICK_MESSAGE = '후보 상품을 골라 주세요.'
@@ -189,7 +190,11 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
   function recognitionFailed(reason: RecognitionFailure) {
     setStep('idle')
     const message =
-      reason === 'no-speech' ? NO_SPEECH_MESSAGE : reason === 'not-allowed' ? MIC_DENIED_MESSAGE : RECOGNITION_FAILED_MESSAGE
+      reason === 'no-speech'
+        ? NO_SPEECH_MESSAGE
+        : reason === 'not-allowed'
+          ? MIC_DENIED_MESSAGE
+          : RECOGNITION_FAILED_MESSAGE
     setNotice({ tone: 'error', message })
   }
 
@@ -322,7 +327,9 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
               {step === 'listening' && (
                 <div className="space-y-1">
                   <p>듣고 있습니다. 테마, 출발일, 투어 등급, 인원을 말해 주세요.</p>
-                  <p className="text-sm text-muted-foreground">예: “12월 20일에 출발하는 골프 투어, 그랜드 등급으로 2명”</p>
+                  <p className="text-sm text-muted-foreground">
+                    예: “12월 20일에 출발하는 골프 투어, 그랜드 등급으로 2명”
+                  </p>
                 </div>
               )}
               {step === 'parsing' && (
@@ -348,7 +355,11 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
                   {step === 'listening' ? '그만 듣기' : '그만두기'}
                 </Button>
               ) : (
-                <Button variant={draft ? 'outline' : 'default'} onClick={startVoiceInput} disabled={step === 'applying'}>
+                <Button
+                  variant={draft ? 'outline' : 'default'}
+                  onClick={startVoiceInput}
+                  disabled={step === 'applying'}
+                >
                   {draft ? '다시 말하기' : '말하기'}
                 </Button>
               )}

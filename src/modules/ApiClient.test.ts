@@ -103,7 +103,12 @@ describe('ApiClient 오류 문구', () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
     const error = await caught(ApiClient.get('/api/v1/tours'))
-    expect(error).toMatchObject({ status: null, message: CONNECTION_FAILED_MESSAGE, handled: false, resultUnknown: false })
+    expect(error).toMatchObject({
+      status: null,
+      message: CONNECTION_FAILED_MESSAGE,
+      handled: false,
+      resultUnknown: false,
+    })
   })
 
   it.each([
@@ -147,8 +152,14 @@ describe('다시 보내면 두 번 처리되는 요청(unsafeToRetry)', () => {
   it.each([
     ['본문이 빈 502(개발 서버 프록시)', new Response('', { status: 502 })],
     ['HTML 본문의 502(호스팅)', new Response('<html>Bad Gateway</html>', { status: 502 })],
-    ['Nginx가 문구를 붙인 503(서버가 응답 중에 끊겨도 온다)', jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' })],
-    ['be의 500(저장한 뒤 반환값 검증에서도 난다)', jsonResponse(500, { message: '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.' })],
+    [
+      'Nginx가 문구를 붙인 503(서버가 응답 중에 끊겨도 온다)',
+      jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }),
+    ],
+    [
+      'be의 500(저장한 뒤 반환값 검증에서도 난다)',
+      jsonResponse(500, { message: '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.' }),
+    ],
     ['성공했는데 본문이 JSON이 아님', new Response('<!doctype html>', { status: 200 })],
     ['성공했는데 본문이 빔(앞단이 응답을 자름)', new Response('', { status: 200 })],
     ['본문 없는 201', new Response(null, { status: 201 })],
@@ -250,7 +261,9 @@ describe('ApiClient 401·403 처리', () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
     fetchMock
       .mockResolvedValueOnce(jsonResponse(403, { message: '권한이 없습니다.' }))
-      .mockResolvedValueOnce(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }))
+      .mockResolvedValueOnce(
+        jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }),
+      )
 
     const error = await caught(ApiClient.get('/api/v1/bookings/previous'))
     expect(error).toMatchObject({ status: 403, handled: true })

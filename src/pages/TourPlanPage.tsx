@@ -421,11 +421,7 @@ export function TourPlanPage() {
                             value={form.prices[level]}
                             onChange={(event) => updatePrice(level, event.target.value)}
                             aria-invalid={!!errors.prices[level]}
-                            aria-describedby={describedBy(
-                              `price-${level}`,
-                              errors.prices[level],
-                              priceHintId,
-                            )}
+                            aria-describedby={describedBy(`price-${level}`, errors.prices[level], priceHintId)}
                           />
                           <BlockedReason fieldId={`price-${level}`}>{errors.prices[level]}</BlockedReason>
                         </Field>
@@ -456,14 +452,20 @@ export function TourPlanPage() {
                         <BlockedReason fieldId={`transport-${row.id}-name`}>{rowErrors?.name}</BlockedReason>
                       </Field>
                       <Field data-invalid={!!rowErrors?.unitPrice}>
-                        <FieldLabel htmlFor={`transport-${row.id}-price`}>{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
+                        <FieldLabel
+                          htmlFor={`transport-${row.id}-price`}
+                        >{`교통 ${index + 1} 1인 추가 요금(원)`}</FieldLabel>
                         <Input
                           id={`transport-${row.id}-price`}
                           inputMode="numeric"
                           value={row.unitPrice}
                           onChange={(event) => updateTransport(row.id, { unitPrice: event.target.value })}
                           aria-invalid={!!rowErrors?.unitPrice}
-                          aria-describedby={describedBy(`transport-${row.id}-price`, rowErrors?.unitPrice, 'transport-hint')}
+                          aria-describedby={describedBy(
+                            `transport-${row.id}-price`,
+                            rowErrors?.unitPrice,
+                            'transport-hint',
+                          )}
                         />
                         <BlockedReason fieldId={`transport-${row.id}-price`}>{rowErrors?.unitPrice}</BlockedReason>
                       </Field>
@@ -480,7 +482,13 @@ export function TourPlanPage() {
                     </div>
                   )
                 })}
-                <Button ref={addTransportRef} type="button" variant="outline" className="self-start" onClick={addTransport}>
+                <Button
+                  ref={addTransportRef}
+                  type="button"
+                  variant="outline"
+                  className="self-start"
+                  onClick={addTransport}
+                >
                   교통 선택지 더하기
                 </Button>
               </FieldSet>

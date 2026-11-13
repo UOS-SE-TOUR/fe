@@ -56,17 +56,22 @@ describe('AuthStore.restore', () => {
       '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.',
     ],
     ['be가 꺼짐(개발 서버 프록시의 빈 502)', new Response('', { status: 502 }), CONNECTION_FAILED_MESSAGE],
-  ])('새로고침 직후 401이 아닌 실패(%s)도 로그인하지 않은 것으로 두고 그 문구를 알린다', async (_, response, message) => {
-    fetchMock.mockResolvedValue(response)
+  ])(
+    '새로고침 직후 401이 아닌 실패(%s)도 로그인하지 않은 것으로 두고 그 문구를 알린다',
+    async (_, response, message) => {
+      fetchMock.mockResolvedValue(response)
 
-    await expect(AuthStore.restore()).resolves.toBe(false)
-    expect(AuthStore.memberType).toBeNull()
-    expect(toast.error).toHaveBeenCalledWith(message)
-  })
+      await expect(AuthStore.restore()).resolves.toBe(false)
+      expect(AuthStore.memberType).toBeNull()
+      expect(toast.error).toHaveBeenCalledWith(message)
+    },
+  )
 
   it('이미 로그인한 상태에서 다시 읽다 401이 아닌 실패가 나면 로그인 상태를 그대로 두고 문구를 알린다', async () => {
     AuthStore.setMember('STAFF', '김직원')
-    fetchMock.mockResolvedValue(jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }))
+    fetchMock.mockResolvedValue(
+      jsonResponse(503, { message: '서버에 잠시 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.' }),
+    )
 
     await AuthStore.restore()
     expect(AuthStore.memberType).toBe('STAFF')

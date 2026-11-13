@@ -37,6 +37,8 @@ const emptyForm: SignUpForm = {
   staffCode: '',
 }
 
+const ADDRESS_SEARCH_FAILED_MESSAGE = '주소 검색을 불러오지 못했습니다. 주소를 직접 입력해 주세요.'
+
 // 서버는 주소를 한 칸으로 받는다. 주소가 없으면 상세 주소만 보내지 않고 비워 서버가 주소를 달라고 하게 둔다
 function joinAddress(address: string, detail: string): string {
   const base = address.trim()
@@ -104,7 +106,9 @@ export function SignUpPage() {
     } catch {
       setAddressSearchFailed(true)
       setAddressByHand(true)
-      addressInput.current?.focus()
+      // 기다리는 사이 다른 칸으로 옮겼으면 초점을 빼앗지 않는다(막힌 단추에 있던 초점은 body로 풀린다)
+      const focused = document.activeElement
+      if (!focused || focused === document.body || focused === addressSearchButton.current) addressInput.current?.focus()
       return
     } finally {
       setAddressSearchLoading(false)
@@ -228,10 +232,12 @@ export function SignUpPage() {
                   </Button>
                 </div>
                 {addressSearchFailed && (
-                  <FieldDescription id="signup-address-help" role="status">
-                    주소 검색을 불러오지 못했습니다. 주소를 직접 입력해 주세요.
-                  </FieldDescription>
+                  <FieldDescription id="signup-address-help">{ADDRESS_SEARCH_FAILED_MESSAGE}</FieldDescription>
                 )}
+                {/* 화면 낭독기는 미리 있던 알림 자리에 새로 든 글자만 읽어 준다 */}
+                <p role="status" className="sr-only">
+                  {addressSearchFailed ? ADDRESS_SEARCH_FAILED_MESSAGE : ''}
+                </p>
               </Field>
               <Field>
                 <FieldLabel htmlFor="signup-address-detail">상세 주소</FieldLabel>

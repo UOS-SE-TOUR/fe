@@ -47,6 +47,12 @@ const customer = {
 
 const ADDRESS_SEARCH_FAILED = '주소 검색을 불러오지 못했습니다. 주소를 직접 입력해 주세요.'
 
+// 화면 낭독기 알림 자리에 들어가고, 주소 칸의 설명으로도 보인다
+async function expectAddressSearchFailed() {
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(ADDRESS_SEARCH_FAILED))
+  expect(screen.getByLabelText('주소')).toHaveAccessibleDescription(ADDRESS_SEARCH_FAILED)
+}
+
 async function openAddressSearch() {
   await user.click(screen.getByRole('button', { name: '주소 검색' }))
   return screen.findByRole('dialog', { name: '주소 검색' })
@@ -393,7 +399,7 @@ describe('SignUpPage', () => {
     await fillForm({ address: null })
     await user.click(screen.getByRole('button', { name: '주소 검색' }))
 
-    expect(await screen.findByText(ADDRESS_SEARCH_FAILED)).toBeInTheDocument()
+    await expectAddressSearchFailed()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     const address = screen.getByLabelText('주소')
     expect(address).not.toHaveAttribute('readonly')
@@ -412,12 +418,26 @@ describe('SignUpPage', () => {
     expect(AddressSearch.embed).not.toHaveBeenCalled()
   })
 
+  it('불러오기를 기다리는 사이 다른 칸으로 옮겼으면, 실패해도 초점을 빼앗지 않는다', async () => {
+    let failLoading: () => void = () => {}
+    vi.mocked(AddressSearch.load).mockReturnValue(new Promise((_, reject) => (failLoading = () => reject(new Error('timeout')))))
+    renderAt('/signup')
+
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+    const phone = screen.getByLabelText('연락처')
+    await user.click(phone)
+    act(() => failLoading())
+
+    await expectAddressSearchFailed()
+    expect(phone).toHaveFocus()
+  })
+
   it('불러오지 못한 뒤 다시 눌러 불러오면 알림을 지우고 검색 팝업을 연다', async () => {
     vi.mocked(AddressSearch.load).mockRejectedValueOnce(new Error('offline'))
     renderAt('/signup')
 
     await user.click(screen.getByRole('button', { name: '주소 검색' }))
-    expect(await screen.findByText(ADDRESS_SEARCH_FAILED)).toBeInTheDocument()
+    await expectAddressSearchFailed()
 
     await chooseAddress(customer.address)
     expect(screen.queryByText(ADDRESS_SEARCH_FAILED)).not.toBeInTheDocument()

@@ -116,9 +116,10 @@ export function unknownResult(status: number | null): ApiError {
   return new ApiError(UNKNOWN_RESULT_MESSAGE, status, { resultUnknown: true })
 }
 
-// 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음). 오프라인이었으면 요청이 나가지 않았다
+// 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음). 오프라인이었으면 요청이 나가지 않았다고 본다.
+// 신청 키가 있으면 이 짐작을 쓰지 않는다(보낸 뒤 끊겼을 수 있고, 같은 키로 다시 보내도 안전하다)
 function connectionLost(status: number | null, options: RequestOptions): ApiError {
-  const unsent = status === null && !navigator.onLine
+  const unsent = status === null && !navigator.onLine && options.idempotencyKey === undefined
   return options.unsafeToRetry && !unsent ? unknownResult(status) : new ApiError(CONNECTION_FAILED_MESSAGE, status)
 }
 
@@ -179,7 +180,7 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
 }
 
 export const ApiClient = {
-  get<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  get<T = unknown>(path: string, options: Pick<RequestOptions, 'handleAuthErrors'> = {}): Promise<T> {
     return request<T>('GET', path, undefined, options)
   },
 

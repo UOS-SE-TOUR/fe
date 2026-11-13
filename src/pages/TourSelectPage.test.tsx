@@ -884,7 +884,7 @@ describe('신청 결과를 모를 때', () => {
       expect(screen.getByText('가격 요약')).toBeInTheDocument()
       for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
       expect(screen.getByLabelText('인원')).toBeDisabled()
-      expect(screen.getByRole('button', { name: '옵션 바꾸기' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeEnabled()
       // 신청이 됐으면 줄었을 남은 자리를 다시 불러와 보인다
       expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
@@ -915,7 +915,7 @@ describe('신청 결과를 모를 때', () => {
     const user = renderPage()
     await applyUnknown(user)
     expect(screen.queryByRole('button', { name: '옵션 고르기 끝' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '옵션 바꾸기' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
   })
 
   it('결과 확인은 같은 신청 키로 같은 내용을 다시 보내고, 받은 상품 상태를 그대로 보인다', async () => {
@@ -1026,19 +1026,43 @@ describe('신청 결과를 모를 때', () => {
     expect(countOf(TOURS)).toBe(3)
   })
 
-  it('결과 확인이 나가지 못했으면(오프라인) 알리고, 들고 있던 신청 키로 다시 확인할 수 있다', async () => {
+  it('오프라인으로 끊겨도 신청 키가 있으니 결과를 모름으로 두고, 같은 신청 키로 다시 확인할 수 있다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    // 요청이 서버에 닿은 뒤 와이파이가 끊겨도 같은 꼴이라, 보내지 못했다고 짐작하지 않는다
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+
+    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByRole('button', { name: '결과 확인' })).toBeEnabled()
+    expect(screen.getByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+    expect(toast.error).not.toHaveBeenCalledWith(CONNECTION_FAILED_MESSAGE)
+
+    online.mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const keys = idempotencyKeysOf(APPLY)
+    expect(keys).toHaveLength(3)
+    expect(new Set(keys).size).toBe(1)
+  })
+
+  it('결과 확인이 400·404·409 밖의 이유로 거부되면(403) 들고 있던 신청 키로 다시 확인할 수 있다', async () => {
     const user = renderPage()
     await applyUnknown(user)
 
-    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
-    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    replyOnce(APPLY, failWith(403, '권한이 없습니다.'))
     await user.click(screen.getByRole('button', { name: '결과 확인' }))
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(CONNECTION_FAILED_MESSAGE))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', { id: 'forbidden' }))
     expect(await screen.findByRole('button', { name: '결과 확인' })).toBeEnabled()
     expect(screen.getByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
     expect(screen.getByLabelText('인원')).toBeDisabled()
 
-    online.mockReturnValue(true)
     await user.click(screen.getByRole('button', { name: '결과 확인' }))
     expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
     const keys = idempotencyKeysOf(APPLY)

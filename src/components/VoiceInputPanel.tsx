@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -164,7 +164,8 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
       setNotice(null)
     }
   }
-  useEffect(() => {
+  // 그린 직후 같은 차례에 정리해, 그사이 도착한 음성 해석 응답이 막힌 패널을 바꾸지 못하게 한다
+  useLayoutEffect(() => {
     if (!disabled) return
     session.current += 1
     recognizerRef.current?.abort()

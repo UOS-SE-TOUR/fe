@@ -166,6 +166,20 @@ describe('다시 보내면 두 번 처리되는 요청(unsafeToRetry)', () => {
     expect(error).toMatchObject({ status: null, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
   })
 
+  it('신청 키가 있으면 오프라인이어도 보내지 못했다고 짐작하지 않고 처리됐는지 모름으로 던진다', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const error = await caught(
+      ApiClient.post(
+        '/api/v1/bookings',
+        { tourId: 1 },
+        { unsafeToRetry: true, idempotencyKey: '0b5f8c1e-7a2d-4c3b-9e6f-1d2c3b4a5f60' },
+      ),
+    )
+    expect(error).toMatchObject({ status: null, message: UNKNOWN_RESULT_MESSAGE, resultUnknown: true })
+  })
+
   it('오프라인이라 요청이 나가지 않았으면 연결 실패 문구로 던진다', async () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))

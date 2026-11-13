@@ -650,7 +650,7 @@ function TourDetail(props: TourDetailProps) {
   // 투어 등급·인원은 가격을 계산하는 동안에도 고칠 수 있다(막으면 치던 칸에서 커서가 빠진다)
   // 결과를 모르는 신청이 있으면 고른 내용을 바꾸지 못한다
   const locked = pending === 'levels' || pending === 'apply' || applyResult !== null || unknownApply !== null
-  const busy = pending !== null || detail.quoting || unknownApply !== null
+  const busy = pending !== null || detail.quoting
   const confirming = detail.priced && priceQuote !== null && priceQuote.discount > 0 && !detail.discountConfirmed
   const headcountNow = parseHeadcount(detail.headcountInput)
   // 고친 투어 등급·인원의 가격이 아직 나오지 않았다
@@ -750,7 +750,7 @@ function TourDetail(props: TourDetailProps) {
         <PriceSummary quote={priceQuote} confirming={confirming} onConfirmPrice={props.onConfirmPrice} />
       )}
 
-      {submitted && !confirming && !applyResult && !detail.optionPanelOpen && (
+      {submitted && !confirming && !applyResult && !unknownApply && !detail.optionPanelOpen && (
         <Button variant="outline" onClick={props.onOpenOptions} disabled={busy}>
           옵션 바꾸기
         </Button>

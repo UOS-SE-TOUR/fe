@@ -899,6 +899,23 @@ describe('신청 결과를 모를 때', () => {
     },
   )
 
+  it('남은 자리를 다시 불러오지 못해도 따로 알리지 않는다(결과를 모른다는 문구 하나만 둔다)', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    replyOnce(TOURS, () => Promise.reject(new TypeError('Failed to fetch')))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+
+    expect(await screen.findByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+    await waitFor(() => expect(countOf(TOURS)).toBe(2))
+    await sleep(0)
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(screen.getByText('남은 자리 10명')).toBeInTheDocument()
+  })
+
   it('옵션 패널을 연 채 신청했으면 패널을 닫는다', async () => {
     const user = renderPage()
     await applyUnknown(user)

@@ -244,8 +244,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (detailRef.current) writeDetail({ ...detailRef.current, ...patch })
   }
 
-  // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다
-  async function loadTours(forTheme: Theme, seq: number): Promise<TourSummary[] | null> {
+  // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다.
+  // quiet면 실패를 알리지 않는다(이미 다른 실패를 보이고 있을 때)
+  async function loadTours(forTheme: Theme, seq: number, { quiet = false } = {}): Promise<TourSummary[] | null> {
     const request = ++toursRequest.current
     const latest = () => isCurrent(seq) && request === toursRequest.current
     try {
@@ -254,7 +255,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       return list
     } catch (error) {
       if (latest()) {
-        showError(error)
+        if (!quiet) showError(error)
         setTours((current) => (current?.status === 'loaded' ? current : { status: 'failed' }))
       }
       return null
@@ -479,9 +480,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       const { error } = outcome
       if (error instanceof ApiError && error.resultUnknown) {
         // 신청이 이미 됐을 수 있어 신청하기를 다시 열지 않고, 이 화면에서 같은 신청 키로 결과를 확인하게 한다.
-        // 신청이 됐으면 줄었을 남은 자리를 보인다
+        // 신청이 됐으면 줄었을 남은 자리를 보인다(연결이 끊겼으면 이것도 실패하기 쉬워 알리지 않는다)
         updateDetail({ unknownApply: { ...apply, message: error.message }, optionPanelOpen: false })
-        if (theme) void loadTours(theme, seq)
+        if (theme) void loadTours(theme, seq, { quiet: true })
       } else if (hasStatus(error, 400)) {
         updateDetail({ unknownApply: null })
         await askLevelAgain(error.message, apply.request.tourId, seq)

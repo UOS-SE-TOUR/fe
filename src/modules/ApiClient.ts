@@ -42,7 +42,8 @@ interface RequestOptions {
   handleAuthErrors?: boolean
   // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)
   unsafeToRetry?: boolean
-  // 신청 키. 요청 머리 Idempotency-Key로 보낸다. 같은 키로 다시 보낸 신청은 서버가 두 번 신청하지 않는다
+  // 신청 키. 요청 머리 Idempotency-Key로 보낸다. 같은 키로 다시 보낸 신청은 서버가 두 번 신청하지 않는다.
+  // unsafeToRetry와 함께 준다(결과를 모를 때 resultUnknown을 받아야 같은 키로 다시 보낼 수 있다)
   idempotencyKey?: string
 }
 

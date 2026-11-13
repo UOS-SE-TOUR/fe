@@ -723,6 +723,18 @@ describe('신청 결과를 모를 때', () => {
     expect(confirmButton()).toBeEnabled()
   })
 
+  it('막힌 동안은 지난 알림(가격을 계산했다)을 숨긴다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    await user.click(confirmButton())
+    expect(await panel().findByText(PRICED)).toBeInTheDocument()
+
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    expect(await panel().findByText(DISABLED)).toBeInTheDocument()
+    expect(panel().queryByText(PRICED)).not.toBeInTheDocument()
+  })
+
   it('막혀 있으면 말하기를 누를 수 없다', () => {
     render(<VoiceInputPanel applySelection={vi.fn()} disabled createRecognizer={() => recognizer} />)
     expect(panel().getByText(DISABLED)).toBeInTheDocument()

@@ -20,7 +20,7 @@ import {
 } from '@/lib/tours'
 import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
-import type { ApplySelection, VoiceSelection } from '@/pages/TourSelectPage'
+import type { VoiceInputProps, VoiceSelection } from '@/pages/TourSelectPage'
 
 // voice/parse의 본문(be VoiceParseRequest·TourSelection). 뽑지 못한 항목은 null이다
 interface VoiceParseRequest {
@@ -118,9 +118,7 @@ function selectionOf(draft: Draft): VoiceSelection | null {
   return { theme, tourId, level, headcount }
 }
 
-interface VoiceInputPanelProps {
-  applySelection: ApplySelection
-  disabled?: boolean
+interface VoiceInputPanelProps extends VoiceInputProps {
   // 테스트는 가짜를 넣는다(테스트 환경에는 브라우저 음성인식이 없다)
   createRecognizer?: () => Recognizer
 }
@@ -130,7 +128,7 @@ function newRecognizer(): Recognizer {
 }
 
 // disabled면 상품 선택 화면이 신청 결과를 확인하기 전이다. 말하기와 확인을 막는다(설계 3.1 VoiceInputPanel)
-export function VoiceInputPanel({ applySelection, disabled = false, createRecognizer = newRecognizer }: VoiceInputPanelProps) {
+export function VoiceInputPanel({ applySelection, disabled, createRecognizer = newRecognizer }: VoiceInputPanelProps) {
   const [supported] = useState(() => createRecognizer().isSupported())
   const [step, setStep] = useState<Step>('idle')
   // 서버가 푸는 중인 말
@@ -317,7 +315,8 @@ export function VoiceInputPanel({ applySelection, disabled = false, createRecogn
                   <AlertDescription>{DISABLED_MESSAGE}</AlertDescription>
                 </Alert>
               )}
-              {notice && (
+              {/* 막힌 동안은 지난 알림(가격을 계산했다 등)을 숨긴다 */}
+              {notice && !disabled && (
                 <Alert variant={notice.tone === 'error' ? 'destructive' : 'default'}>
                   <AlertDescription>{notice.message}</AlertDescription>
                 </Alert>

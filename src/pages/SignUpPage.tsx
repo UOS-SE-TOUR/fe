@@ -128,8 +128,9 @@ export function SignUpPage() {
       setAddressByHand(true)
       // 기다리는 사이 다른 칸으로 옮겼으면 초점을 빼앗지 않는다
       const focused = document.activeElement
-      if (!focused || focused === document.body || focused === addressSearchButton.current)
+      if (!focused || focused === document.body || focused === addressSearchButton.current) {
         addressInput.current?.focus()
+      }
       return
     } finally {
       setAddressSearchLoading(false)

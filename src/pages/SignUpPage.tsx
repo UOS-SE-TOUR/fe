@@ -1,22 +1,26 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { XIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { memberTypeLabels } from '@/lib/labels'
 import { isMemberType, memberTypes, pagePaths, type MemberType } from '@/lib/pages'
 import { editPhoneNumber, type PhoneNumberSelection } from '@/lib/phoneNumber'
+import { AddressSearch } from '@/modules/AddressSearch'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
-// 설계의 form. 칸 이름은 be의 회원가입 요청(SignUpRequest)과 같다
+// 설계의 form. 상세 주소(addressDetail) 말고는 칸 이름이 be의 회원가입 요청(SignUpRequest)과 같다
 interface SignUpForm {
   loginId: string
   password: string
   name: string
   address: string
+  addressDetail: string
   phone: string
   memberType: MemberType
   staffCode: string
@@ -27,9 +31,17 @@ const emptyForm: SignUpForm = {
   password: '',
   name: '',
   address: '',
+  addressDetail: '',
   phone: '',
   memberType: 'CUSTOMER',
   staffCode: '',
+}
+
+// 서버는 주소를 한 칸으로 받는다. 주소가 없으면 상세 주소만 보내지 않고 비워 서버가 주소를 달라고 하게 둔다
+function joinAddress(address: string, detail: string): string {
+  const base = address.trim()
+  const rest = detail.trim()
+  return base && rest ? `${base} ${rest}` : base
 }
 
 export function SignUpPage() {
@@ -37,6 +49,14 @@ export function SignUpPage() {
   const [form, setForm] = useState<SignUpForm>(emptyForm)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [addressSearchLoading, setAddressSearchLoading] = useState(false)
+  const [addressSearchOpen, setAddressSearchOpen] = useState(false)
+  // 우편번호 서비스를 불러오지 못하면 주소를 직접 입력하게 연다
+  const [addressSearchFailed, setAddressSearchFailed] = useState(false)
+  const addressInput = useRef<HTMLInputElement>(null)
+  const addressDetailInput = useRef<HTMLInputElement>(null)
+  const addressSearchButton = useRef<HTMLButtonElement>(null)
+  const addressSelected = useRef(false)
   const phoneInput = useRef<HTMLInputElement>(null)
   const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
 
@@ -75,17 +95,53 @@ export function SignUpPage() {
     if (next.value !== form.phone) update('phone', next.value)
   }
 
+  async function openAddressSearch() {
+    setAddressSearchLoading(true)
+    try {
+      await AddressSearch.load()
+    } catch {
+      setAddressSearchFailed(true)
+      addressInput.current?.focus()
+      return
+    } finally {
+      setAddressSearchLoading(false)
+    }
+    setAddressSearchFailed(false)
+    addressSelected.current = false
+    setAddressSearchOpen(true)
+  }
+
+  // 팝업이 열려 검색 화면 자리가 생기면 띄운다. StrictMode는 ref를 두 번 붙이니 이미 띄웠으면 그대로 둔다
+  const showAddressSearch = useCallback((element: HTMLDivElement | null) => {
+    if (!element || element.childElementCount > 0) return
+    AddressSearch.embed(element, (address) => {
+      setForm((current) => ({ ...current, address }))
+      setError(null)
+      addressSelected.current = true
+      setAddressSearchOpen(false)
+    })
+  }, [])
+
+  // 주소를 골라 닫으면 상세 주소를 바로 치게 하고, 그냥 닫으면 "주소 검색" 단추로 돌아간다.
+  // 불러오는 동안 단추를 막아 초점이 풀리므로 팝업이 스스로 돌려보낼 자리가 없다
+  function focusAfterAddressSearch(event: Event) {
+    event.preventDefault()
+    if (addressSelected.current) addressDetailInput.current?.focus()
+    else addressSearchButton.current?.focus()
+  }
+
   function showSignUpResult() {
     toast.success('가입했습니다. 로그인해 주세요.')
     navigate(pagePaths.LoginPage, { replace: true })
   }
 
-  async function submitSignUp({ staffCode, ...fields }: SignUpForm) {
+  async function submitSignUp({ staffCode, addressDetail, ...fields }: SignUpForm) {
     setSubmitting(true)
     setError(null)
+    const request = { ...fields, address: joinAddress(fields.address, addressDetail) }
     try {
       // 직원 코드는 직원으로 가입할 때만 보낸다(고객이면 서버도 보지 않는다)
-      await ApiClient.post('/api/v1/members/signup', fields.memberType === 'STAFF' ? { ...fields, staffCode } : fields)
+      await ApiClient.post('/api/v1/members/signup', request.memberType === 'STAFF' ? { ...request, staffCode } : request)
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 400) setError(caught.message)
       else showError(caught)
@@ -144,12 +200,47 @@ export function SignUpPage() {
               </Field>
               <Field>
                 <FieldLabel htmlFor="signup-address">주소</FieldLabel>
+                <div className="flex gap-2">
+                  <Input
+                    id="signup-address"
+                    autoComplete="address-line1"
+                    readOnly={!addressSearchFailed}
+                    placeholder={addressSearchFailed ? undefined : '주소 검색으로 찾아 주세요'}
+                    aria-describedby={addressSearchFailed ? 'signup-address-help' : undefined}
+                    value={form.address}
+                    ref={addressInput}
+                    onChange={(event) => update('address', event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={addressSearchLoading}
+                    ref={addressSearchButton}
+                    onClick={() => void openAddressSearch()}
+                  >
+                    주소 검색
+                  </Button>
+                </div>
+                {addressSearchFailed && (
+                  <FieldDescription id="signup-address-help" role="status">
+                    주소 검색을 불러오지 못했습니다. 주소를 직접 입력해 주세요.
+                  </FieldDescription>
+                )}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="signup-address-detail">상세 주소</FieldLabel>
                 <Input
-                  id="signup-address"
-                  autoComplete="street-address"
-                  value={form.address}
-                  onChange={(event) => update('address', event.target.value)}
+                  id="signup-address-detail"
+                  autoComplete="address-line2"
+                  aria-describedby="signup-address-detail-help"
+                  value={form.addressDetail}
+                  ref={addressDetailInput}
+                  onChange={(event) => update('addressDetail', event.target.value)}
                 />
+                <FieldDescription id="signup-address-detail-help">
+                  동·호수 같은 나머지 주소를 입력해 주세요. 없으면 비워 둡니다.
+                </FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="signup-phone">연락처</FieldLabel>
@@ -211,6 +302,27 @@ export function SignUpPage() {
           </form>
         </CardContent>
       </Card>
+      {/* 검색 화면은 폭 300px·높이 400px 이상이어야 하고, 아래 카카오 로고가 가려지면 안 된다. 낮은 화면에선 팝업을 굴려 본다 */}
+      <Dialog open={addressSearchOpen} onOpenChange={setAddressSearchOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[calc(100svh-2rem)] max-w-[calc(100%-1rem)] gap-4 overflow-y-auto p-4 sm:max-w-md sm:p-6"
+          onCloseAutoFocus={focusAfterAddressSearch}
+        >
+          <DialogHeader className="flex-row items-start justify-between gap-4">
+            <div className="flex flex-col gap-2">
+              <DialogTitle>주소 검색</DialogTitle>
+              <DialogDescription>도로명·건물명·지번으로 찾은 뒤, 나온 주소를 누르면 주소 칸에 들어갑니다.</DialogDescription>
+            </div>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="닫기">
+                <XIcon />
+              </Button>
+            </DialogClose>
+          </DialogHeader>
+          <div ref={showAddressSearch} className="h-[clamp(400px,calc(100svh-10rem),500px)]" />
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }

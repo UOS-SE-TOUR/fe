@@ -1,7 +1,8 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AddressSearch } from '@/modules/AddressSearch'
 import { CONNECTION_FAILED_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { jsonResponse, stubFetch } from '@/test/http'
@@ -9,12 +10,24 @@ import { renderAt, sentRequest } from '@/test/router'
 
 let fetchMock: ReturnType<typeof stubFetch>
 let user: UserEvent
+// 가짜 검색 화면을 띄운 자리와, 거기서 주소를 고르는 함수
+let searchTarget: HTMLElement | null
+let selectAddress: ((address: string) => void) | null
 
 beforeEach(() => {
   fetchMock = stubFetch()
   vi.spyOn(toast, 'error').mockImplementation(() => 'toast')
   vi.spyOn(toast, 'success').mockImplementation(() => 'toast')
   vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
+  searchTarget = null
+  selectAddress = null
+  vi.spyOn(AddressSearch, 'load').mockResolvedValue()
+  // 카카오 검색 화면처럼 받은 자리에 무언가를 붙인다
+  vi.spyOn(AddressSearch, 'embed').mockImplementation((element, onselect) => {
+    element.append(document.createElement('iframe'))
+    searchTarget = element
+    selectAddress = onselect
+  })
   user = userEvent.setup()
 })
 
@@ -28,15 +41,28 @@ const customer = {
   loginId: 'hong',
   password: 'password1',
   name: '홍길동',
-  address: '서울시 동대문구 서울시립대로 163',
+  address: '(02504) 서울 동대문구 서울시립대로 163',
   phone: '010-1234-5678',
 }
 
-async function fillForm() {
+const ADDRESS_SEARCH_FAILED = '주소 검색을 불러오지 못했습니다. 주소를 직접 입력해 주세요.'
+
+async function openAddressSearch() {
+  await user.click(screen.getByRole('button', { name: '주소 검색' }))
+  return screen.findByRole('dialog', { name: '주소 검색' })
+}
+
+async function chooseAddress(address: string) {
+  await openAddressSearch()
+  act(() => selectAddress?.(address))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+}
+
+async function fillForm({ address = customer.address }: { address?: string | null } = {}) {
   await user.type(screen.getByLabelText('아이디'), customer.loginId)
   await user.type(screen.getByLabelText('비밀번호'), customer.password)
   await user.type(screen.getByLabelText('성명'), customer.name)
-  await user.type(screen.getByLabelText('주소'), customer.address)
+  if (address !== null) await chooseAddress(address)
   await user.type(screen.getByLabelText('연락처'), customer.phone)
 }
 
@@ -284,6 +310,128 @@ describe('SignUpPage', () => {
 
     expect(phone).toHaveValue('010-1234-678')
     expect(phone.selectionStart).toBe(8)
+  })
+
+  it('주소 칸은 직접 고칠 수 없고, 주소 검색 팝업에서 고른 주소가 들어간 뒤 상세 주소 칸으로 간다', async () => {
+    renderAt('/signup')
+    const address = screen.getByLabelText('주소')
+
+    expect(address).toHaveAttribute('readonly')
+    await user.type(address, '아무 글자')
+    expect(address).toHaveValue('')
+
+    const dialog = await openAddressSearch()
+    expect(dialog).toContainElement(searchTarget)
+    expect(AddressSearch.embed).toHaveBeenCalledTimes(1)
+
+    act(() => selectAddress?.(customer.address))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(address).toHaveValue(customer.address)
+    expect(screen.getByLabelText('상세 주소')).toHaveFocus()
+  })
+
+  it('다시 검색하면 고른 주소로 바뀌고, 그냥 닫으면 주소가 그대로다', async () => {
+    renderAt('/signup')
+    await chooseAddress(customer.address)
+
+    await chooseAddress('(01234) 서울 종로구 세종대로 1')
+    expect(screen.getByLabelText('주소')).toHaveValue('(01234) 서울 종로구 세종대로 1')
+
+    await openAddressSearch()
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('주소')).toHaveValue('(01234) 서울 종로구 세종대로 1')
+    expect(screen.getByRole('button', { name: '주소 검색' })).toHaveFocus()
+  })
+
+  it('고른 주소와 상세 주소를 한 칸 띄워 한 줄로 보낸다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { memberId: 5 }))
+    renderAt('/signup')
+
+    await fillForm()
+    await user.type(screen.getByLabelText('상세 주소'), '  21세기관 101호 ')
+    await submit()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(sentRequest(fetchMock).body).toEqual({
+      ...customer,
+      address: '(02504) 서울 동대문구 서울시립대로 163 21세기관 101호',
+      memberType: 'CUSTOMER',
+    })
+  })
+
+  it('주소를 검색하지 않으면 상세 주소가 있어도 빈 주소를 보내고, 서버 문구를 보인다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(400, { message: '주소를 입력해 주세요.' }))
+    renderAt('/signup')
+
+    await fillForm({ address: null })
+    await user.type(screen.getByLabelText('상세 주소'), '101호')
+    await submit()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('주소를 입력해 주세요.')
+    expect(sentRequest(fetchMock).body).toEqual({ ...customer, address: '', memberType: 'CUSTOMER' })
+  })
+
+  it('검색 화면을 불러오는 동안에는 주소 검색 단추를 막는다', async () => {
+    let finishLoading: () => void = () => {}
+    vi.mocked(AddressSearch.load).mockReturnValue(new Promise((resolve) => (finishLoading = resolve)))
+    renderAt('/signup')
+
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+    expect(screen.getByRole('button', { name: '주소 검색' })).toBeDisabled()
+
+    act(() => finishLoading())
+    expect(await screen.findByRole('dialog', { name: '주소 검색' })).toBeInTheDocument()
+    expect(AddressSearch.load).toHaveBeenCalledTimes(1)
+  })
+
+  it('우편번호 서비스를 불러오지 못하면 알리고, 주소를 직접 입력해 가입할 수 있다', async () => {
+    vi.mocked(AddressSearch.load).mockRejectedValue(new Error('blocked'))
+    fetchMock.mockResolvedValue(jsonResponse(201, { memberId: 6 }))
+    renderAt('/signup')
+
+    await fillForm({ address: null })
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+
+    expect(await screen.findByText(ADDRESS_SEARCH_FAILED)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const address = screen.getByLabelText('주소')
+    expect(address).not.toHaveAttribute('readonly')
+    expect(address).toHaveFocus()
+
+    await user.type(address, '서울시 동대문구 서울시립대로 163')
+    await user.type(screen.getByLabelText('상세 주소'), '21세기관 101호')
+    await submit()
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(sentRequest(fetchMock).body).toEqual({
+      ...customer,
+      address: '서울시 동대문구 서울시립대로 163 21세기관 101호',
+      memberType: 'CUSTOMER',
+    })
+    expect(AddressSearch.embed).not.toHaveBeenCalled()
+  })
+
+  it('불러오지 못한 뒤 다시 눌러 불러오면 알림을 지우고 검색 팝업을 연다', async () => {
+    vi.mocked(AddressSearch.load).mockRejectedValueOnce(new Error('offline'))
+    renderAt('/signup')
+
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+    expect(await screen.findByText(ADDRESS_SEARCH_FAILED)).toBeInTheDocument()
+
+    await chooseAddress(customer.address)
+    expect(screen.queryByText(ADDRESS_SEARCH_FAILED)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('주소')).toHaveValue(customer.address)
+    expect(screen.getByLabelText('주소')).toHaveAttribute('readonly')
+  })
+
+  it('StrictMode로 띄워도 검색 화면은 한 번만 띄운다', async () => {
+    renderAt('/signup', { strict: true })
+
+    await openAddressSearch()
+
+    expect(AddressSearch.embed).toHaveBeenCalledTimes(1)
+    expect(searchTarget?.childElementCount).toBe(1)
   })
 
   it('로그인 링크로 로그인 화면에 간다', async () => {

@@ -342,9 +342,12 @@ export function SignUpPage() {
             <div className="flex flex-col gap-2">
               <DialogTitle>주소 검색</DialogTitle>
               <DialogDescription>도로명·건물명·지번으로 찾은 뒤, 나온 주소를 누르면 주소 칸에 들어갑니다.</DialogDescription>
-              <Button variant="link" size="sm" className="h-auto w-fit p-0" onClick={typeAddressByHand}>
-                검색이 안 되면 주소를 직접 입력하기
-              </Button>
+              <p className="text-sm text-muted-foreground">
+                검색이 안 되나요?{' '}
+                <Button variant="link" className="h-auto p-0 font-normal" onClick={typeAddressByHand}>
+                  주소 직접 입력하기
+                </Button>
+              </p>
             </div>
             <DialogClose asChild>
               <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="닫기">

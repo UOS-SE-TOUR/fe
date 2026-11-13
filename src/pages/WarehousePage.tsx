@@ -7,6 +7,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { themeLabel, themes, type Theme } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
+import { useBlockLeaving } from '@/lib/useBlockLeaving'
 import { ApiClient, ApiError, showError, unknownResult } from '@/modules/ApiClient'
 
 const ITEMS_PATH = '/api/v1/staff/items'
@@ -58,6 +59,7 @@ export function WarehousePage() {
   const [addResult, setAddResult] = useState<string | null>(null)
   const addingRef = useRef(false)
   const loadSeq = useRef(0)
+  useBlockLeaving(adding, '추가가 끝날 때까지 이 화면에 있어 주세요.')
 
   const showItems = useCallback((items: Item[]) => {
     setItemsState({ status: 'loaded', items })
@@ -163,9 +165,15 @@ export function WarehousePage() {
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">창고</h1>
-        <Button variant="outline" asChild>
-          <Link to={pagePaths.StaffMainPage}>직원 메뉴</Link>
-        </Button>
+        {adding ? (
+          <Button variant="outline" disabled>
+            직원 메뉴
+          </Button>
+        ) : (
+          <Button variant="outline" asChild>
+            <Link to={pagePaths.StaffMainPage}>직원 메뉴</Link>
+          </Button>
+        )}
       </header>
 
       <section className="flex flex-col gap-4" aria-labelledby="add-item-heading">

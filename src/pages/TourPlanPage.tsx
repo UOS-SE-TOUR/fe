@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, useBlocker } from 'react-router'
-import { toast } from 'sonner'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
@@ -9,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { themeLabel, themes, tourLevelLabel, tourLevels, type Theme, type TourLevel } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
+import { useBlockLeaving } from '@/lib/useBlockLeaving'
 import { ApiClient, ApiError, showError } from '@/modules/ApiClient'
 
 // 허니문·효도 투어는 그랜드와 프리미엄만 판다(be Theme.allows)
@@ -211,23 +211,7 @@ export function TourPlanPage() {
   const unknownHintRef = useRef<HTMLParagraphElement>(null)
   const addTransportRef = useRef<HTMLButtonElement>(null)
 
-  // 보내는 동안 떠나면 등록됐는지 알 수 없으니 화면 이동(뒤로 가기 포함)과 탭 닫기를 막는다
-  const blocker = useBlocker(submitting)
-  useEffect(() => {
-    if (blocker.state !== 'blocked') return
-    toast.info('등록이 끝날 때까지 이 화면에 있어 주세요.', { id: 'tour-plan-leave' })
-    blocker.reset()
-  }, [blocker])
-  useEffect(() => {
-    if (!submitting) return
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      // 옛 브라우저는 이 값이 있어야 떠나기 확인 창을 띄운다
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [submitting])
+  useBlockLeaving(submitting, '등록이 끝날 때까지 이 화면에 있어 주세요.')
 
   const validation = useMemo(() => validate(form), [form])
   const errors = submitted ? validation.errors : noErrors

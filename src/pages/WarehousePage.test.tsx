@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -26,8 +26,9 @@ afterEach(() => {
 const golfBall = { id: 1, name: '골프공', theme: 'GOLF', quantity: 20 }
 const tent = { id: 2, name: '텐트', theme: 'TREKKING', quantity: 3 }
 
+// 직원 메뉴에서 들어온 것처럼 띄운다(뒤로 가기가 직원 메뉴로 간다)
 function renderPage() {
-  const router = createMemoryRouter(routes, { initialEntries: ['/staff/items'] })
+  const router = createMemoryRouter(routes, { initialEntries: ['/staff', '/staff/items'], initialIndex: 1 })
   render(<RouterProvider router={router} />)
   return router
 }
@@ -238,6 +239,52 @@ describe('물품 추가', () => {
     respond(jsonResponse(200, { ...golfBall, quantity: 10 }))
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 10개)'))
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('추가하는 동안은 직원 메뉴 링크와 뒤로 가기 같은 화면 이동, 탭 닫기를 막고, 응답을 받으면 풀어 준다', async () => {
+    let respond: (response: Response) => void = () => {}
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, []))
+      .mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
+      .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, quantity: 10 }]))
+    const router = renderPage()
+    await screen.findByText('창고에 물품이 없습니다.')
+
+    const user = await fillForm('골프공', '골프 챌린지 투어', '10')
+    await user.click(screen.getByRole('button', { name: '추가' }))
+    expect(screen.queryByRole('link', { name: '직원 메뉴' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '직원 메뉴' })).toBeDisabled()
+
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/staff/items')
+    expect(info).toHaveBeenCalledWith('추가가 끝날 때까지 이 화면에 있어 주세요.', expect.anything())
+    const leaving = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leaving)
+    expect(leaving.defaultPrevented).toBe(true)
+
+    respond(jsonResponse(200, { ...golfBall, quantity: 10 }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 10개)'))
+    expect(screen.getByRole('link', { name: '직원 메뉴' })).toBeInTheDocument()
+    const leavingAfter = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leavingAfter)
+    expect(leavingAfter.defaultPrevented).toBe(false)
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/staff')
+  })
+
+  it('추가하는 중에 401이 오면 로그인 화면으로 간다(이동을 막지 않는다)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, []))
+      .mockResolvedValueOnce(jsonResponse(401, { message: '로그인이 필요합니다.' }))
+    const router = renderPage()
+    await screen.findByText('창고에 물품이 없습니다.')
+
+    const user = await fillForm('골프공', '골프 챌린지 투어', '10')
+    await user.click(screen.getByRole('button', { name: '추가' }))
+
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/login')
   })
 
   it('처리됐는지 모르면 다시 보내지 않고, 입력을 비우고, 목록을 다시 불러온 뒤에 단추를 연다', async () => {

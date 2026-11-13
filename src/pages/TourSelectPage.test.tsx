@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { useState, type ComponentType } from 'react'
 import { createMemoryRouter } from 'react-router'
@@ -201,16 +201,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function renderPage(voiceInput?: ComponentType<{ applySelection: ApplySelection }>) {
+// 고객 메뉴에서 들어온 것처럼 띄운다(뒤로 가기가 고객 메뉴로 간다)
+function renderWithRouter(voiceInput?: ComponentType<{ applySelection: ApplySelection }>) {
   const router = createMemoryRouter(
     [
       { path: '/tours', element: <TourSelectPage voiceInput={voiceInput} /> },
       { path: '/', element: <h1>고객 메뉴</h1> },
     ],
-    { initialEntries: ['/tours'] },
+    { initialEntries: ['/', '/tours'], initialIndex: 1 },
   )
   render(<RouterProvider router={router} />)
-  return userEvent.setup()
+  return { user: userEvent.setup(), router }
+}
+
+function renderPage(voiceInput?: ComponentType<{ applySelection: ApplySelection }>) {
+  return renderWithRouter(voiceInput).user
 }
 
 async function openTour(user: UserEvent, title: RegExp = /12\/20 출발 5일/) {
@@ -777,6 +782,30 @@ describe('신청', () => {
     expect(await screen.findByText('신청했습니다. 지금 상품 상태는 ‘모집 중’입니다.')).toBeInTheDocument()
     expect(countOf(APPLY)).toBe(1)
     expect(screen.getByRole('link', { name: '고객 메뉴' })).toBeInTheDocument()
+  })
+
+  it('신청하는 동안은 뒤로 가기 같은 화면 이동과 탭 닫기를 막고, 응답을 받으면 풀어 준다', async () => {
+    let finish: (response: Response) => void = () => {}
+    replyOnce(APPLY, () => new Promise<Response>((resolve) => (finish = resolve)))
+    const { user, router } = renderWithRouter()
+    await priced(user)
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/tours')
+    expect(info).toHaveBeenCalledWith('신청이 끝날 때까지 이 화면에 있어 주세요.', expect.anything())
+    const leaving = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leaving)
+    expect(leaving.defaultPrevented).toBe(true)
+
+    finish(jsonResponse(201, { bookingId: 7, status: 'RECRUITING' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const leavingAfter = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leavingAfter)
+    expect(leavingAfter.defaultPrevented).toBe(false)
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/')
   })
 })
 

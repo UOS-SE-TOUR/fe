@@ -5,7 +5,7 @@
 - 서버: [UOS-SE-TOUR/be](https://github.com/UOS-SE-TOUR/be) — API 문서는 운영 서버의 [Swagger](https://uos-mwt.duckdns.org/api/swagger-ui.html)
 - 설계·분석 산출물: [UOS-SE-TOUR/docs](https://github.com/UOS-SE-TOUR/docs) — 화면 클래스는 설계산출물 3장, 서버 API 표는 4.9
 
-React 19 · TypeScript · Vite · Tailwind CSS 4 · [shadcn/ui](https://ui.shadcn.com) · 글꼴 [Pretendard](https://github.com/orioncactus/pretendard)
+React 19 · TypeScript · Vite · Tailwind CSS 4 · [shadcn/ui](https://ui.shadcn.com) · 글꼴 [Pretendard](https://github.com/orioncactus/pretendard) · 주소 검색 [카카오 우편번호 서비스](https://postcode.map.kakao.com/guide)
 
 ## 실행
 

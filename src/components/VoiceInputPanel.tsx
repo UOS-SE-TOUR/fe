@@ -155,6 +155,21 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
     }
   }, [])
 
+  // 막히면 듣기·말 풀기를 그만두고 지난 알림을 지운다(풀린 뒤 낡은 알림이 다시 보이지 않게)
+  const [wasDisabled, setWasDisabled] = useState(disabled)
+  if (disabled !== wasDisabled) {
+    setWasDisabled(disabled)
+    if (disabled) {
+      setStep('idle')
+      setNotice(null)
+    }
+  }
+  useEffect(() => {
+    if (!disabled) return
+    session.current += 1
+    recognizerRef.current?.abort()
+  }, [disabled])
+
   function updateDraft(patch: Partial<Draft>) {
     setDraft((current) => (current ? { ...current, ...patch } : current))
   }
@@ -320,8 +335,7 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
                   <AlertDescription>{DISABLED_MESSAGE}</AlertDescription>
                 </Alert>
               )}
-              {/* 막힌 동안은 지난 알림(가격을 계산했다 등)을 숨긴다 */}
-              {notice && !disabled && (
+              {notice && (
                 <Alert variant={notice.tone === 'error' ? 'destructive' : 'default'}>
                   <AlertDescription>{notice.message}</AlertDescription>
                 </Alert>

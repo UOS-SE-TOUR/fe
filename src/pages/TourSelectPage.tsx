@@ -66,8 +66,7 @@ interface UnknownApply extends ApplyRequest {
   message: string
 }
 
-// 새 신청 키(UUID v4). crypto.randomUUID는 https·localhost에서만 있어, 같은 망의 http 주소로 연 개발 서버 등에서는
-// crypto.getRandomValues로 같은 모양을 만든다
+// 새 신청 키(UUID v4). crypto.randomUUID가 없는 브라우저(Safari 15.4 이전)에서는 getRandomValues로 같은 모양을 만든다
 function newIdempotencyKey(): string {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
   const bytes = crypto.getRandomValues(new Uint8Array(16))
@@ -100,8 +99,7 @@ interface Detail {
   levelMessage: string | null
   optionMessage: string | null
   applyResult: ApplyTourResponse | null
-  // 결과를 알 때까지 들고 있는 신청(설계 3.1 idempotencyKey). 그동안 투어 등급·인원·옵션과 음성 입력을 막는다.
-  // 상품을 다시 고르거나 목록으로 돌아가면 이 상태와 함께 버린다
+  // 결과를 모르는 신청(설계 3.1 idempotencyKey). 있으면 고른 내용과 음성 입력을 막는다
   unknownApply: UnknownApply | null
 }
 
@@ -435,8 +433,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     })
   }
 
-  // 신청하기와 "결과 확인"(설계 3.1 applyTour). 결과 확인이면 들고 있던 신청 키로 같은 내용을 다시 보내고,
-  // 아니면 새 신청 키로 마지막으로 가격이 나온 내용을 보낸다
+  // 신청하기와 결과 확인(설계 3.1 applyTour). 결과 확인은 들고 있던 신청을 그대로 다시 보낸다
   async function applyTour() {
     const current = detailRef.current
     if (!current || current.applyResult || current.quoting || pending || applying.current) return
@@ -471,7 +468,6 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (!isCurrent(seq)) return
     try {
       if (outcome.ok) {
-        // 결과 확인으로 받은 상품 상태는 지금 상태라 취소·진행 중·완료일 수도 있다. 받은 대로 보인다
         updateDetail({ applyResult: outcome.result, unknownApply: null, optionPanelOpen: false })
         // 신청 인원을 더한 남은 자리를 보인다
         if (theme) void loadTours(theme, seq)
@@ -479,8 +475,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       }
       const { error } = outcome
       if (error instanceof ApiError && error.resultUnknown) {
-        // 신청이 이미 됐을 수 있어 신청하기를 다시 열지 않고, 이 화면에서 같은 신청 키로 결과를 확인하게 한다.
-        // 신청이 됐으면 줄었을 남은 자리를 보인다(연결이 끊겼으면 이것도 실패하기 쉬워 알리지 않는다)
+        // 신청이 됐을 수 있어 신청하기를 다시 열지 않는다. 줄었을 남은 자리는 알림 없이 다시 불러온다
         updateDetail({ unknownApply: { ...apply, message: error.message }, optionPanelOpen: false })
         if (theme) void loadTours(theme, seq, { quiet: true })
       } else if (hasStatus(error, 400)) {
@@ -489,12 +484,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       } else if (hasStatus(error, 409)) {
         showTourList(error.message)
       } else if (hasStatus(error, 404)) {
-        // 상품이 없어져 신청은 되지 않았다(결과 확인이어도 서버는 같은 신청 키의 신청부터 찾는다). 목록을 다시 불러온다
+        // 상품이 없어 신청은 되지 않았다
         showError(error)
         showTourList(null)
       } else {
-        // 결과 확인이 나가지 못했거나 거부됐으면 앞 신청의 결과는 아직 모른다. 들고 있던 신청 키는 그대로 둔다
-        // (401이면 로그인 화면으로 가며 이 화면과 함께 버려진다)
+        // 결과 확인이 나가지 못했거나 거부됐으면 앞 신청의 결과는 아직 모르니 신청 키를 둔다
         showError(error)
       }
     } finally {
@@ -508,7 +502,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       toast.error(APPLYING_MESSAGE)
       return { status: 'failed' }
     }
-    // 결과를 모르는 신청이 있으면 음성 입력은 막혀 있다(VoiceInputProps.disabled). 막히기 전에 누른 확인도 받지 않는다
+    // 음성 입력이 막히기 전에 누른 확인도 받지 않는다
     if (detailRef.current?.unknownApply) {
       toast.error(CHECK_RESULT_FIRST_MESSAGE)
       return { status: 'failed' }
@@ -652,8 +646,8 @@ interface TourDetailProps {
 function TourDetail(props: TourDetailProps) {
   const { detail, tour, theme, pending } = props
   const { levels, quote: priceQuote, submitted, applyResult, unknownApply } = detail
-  // 투어 등급·인원은 가격을 계산하는 동안에도 고칠 수 있다(막으면 치던 칸에서 커서가 빠진다).
-  // 결과를 모르는 신청이 있으면 결과를 알 때까지 고른 내용을 바꾸지 못한다(같은 신청 키로는 같은 내용만 보낸다)
+  // 투어 등급·인원은 가격을 계산하는 동안에도 고칠 수 있다(막으면 치던 칸에서 커서가 빠진다)
+  // 결과를 모르는 신청이 있으면 고른 내용을 바꾸지 못한다
   const locked = pending === 'levels' || pending === 'apply' || applyResult !== null || unknownApply !== null
   const busy = pending !== null || detail.quoting || unknownApply !== null
   const confirming = detail.priced && priceQuote !== null && priceQuote.discount > 0 && !detail.discountConfirmed

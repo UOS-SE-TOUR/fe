@@ -751,7 +751,7 @@ describe('신청 결과를 모를 때', () => {
     expect(confirmButton()).toBeEnabled()
   })
 
-  it('막힌 동안은 지난 알림(가격을 계산했다)을 숨긴다', async () => {
+  it('막히면 지난 알림(가격을 계산했다)을 지우고, 풀려도 다시 보이지 않는다', async () => {
     const user = renderPage()
     await speak(user, heardAll)
     await user.click(confirmButton())
@@ -761,6 +761,37 @@ describe('신청 결과를 모를 때', () => {
     await user.click(screen.getByRole('button', { name: '신청하기' }))
     expect(await panel().findByText(DISABLED)).toBeInTheDocument()
     expect(panel().queryByText(PRICED)).not.toBeInTheDocument()
+
+    replyOnce(APPLY, jsonResponse(201, { bookingId: 7, status: 'CONFIRMED' }))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    expect(panel().queryByText(DISABLED)).not.toBeInTheDocument()
+    expect(panel().queryByText(PRICED)).not.toBeInTheDocument()
+  })
+
+  it('듣는 중에 막히면 듣기를 그만두고, 그 뒤에 들은 말은 서버에 보내지 않는다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    await user.click(confirmButton())
+    await panel().findByText(PRICED)
+
+    const slow = deferred()
+    replyOnce(APPLY, slow.reply)
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await user.click(panel().getByRole('button', { name: '말하기' }))
+    expect(panel().getByRole('button', { name: '그만 듣기' })).toBeInTheDocument()
+    const aborted = recognizer.aborted
+
+    slow.resolve(failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    expect(await panel().findByText(DISABLED)).toBeInTheDocument()
+    expect(recognizer.aborted).toBeGreaterThan(aborted)
+    expect(panel().queryByRole('button', { name: '그만 듣기' })).not.toBeInTheDocument()
+    expect(panel().getByRole('button', { name: '말하기' })).toBeDisabled()
+
+    const parsed = countOf(PARSE)
+    recognizer.say('막힌 뒤에 들린 말')
+    await sleep(0)
+    expect(countOf(PARSE)).toBe(parsed)
   })
 
   it('막혀 있으면 말하기를 누를 수 없다', () => {

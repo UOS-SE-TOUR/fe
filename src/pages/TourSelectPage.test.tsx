@@ -786,7 +786,7 @@ describe('신청', () => {
     expect(second).not.toBe(first)
   })
 
-  it('crypto.randomUUID가 없는 곳(https·localhost가 아닌 주소)에서도 UUID 모양의 신청 키를 만든다', async () => {
+  it('crypto.randomUUID가 없는 브라우저(Safari 15.4 이전)에서도 UUID 모양의 신청 키를 만든다', async () => {
     const { getRandomValues } = crypto
     vi.stubGlobal('crypto', { getRandomValues: getRandomValues.bind(crypto) })
     const user = renderPage()

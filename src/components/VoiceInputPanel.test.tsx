@@ -42,7 +42,10 @@ const golf20Full = tour(2, '2026-12-20', 3, 'FULL', 0)
 const golf20Short = tour(3, '2026-12-20', 4, 'CONFIRMED', 6)
 const golf27 = tour(4, '2026-12-27', 4, 'RECRUITING', 8)
 const golfTours = [golf20Long, golf20Full, golf20Short, golf27]
-const trekking20: TourSummary = { ...tour(5, '2026-12-20', 3, 'RECRUITING', 12), title: '아웃도어 트레킹 투어 12/20 출발 3일' }
+const trekking20: TourSummary = {
+  ...tour(5, '2026-12-20', 3, 'RECRUITING', 12),
+  title: '아웃도어 트레킹 투어 12/20 출발 3일',
+}
 
 const levels: TourLevelsResponse = {
   service: '라운딩 2회',
@@ -56,7 +59,13 @@ const levels: TourLevelsResponse = {
 }
 
 // 12/27 골프 그랜드 2명. 테마와 출발일이 같은 상품은 하나다
-const heardAll: TourSelection = { theme: 'GOLF', departureDate: '2026-12-27', level: 'GRAND', headcount: 2, candidates: [golf27] }
+const heardAll: TourSelection = {
+  theme: 'GOLF',
+  departureDate: '2026-12-27',
+  level: 'GRAND',
+  headcount: 2,
+  candidates: [golf27],
+}
 
 function quoteFor(request: QuoteRequest): PriceQuote {
   const found = [...golfTours, trekking20].find((item) => item.tourId === request.tourId)!
@@ -479,33 +488,40 @@ describe('오류', () => {
   it.each([
     [400, '남은 자리보다 인원이 많습니다.'],
     [409, CLOSED],
-  ])('확인한 내용의 가격 계산이 %i면 서버 문구를 보여 준 뒤 다시 말해 달라고 하고, 상품 목록으로 돌아가지 않는다', async (status, message) => {
-    const user = renderPage()
-    await speak(user, heardAll)
-    replyOnce(QUOTE, failWith(status, message))
-    await user.click(confirmButton())
+  ])(
+    '확인한 내용의 가격 계산이 %i면 서버 문구를 보여 준 뒤 다시 말해 달라고 하고, 상품 목록으로 돌아가지 않는다',
+    async (status, message) => {
+      const user = renderPage()
+      await speak(user, heardAll)
+      replyOnce(QUOTE, failWith(status, message))
+      await user.click(confirmButton())
 
-    expect(await panel().findByText(message)).toBeInTheDocument()
-    expect(panel().getByText(SPEAK_AGAIN)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '상품 목록' })).not.toBeInTheDocument()
-    expect(toast.error).not.toHaveBeenCalled()
+      expect(await panel().findByText(message)).toBeInTheDocument()
+      expect(panel().getByText(SPEAK_AGAIN)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: '상품 목록' })).not.toBeInTheDocument()
+      expect(toast.error).not.toHaveBeenCalled()
 
-    // 고쳐서 다시 확인할 수 있다
-    await user.clear(panel().getByLabelText('인원'))
-    expect(panel().queryByText(message)).not.toBeInTheDocument()
-    await user.type(panel().getByLabelText('인원'), '1')
-    await user.click(confirmButton())
-    expect(await screen.findByText('가격 요약')).toBeInTheDocument()
-    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 4, level: 'GRAND', headcount: 1, optionIds: [] })
-  })
+      // 고쳐서 다시 확인할 수 있다
+      await user.clear(panel().getByLabelText('인원'))
+      expect(panel().queryByText(message)).not.toBeInTheDocument()
+      await user.type(panel().getByLabelText('인원'), '1')
+      await user.click(confirmButton())
+      expect(await screen.findByText('가격 요약')).toBeInTheDocument()
+      expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 4, level: 'GRAND', headcount: 1, optionIds: [] })
+    },
+  )
 
   it('확인한 상품이 그사이 마감됐으면(409) 후보를 새로 받아 마감으로 보이고 확인을 막는다', async () => {
     const user = renderPage()
     await speak(user, heardAll)
     const closed = { ...golf27, status: 'FULL' as const, remainingSeats: 0 }
     // 앞의 것은 상품 선택 화면이, 뒤의 것은 거부 뒤 음성 패널이 받는다
-    replyOnce(GOLF_TOURS, jsonResponse(200, golfTours), jsonResponse(200, [golf20Long, golf20Full, golf20Short, closed]))
+    replyOnce(
+      GOLF_TOURS,
+      jsonResponse(200, golfTours),
+      jsonResponse(200, [golf20Long, golf20Full, golf20Short, closed]),
+    )
     replyOnce(QUOTE, failWith(409, CLOSED))
     await user.click(confirmButton())
 
@@ -564,7 +580,9 @@ describe('오류', () => {
     // 다시 확인해 다른 이유로 실패하면 지난 거부 문구는 남지 않는다
     replyOnce(QUOTE, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
     await user.click(confirmButton())
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
     expect(panel().queryByText('골프 챌린지 투어는 2명만 신청할 수 있습니다.')).not.toBeInTheDocument()
   })
 
@@ -588,7 +606,11 @@ describe('오류', () => {
     expect(await panel().findByRole('radio', { name: /12\/27 출발 4일/ })).toBeChecked()
     expect(countOf(GOLF_TOURS)).toBe(1)
 
-    replyOnce(GOLF_TOURS, jsonResponse(200, golfTours), failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    replyOnce(
+      GOLF_TOURS,
+      jsonResponse(200, golfTours),
+      failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
     replyOnce(QUOTE, failWith(409, CLOSED))
     await user.click(confirmButton())
     expect(await panel().findByText('후보 상품을 불러오지 못했습니다.')).toBeInTheDocument()
@@ -602,7 +624,11 @@ describe('오류', () => {
     const user = renderPage()
     await speak(user, { ...heardAll, departureDate: '2026-12-20', candidates: [golf20Long, golf20Full, golf20Short] })
     await user.click(panel().getByRole('radio', { name: /12\/20 출발 4일/ }))
-    replyOnce(GOLF_TOURS, jsonResponse(200, golfTours), failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    replyOnce(
+      GOLF_TOURS,
+      jsonResponse(200, golfTours),
+      failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
     replyOnce(QUOTE, failWith(409, '출발일이 지난 상품입니다.'))
     await user.click(confirmButton())
 
@@ -675,7 +701,9 @@ describe('오류', () => {
     await user.click(panel().getByRole('button', { name: '말하기' }))
     recognizer.say('골프')
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
     expect(panel().getByRole('button', { name: '말하기' })).toBeEnabled()
   })
 

@@ -1,0 +1,9 @@
+# shadcn/ui가 만든 파일 — 손으로 고치지 않는다(CLAUDE.md)
+src/components/ui
+src/hooks
+src/lib/utils.ts
+# /issue 스킬 문서·스크립트 — 스킬 테스트가 따로 검사한다
+.claude
+# 표의 칸 폭을 빈칸으로 맞춰서, 칸 내용이 긴 표는 한 줄이 수백 자가 된다
+*.md
+package-lock.json

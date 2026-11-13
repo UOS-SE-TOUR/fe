@@ -65,13 +65,16 @@ describe('ApiClient가 받은 401·403 뒤', () => {
 })
 
 describe('로그인하지 않았을 때', () => {
-  it.each(['/', '/tours', '/staff', '/staff/tours/new', '/staff/items'])('%s는 로그인 화면으로 보낸다', async (path) => {
-    const router = renderAt(path)
+  it.each(['/', '/tours', '/staff', '/staff/tours/new', '/staff/items'])(
+    '%s는 로그인 화면으로 보낸다',
+    async (path) => {
+      const router = renderAt(path)
 
-    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe('/login')
-    expect(toast.error).not.toHaveBeenCalled()
-  })
+      expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+      expect(router.state.location.pathname).toBe('/login')
+      expect(toast.error).not.toHaveBeenCalled()
+    },
+  )
 
   it.each([
     ['/login', '로그인'],
@@ -110,14 +113,17 @@ describe('로그인했을 때', () => {
   it.each([
     ['CUSTOMER', '/staff/items', '/', '고객 메뉴'],
     ['STAFF', '/tours', '/staff', '직원 메뉴'],
-  ] as const)('%s가 다른 회원 구분의 화면 주소(%s)로 오면 권한이 없다고 알리고 자기 첫 화면으로 보낸다', async (memberType, path, home, title) => {
-    AuthStore.setMember(memberType, '홍길동')
-    const router = renderAt(path)
+  ] as const)(
+    '%s가 다른 회원 구분의 화면 주소(%s)로 오면 권한이 없다고 알리고 자기 첫 화면으로 보낸다',
+    async (memberType, path, home, title) => {
+      AuthStore.setMember(memberType, '홍길동')
+      const router = renderAt(path)
 
-    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(home)
-    expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
-  })
+      expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
+      expect(router.state.location.pathname).toBe(home)
+      expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', expect.anything())
+    },
+  )
 
   it('자기 화면은 그대로 연다', async () => {
     AuthStore.setMember('STAFF', '김직원')

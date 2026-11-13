@@ -87,8 +87,20 @@ describe('isSupported', () => {
   })
 
   it.each([
-    ['엣지', [{ brand: 'Microsoft Edge', version: '142' }, { brand: 'Chromium', version: '142' }]],
-    ['웨일', [{ brand: 'Whale', version: '4' }, { brand: 'Chromium', version: '142' }]],
+    [
+      '엣지',
+      [
+        { brand: 'Microsoft Edge', version: '142' },
+        { brand: 'Chromium', version: '142' },
+      ],
+    ],
+    [
+      '웨일',
+      [
+        { brand: 'Whale', version: '4' },
+        { brand: 'Chromium', version: '142' },
+      ],
+    ],
   ])('이름에 크롬이 든 다른 브라우저(%s)는 쓸 수 없다', (_, brands) => {
     setBrands(brands)
     expect(new SpeechRecognizer().isSupported()).toBe(false)

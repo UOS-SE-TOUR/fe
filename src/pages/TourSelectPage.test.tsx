@@ -15,12 +15,7 @@ import type {
   TourSummary,
 } from '@/lib/tours'
 import { CONNECTION_FAILED_MESSAGE, GATEWAY_TIMEOUT_MESSAGE, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
-import {
-  HEADCOUNT_DELAY_MS,
-  TourSelectPage,
-  type VoiceInputProps,
-  type VoiceSelection,
-} from '@/pages/TourSelectPage'
+import { HEADCOUNT_DELAY_MS, TourSelectPage, type VoiceInputProps, type VoiceSelection } from '@/pages/TourSelectPage'
 import { jsonResponse, stubFetch } from '@/test/http'
 import { leaveBlocked, waitUntilLeaveAllowed } from '@/test/leave'
 
@@ -1280,7 +1275,9 @@ describe('그 밖의 실패', () => {
     await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
     await user.click(await screen.findByRole('button', { name: /12\/20 출발 5일/ }))
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
     expect(countOf(TOURS)).toBe(1)
   })
@@ -1333,7 +1330,9 @@ describe('그 밖의 실패', () => {
     replyOnce(QUOTE, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
     await priceWith(user, /^그랜드/, '3')
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
     expect(screen.getByRole('button', { name: '신청하기' })).toBeDisabled()
     expect(screen.getByText('고친 투어 등급·인원으로 가격을 계산하지 못했습니다.')).toBeInTheDocument()
 

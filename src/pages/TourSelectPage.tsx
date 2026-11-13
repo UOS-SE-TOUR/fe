@@ -515,7 +515,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     }
     const seq = resetTo({
       theme: selection.theme,
-      detail: { ...newDetail(selection.tourId), levelInput: selection.level, headcountInput: String(selection.headcount) },
+      detail: {
+        ...newDetail(selection.tourId),
+        levelInput: selection.level,
+        headcountInput: String(selection.headcount),
+      },
       // 같은 테마면 받아 둔 목록을 그대로 쓴다
       list: selection.theme === theme ? tourList : undefined,
     })
@@ -593,7 +597,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
             </Alert>
           )}
           {!theme && <p className="text-sm text-muted-foreground">테마를 고르면 상품 목록이 나옵니다.</p>}
-          {tours?.status === 'loading' && <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중입니다.</p>}
+          {tours?.status === 'loading' && (
+            <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중입니다.</p>
+          )}
           {tours?.status === 'failed' && (
             <div className="flex items-center gap-4">
               <p className="text-sm text-muted-foreground">상품 목록을 불러오지 못했습니다.</p>

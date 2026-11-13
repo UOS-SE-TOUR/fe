@@ -51,11 +51,13 @@ export function SignUpPage() {
   const [submitting, setSubmitting] = useState(false)
   const [addressSearchLoading, setAddressSearchLoading] = useState(false)
   const [addressSearchOpen, setAddressSearchOpen] = useState(false)
-  // 우편번호 서비스를 불러오지 못하면 주소를 직접 입력하게 연다
   const [addressSearchFailed, setAddressSearchFailed] = useState(false)
+  // 우편번호 서비스를 불러오지 못하면 주소를 직접 입력하게 연다. 다시 불러와도 검색에서 주소를 고르기 전까지는 연 채로 둔다
+  const [addressByHand, setAddressByHand] = useState(false)
   const addressInput = useRef<HTMLInputElement>(null)
   const addressDetailInput = useRef<HTMLInputElement>(null)
   const addressSearchButton = useRef<HTMLButtonElement>(null)
+  const addressSearchTarget = useRef<HTMLElement | null>(null)
   const addressSelected = useRef(false)
   const phoneInput = useRef<HTMLInputElement>(null)
   const phoneSelectionBefore = useRef<PhoneNumberSelection | undefined>(undefined)
@@ -101,6 +103,7 @@ export function SignUpPage() {
       await AddressSearch.load()
     } catch {
       setAddressSearchFailed(true)
+      setAddressByHand(true)
       addressInput.current?.focus()
       return
     } finally {
@@ -111,12 +114,14 @@ export function SignUpPage() {
     setAddressSearchOpen(true)
   }
 
-  // 팝업이 열려 검색 화면 자리가 생기면 띄운다. StrictMode는 ref를 두 번 붙이니 이미 띄웠으면 그대로 둔다
+  // 팝업이 열려 검색 화면 자리가 생기면 띄운다. StrictMode는 같은 자리에 ref를 두 번 붙이니 이미 띄운 자리는 그대로 둔다
   const showAddressSearch = useCallback((element: HTMLDivElement | null) => {
-    if (!element || element.childElementCount > 0) return
+    if (!element || element === addressSearchTarget.current) return
+    addressSearchTarget.current = element
     AddressSearch.embed(element, (address) => {
       setForm((current) => ({ ...current, address }))
       setError(null)
+      setAddressByHand(false)
       addressSelected.current = true
       setAddressSearchOpen(false)
     })
@@ -204,8 +209,8 @@ export function SignUpPage() {
                   <Input
                     id="signup-address"
                     autoComplete="address-line1"
-                    readOnly={!addressSearchFailed}
-                    placeholder={addressSearchFailed ? undefined : '주소 검색으로 찾아 주세요'}
+                    readOnly={!addressByHand}
+                    placeholder={addressByHand ? undefined : '주소 검색으로 찾아 주세요'}
                     aria-describedby={addressSearchFailed ? 'signup-address-help' : undefined}
                     value={form.address}
                     ref={addressInput}
@@ -302,7 +307,8 @@ export function SignUpPage() {
           </form>
         </CardContent>
       </Card>
-      {/* 검색 화면은 폭 300px·높이 400px 이상이어야 하고, 아래 카카오 로고가 가려지면 안 된다. 낮은 화면에선 팝업을 굴려 본다 */}
+      {/* 검색 화면은 폭 300px·높이 400px 이상이어야 하고, 아래 카카오 로고가 가려지면 안 된다.
+          좁은 휴대폰에선 검색 자리를 팝업 좌우 끝까지 넓히고, 낮은 화면에선 팝업을 굴려 본다 */}
       <Dialog open={addressSearchOpen} onOpenChange={setAddressSearchOpen}>
         <DialogContent
           showCloseButton={false}
@@ -320,7 +326,7 @@ export function SignUpPage() {
               </Button>
             </DialogClose>
           </DialogHeader>
-          <div ref={showAddressSearch} className="h-[clamp(400px,calc(100svh-10rem),500px)]" />
+          <div ref={showAddressSearch} className="-mx-4 h-[clamp(400px,calc(100svh-10rem),500px)] sm:mx-0" />
         </DialogContent>
       </Dialog>
     </main>

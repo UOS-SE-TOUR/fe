@@ -425,6 +425,24 @@ describe('SignUpPage', () => {
     expect(screen.getByLabelText('주소')).toHaveAttribute('readonly')
   })
 
+  it('불러오지 못해 직접 친 주소는, 다시 불러온 검색을 고르지 않고 닫아도 계속 고칠 수 있다', async () => {
+    vi.mocked(AddressSearch.load).mockRejectedValueOnce(new Error('offline'))
+    renderAt('/signup')
+
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+    const address = screen.getByLabelText('주소')
+    await user.type(address, '서울시 동대문구')
+
+    await openAddressSearch()
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    expect(screen.queryByText(ADDRESS_SEARCH_FAILED)).not.toBeInTheDocument()
+    expect(address).not.toHaveAttribute('readonly')
+    await user.type(address, ' 서울시립대로 163')
+    expect(address).toHaveValue('서울시 동대문구 서울시립대로 163')
+  })
+
   it('StrictMode로 띄워도 검색 화면은 한 번만 띄운다', async () => {
     renderAt('/signup', { strict: true })
 

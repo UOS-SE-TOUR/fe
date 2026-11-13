@@ -344,7 +344,7 @@ export function SignUpPage() {
               <DialogDescription>도로명·건물명·지번으로 찾은 뒤, 나온 주소를 누르면 주소 칸에 들어갑니다.</DialogDescription>
               <p className="text-sm text-muted-foreground">
                 검색이 안 되나요?{' '}
-                <Button variant="link" size="sm" className="h-auto p-0" onClick={typeAddressByHand}>
+                <Button variant="link" size="sm" className="h-auto p-0 font-normal" onClick={typeAddressByHand}>
                   주소 직접 입력하기
                 </Button>
               </p>

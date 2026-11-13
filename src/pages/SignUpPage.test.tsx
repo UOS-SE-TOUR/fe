@@ -485,7 +485,9 @@ describe('SignUpPage', () => {
     await fillForm({ address: null })
 
     await openAddressSearch()
-    await user.click(screen.getByRole('button', { name: '주소 직접 입력하기' }))
+    const typeByHand = screen.getByRole('button', { name: '주소 직접 입력하기' })
+    expect(screen.getByText('검색이 안 되나요?')).toContainElement(typeByHand)
+    await user.click(typeByHand)
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     const address = screen.getByLabelText('주소')

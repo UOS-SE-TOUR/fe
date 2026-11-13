@@ -205,7 +205,7 @@ function renderPage(voiceInput?: ComponentType<{ applySelection: ApplySelection 
   const router = createMemoryRouter(
     [
       { path: '/tours', element: <TourSelectPage voiceInput={voiceInput} /> },
-      { path: '/', element: <p>고객 첫 화면</p> },
+      { path: '/', element: <h1>고객 메뉴</h1> },
     ],
     { initialEntries: ['/tours'] },
   )
@@ -769,11 +769,14 @@ describe('신청', () => {
     await user.click(button)
     expect(screen.getByRole('button', { name: '신청하는 중' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeDisabled()
+    expect(screen.queryByRole('link', { name: '고객 메뉴' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '고객 메뉴' })).toBeDisabled()
     expect(countOf(APPLY)).toBe(1)
 
     finish(jsonResponse(201, { bookingId: 7, status: 'RECRUITING' }))
     expect(await screen.findByText('신청했습니다. 지금 상품 상태는 ‘모집 중’입니다.')).toBeInTheDocument()
     expect(countOf(APPLY)).toBe(1)
+    expect(screen.getByRole('link', { name: '고객 메뉴' })).toBeInTheDocument()
   })
 })
 

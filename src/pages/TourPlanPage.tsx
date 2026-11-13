@@ -335,11 +335,11 @@ export function TourPlanPage() {
         <h1 className="text-2xl font-semibold">상품 기획</h1>
         {submitting ? (
           <Button variant="outline" disabled>
-            직원 첫 화면으로
+            직원 메뉴
           </Button>
         ) : (
           <Button variant="outline" asChild>
-            <Link to={pagePaths.StaffMainPage}>직원 첫 화면으로</Link>
+            <Link to={pagePaths.StaffMainPage}>직원 메뉴</Link>
           </Button>
         )}
       </header>

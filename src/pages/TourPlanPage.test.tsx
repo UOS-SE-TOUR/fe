@@ -113,13 +113,13 @@ describe('등록', () => {
     expect(screen.getByLabelText('정원(명)')).toBeDisabled()
     expect(screen.getByRole('radio', { name: '허니문 낭만 투어' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '교통 선택지 더하기' })).toBeDisabled()
-    expect(screen.queryByRole('link', { name: '직원 첫 화면으로' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '직원 첫 화면으로' })).toBeDisabled()
+    expect(screen.queryByRole('link', { name: '직원 메뉴' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '직원 메뉴' })).toBeDisabled()
 
     respond(jsonResponse(400, { message: '정원은 3명 이상이어야 합니다.' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('정원은 3명 이상이어야 합니다.')
     expect(screen.getByLabelText('정원(명)')).toBeEnabled()
-    expect(screen.getByRole('link', { name: '직원 첫 화면으로' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '직원 메뉴' })).toBeInTheDocument()
   })
 
   it('보내는 동안에는 화면 이동과 탭 닫기를 막고, 끝나면 풀어 준다', async () => {

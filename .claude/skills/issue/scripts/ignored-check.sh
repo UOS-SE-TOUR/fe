@@ -16,8 +16,8 @@
 #   KEEP          그 밖의 무시 대상이 있다. keep <워크트리 기준 상대경로> 줄(최대 20줄), 20개를 넘으면
 #                 keep-more 20+ 줄이 붙는다
 #
-# 다시 만들 수 있는 것으로 치는 것은 /issue 3단계 게이트(npm ci·npm run lint·npm test·npm run build)와 IDE·하네스가
-# 만드는 자리뿐이다:
+# 다시 만들 수 있는 것으로 치는 것은 /issue 3단계 게이트(npm ci·npm run lint·npm test·npm run build·
+# npm run format:check)와 IDE·하네스가 만드는 자리뿐이다:
 #   - 최상위 node_modules 디렉터리(npm ci 가 package-lock.json 대로 통째로 다시 만든다. 개발 서버·Vitest 의 캐시
 #     node_modules/.vite·타입 검사의 node_modules/.tmp 도 그 안이다)
 #   - 최상위 dist 디렉터리(게이트의 npm run build 가 만든다. vite build 는 빌드마다 dist 를 비우고 다시 쓰는 산출물

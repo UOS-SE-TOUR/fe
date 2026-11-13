@@ -11,7 +11,7 @@
 
 - 설계 클래스 하나에 파일 하나: «Page»는 `src/pages/<이름>.tsx`, «Component»는 `src/components/<이름>.tsx`, «Module»은 `src/modules/<이름>.ts`.
 - 설계 클래스가 아닌 공용 코드는 `src/lib/`(화면 주소 `pages.ts`, 회원 구분·테마·등급·상태의 화면 이름 `labels.ts`), 화면 주소와 막기는 `src/router/`에 둔다.
-- `src/components/ui/`·`src/hooks/`·`src/lib/utils.ts`는 shadcn/ui가 만든 파일이다. `npx shadcn add <이름>`으로만 더하고 손으로 고치지 않는다(ESLint·Prettier·셀프 리뷰 대상도 아니다).
+- `src/components/ui/`·`src/hooks/`·`src/lib/utils.ts`는 shadcn/ui가 만든 파일이다. `npx shadcn add <이름>`으로만 더하고 손으로 고치지 않는다(ESLint·Prettier·셀프 리뷰 대상도 아니다). `shadcn add`는 `src/index.css`도 고칠 수 있어서, 뒤에 `npm run format`을 돌린다.
 - 서버는 `ApiClient`로만 부르고, 주소는 `/api/v1/...` 경로만 쓴다. 서버 도메인을 코드·`VITE_` 환경변수에 두지 않는다.
 - 로그인 상태는 `members/login`·`members/me` 응답으로만 판단한다(로그인 쿠키는 HttpOnly라 읽을 수 없다).
 - 직원 코드 같은 비밀 값은 코드·`.env`에 넣지 않는다.
@@ -31,7 +31,7 @@
 ## 빌드 / 실행
 
 - 실행: `npm ci` → `npm run dev` → Chrome에서 `http://localhost:5173`.
-- AI 기본 게이트: 코드·설정을 고쳤으면 `npm run format:check && npm run lint && npm test && npm run build`(빌드에 타입 검사가 들어 있다), `.claude/skills/`·`.gitignore`를 고쳤으면 `bash .claude/skills/issue/tests/run.sh`(스킬 테스트가 `.gitignore`도 본다).
+- AI 기본 게이트: 코드·설정을 고쳤으면 `npm run lint && npm test && npm run build && npm run format:check`(빌드에 타입 검사가 들어 있다), `.claude/skills/`·`.gitignore`를 고쳤으면 `bash .claude/skills/issue/tests/run.sh`(스킬 테스트가 `.gitignore`도 본다).
 - 운영 서버에 붙인 화면(`API_PROXY_TARGET`을 바꾼 로컬, Vercel 프리뷰·운영)에서는 읽기(GET)만 시험한다 — 가입·신청은 운영 DB에 남고 실제 문자가 나갈 수 있다.
 ## Git / 협업 규칙
 

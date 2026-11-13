@@ -23,7 +23,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run format:check
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      # 서식은 npm run format으로 바로 고쳐지니, 서식 하나로 위 결과를 가리지 않게 맨 뒤에 둔다
+      - run: npm run format:check

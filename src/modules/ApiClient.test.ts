@@ -55,6 +55,23 @@ describe('ApiClient 요청', () => {
     expect(init?.body).toBe(JSON.stringify({ loginId: 'hong', password: 'pw' }))
   })
 
+  it('신청 키(idempotencyKey)를 주면 요청 머리 Idempotency-Key로 보낸다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { bookingId: 1, status: 'RECRUITING' }))
+    const idempotencyKey = '0b5f8c1e-7a2d-4c3b-9e6f-1d2c3b4a5f60'
+
+    await ApiClient.post('/api/v1/bookings', { tourId: 1 }, { unsafeToRetry: true, idempotencyKey })
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.headers).toMatchObject({ 'Idempotency-Key': idempotencyKey, 'Content-Type': 'application/json' })
+  })
+
+  it('신청 키를 주지 않으면 Idempotency-Key를 보내지 않는다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { finalPrice: 1 }))
+
+    await ApiClient.post('/api/v1/bookings/quote', { tourId: 1 })
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.headers).not.toHaveProperty('Idempotency-Key')
+  })
+
   it('본문이 빈 응답(로그아웃의 204)은 undefined로 끝난다', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }))
 

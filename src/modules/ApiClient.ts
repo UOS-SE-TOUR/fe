@@ -17,6 +17,7 @@ export class ApiError extends Error {
   // ApiClient가 이미 알렸다(401·403). 화면은 보여 주지 않는다
   readonly handled: boolean
   // unsafeToRetry 요청을 서버가 처리했는지 알 수 없다. 화면은 단추를 다시 열지 않고 결과를 다시 읽는다
+  // (신청은 같은 신청 키로 다시 보내 결과를 받는다)
   readonly resultUnknown: boolean
 
   constructor(
@@ -41,6 +42,8 @@ interface RequestOptions {
   handleAuthErrors?: boolean
   // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)
   unsafeToRetry?: boolean
+  // 신청 키. 요청 머리 Idempotency-Key로 보낸다. 같은 키로 다시 보낸 신청은 서버가 두 번 신청하지 않는다
+  idempotencyKey?: string
 }
 
 // AuthStore가 불러와질 때 등록한다. ApiClient는 AuthStore를 import하지 않는다(설계의 의존 방향).
@@ -119,7 +122,11 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   try {
     response = await fetch(path, {
       method,
-      headers: { Accept: 'application/json', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
+      headers: {
+        Accept: 'application/json',
+        ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        ...(options.idempotencyKey !== undefined && { 'Idempotency-Key': options.idempotencyKey }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })

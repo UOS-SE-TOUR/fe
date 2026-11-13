@@ -46,12 +46,24 @@ export type ApplySelection = (selection: VoiceSelection) => Promise<ApplySelecti
 const CANNOT_APPLY_MESSAGE = '더는 신청할 수 없는 상품입니다. 다른 상품을 골라 주세요.'
 const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
 const APPLYING_MESSAGE = '신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.'
+const CHECK_RESULT_FIRST_MESSAGE = '신청 결과를 확인한 뒤 다시 시도해 주세요.'
 // 인원을 치다가 이만큼 멈추면 가격을 계산한다(글자마다 서버를 부르지 않게)
 export const HEADCOUNT_DELAY_MS = 500
 
 interface PricedSelection {
   level: TourLevel
   headcount: number
+}
+
+// 보내는 신청. 신청 키는 신청하기를 누를 때마다 새로 만든다
+interface ApplyRequest {
+  idempotencyKey: string
+  request: QuoteRequest
+}
+
+// 결과를 모르는 신청과 그 문구. "결과 확인"은 같은 신청 키로 같은 내용을 다시 보낸다
+interface UnknownApply extends ApplyRequest {
+  message: string
 }
 
 // 고른 상품 하나의 상태. 상품을 다시 고르면 새로 만들어, 고른 옵션과 지난 가격이 함께 비워진다
@@ -77,6 +89,9 @@ interface Detail {
   levelMessage: string | null
   optionMessage: string | null
   applyResult: ApplyTourResponse | null
+  // 결과를 알 때까지 들고 있는 신청(설계 3.1 idempotencyKey). 그동안 투어 등급·인원·옵션과 음성 입력을 막는다.
+  // 상품을 다시 고르거나 목록으로 돌아가면 이 상태와 함께 버린다
+  unknownApply: UnknownApply | null
 }
 
 // levels·apply는 입력까지 막고, seats(400 뒤 남은 자리를 다시 불러오는 중)는 옵션·신청만 막는다
@@ -99,6 +114,7 @@ function newDetail(tourId: number): Detail {
     levelMessage: null,
     optionMessage: null,
     applyResult: null,
+    unknownApply: null,
   }
 }
 
@@ -153,9 +169,15 @@ function TourList({ tours, onSelect }: { tours: TourSummary[]; onSelect(tourId: 
   )
 }
 
+// 음성 입력 부품이 받는 것. disabled면 신청 결과를 확인하기 전이라 쓸 수 없다
+export interface VoiceInputProps {
+  applySelection: ApplySelection
+  disabled: boolean
+}
+
 interface TourSelectPageProps {
-  // 음성 입력 부품(VoiceInputPanel, #7)을 넣을 자리. applySelection을 넘겨받는다
-  voiceInput?: ComponentType<{ applySelection: ApplySelection }>
+  // 음성 입력 부품(VoiceInputPanel, #7)을 넣을 자리
+  voiceInput?: ComponentType<VoiceInputProps>
 }
 
 export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps = {}) {
@@ -321,7 +343,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   // 투어 등급·인원으로 가격을 계산한다(설계 5.4 selectLevel). 등급을 고르거나 인원을 치다 멈추면 부른다
   async function selectLevel(current: Detail) {
-    if (applying.current || current.applyResult) return
+    if (applying.current || current.applyResult || current.unknownApply) return
     // 가격 계산은 하나씩 보낸다. 계산 중에 고친 입력은 그 계산이 끝난 뒤 그때의 입력으로 계산한다
     // (겹쳐 보내면 먼저 보낸 계산의 되돌리기·문구가 섞인다)
     if (current.quoting) {
@@ -385,7 +407,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   function changeOptions(optionIds: number[]) {
     const current = detailRef.current
-    if (!current?.submitted || pending || current.quoting) return
+    if (!current?.submitted || pending || current.quoting || current.unknownApply) return
     // 가격이 나와 있으면 마지막으로 가격이 나온 옵션, 다시 받는 중이면 남겨 둔 옵션이다
     const { tourId, submitted, optionIds: previousIds } = current
     updateDetail({ optionIds, optionMessage: null })
@@ -401,23 +423,35 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     })
   }
 
+  // 신청하기와 "결과 확인"(설계 3.1 applyTour). 결과 확인이면 들고 있던 신청 키로 같은 내용을 다시 보내고,
+  // 아니면 새 신청 키로 마지막으로 가격이 나온 내용을 보낸다
   async function applyTour() {
     const current = detailRef.current
-    if (!current?.quote || !current.priced || current.quoting || pending || applying.current) return
+    if (!current || current.applyResult || current.quoting || pending || applying.current) return
+    let apply: ApplyRequest
+    if (current.unknownApply) {
+      const { idempotencyKey, request } = current.unknownApply
+      apply = { idempotencyKey, request }
+    } else {
+      if (!current.quote || !current.priced) return
+      const { summary } = current.quote
+      apply = {
+        idempotencyKey: crypto.randomUUID(),
+        request: {
+          tourId: summary.tourId,
+          level: summary.level,
+          headcount: summary.headcount,
+          optionIds: summary.options.map((option) => option.optionId),
+        },
+      }
+    }
     applying.current = true
     const seq = context.current
-    const { summary } = current.quote
     setPending('apply')
-    const outcome = await ApiClient.post<ApplyTourResponse>(
-      '/api/v1/bookings',
-      {
-        tourId: summary.tourId,
-        level: summary.level,
-        headcount: summary.headcount,
-        optionIds: summary.options.map((option) => option.optionId),
-      } satisfies QuoteRequest,
-      { unsafeToRetry: true },
-    ).then(
+    const outcome = await ApiClient.post<ApplyTourResponse>('/api/v1/bookings', apply.request, {
+      unsafeToRetry: true,
+      idempotencyKey: apply.idempotencyKey,
+    }).then(
       (result) => ({ ok: true as const, result }),
       (error: unknown) => ({ ok: false as const, error }),
     )
@@ -426,17 +460,25 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (!isCurrent(seq)) return
     try {
       if (outcome.ok) {
-        updateDetail({ applyResult: outcome.result, optionPanelOpen: false })
+        // 결과 확인으로 받은 상품 상태는 지금 상태라 취소·진행 중·완료일 수도 있다. 받은 대로 보인다
+        updateDetail({ applyResult: outcome.result, unknownApply: null, optionPanelOpen: false })
         // 신청 인원을 더한 남은 자리를 보인다
         if (theme) void loadTours(theme, seq)
         return
       }
       const { error } = outcome
-      // 신청이 이미 됐을 수 있어 단추를 다시 열지 않는다
-      if (error instanceof ApiError && error.resultUnknown) showTourList(error.message)
-      else if (hasStatus(error, 400)) await askLevelAgain(error.message, summary.tourId, seq)
-      else if (hasStatus(error, 409)) showTourList(error.message)
-      else showError(error)
+      if (error instanceof ApiError && error.resultUnknown) {
+        // 신청이 이미 됐을 수 있어 신청하기를 다시 열지 않고, 이 화면에서 같은 신청 키로 결과를 확인하게 한다
+        updateDetail({ unknownApply: { ...apply, message: error.message }, optionPanelOpen: false })
+      } else if (hasStatus(error, 400)) {
+        updateDetail({ unknownApply: null })
+        await askLevelAgain(error.message, apply.request.tourId, seq)
+      } else if (hasStatus(error, 409)) {
+        showTourList(error.message)
+      } else {
+        // 결과 확인이 나가지 못했거나 거부됐으면 앞 신청의 결과는 아직 모른다. 들고 있던 신청 키는 그대로 둔다
+        showError(error)
+      }
     } finally {
       if (isCurrent(seq)) setPending(null)
     }
@@ -446,6 +488,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const applySelection: ApplySelection = async (selection) => {
     if (applying.current) {
       toast.error(APPLYING_MESSAGE)
+      return { status: 'failed' }
+    }
+    // 결과를 모르는 신청이 있으면 음성 입력은 막혀 있다(VoiceInputProps.disabled). 막히기 전에 누른 확인도 받지 않는다
+    if (detailRef.current?.unknownApply) {
+      toast.error(CHECK_RESULT_FIRST_MESSAGE)
       return { status: 'failed' }
     }
     const seq = resetTo({
@@ -504,7 +551,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         <MenuLink to={pagePaths.CustomerMainPage} label="고객 메뉴" disabled={applyBusy} />
       </header>
 
-      {VoiceInput && <VoiceInput applySelection={applySelection} />}
+      {VoiceInput && <VoiceInput applySelection={applySelection} disabled={Boolean(detail?.unknownApply)} />}
 
       <section aria-label="테마" className="flex flex-wrap gap-2">
         {themes.map((item) => (
@@ -580,10 +627,11 @@ interface TourDetailProps {
 
 function TourDetail(props: TourDetailProps) {
   const { detail, tour, theme, pending } = props
-  const { levels, quote: priceQuote, submitted, applyResult } = detail
-  // 투어 등급·인원은 가격을 계산하는 동안에도 고칠 수 있다(막으면 치던 칸에서 커서가 빠진다)
-  const locked = pending === 'levels' || pending === 'apply' || applyResult !== null
-  const busy = pending !== null || detail.quoting
+  const { levels, quote: priceQuote, submitted, applyResult, unknownApply } = detail
+  // 투어 등급·인원은 가격을 계산하는 동안에도 고칠 수 있다(막으면 치던 칸에서 커서가 빠진다).
+  // 결과를 모르는 신청이 있으면 결과를 알 때까지 고른 내용을 바꾸지 못한다(같은 신청 키로는 같은 내용만 보낸다)
+  const locked = pending === 'levels' || pending === 'apply' || applyResult !== null || unknownApply !== null
+  const busy = pending !== null || detail.quoting || unknownApply !== null
   const confirming = detail.priced && priceQuote !== null && priceQuote.discount > 0 && !detail.discountConfirmed
   const headcountNow = parseHeadcount(detail.headcountInput)
   // 고친 투어 등급·인원의 가격이 아직 나오지 않았다
@@ -713,7 +761,18 @@ function TourDetail(props: TourDetailProps) {
         </Alert>
       )}
 
-      {detail.priced && priceQuote && !confirming && !applyResult && (
+      {unknownApply && (
+        <div className="space-y-2">
+          <Alert variant="destructive">
+            <AlertDescription>{unknownApply.message}</AlertDescription>
+          </Alert>
+          <Button onClick={props.onApply} disabled={pending !== null}>
+            {pending === 'apply' ? '결과를 확인하는 중' : '결과 확인'}
+          </Button>
+        </div>
+      )}
+
+      {!unknownApply && detail.priced && priceQuote && !confirming && !applyResult && (
         <div className="space-y-2">
           <Button onClick={props.onApply} disabled={busy || edited}>
             {pending === 'apply' ? '신청하는 중' : '신청하기'}

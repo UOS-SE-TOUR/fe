@@ -8,7 +8,7 @@ import { VoiceInputPanel, type TourSelection } from '@/components/VoiceInputPane
 import { tourLevelLabel } from '@/lib/labels'
 import type { PriceQuote, QuoteRequest, TourLevelsResponse, TourSummary } from '@/lib/tours'
 import type { RecognitionFailure, Recognizer } from '@/modules/SpeechRecognizer'
-import { TourSelectPage, type ApplySelection } from '@/pages/TourSelectPage'
+import { TourSelectPage, type VoiceInputProps } from '@/pages/TourSelectPage'
 import { jsonResponse, stubFetch } from '@/test/http'
 
 const PARSE = 'POST /api/v1/voice/parse'
@@ -22,6 +22,8 @@ const NO_CANDIDATE = '그 테마와 출발일에 고를 수 있는 상품이 없
 const CHOOSE = '출발일이 같은 상품이 여럿입니다. 하나를 골라 주세요.'
 const PRICED = '말한 내용으로 가격을 계산했습니다. 아래에서 확인해 주세요.'
 const CLOSED = '마감된 상품입니다.'
+const DISABLED = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
+const APPLY = 'POST /api/v1/bookings'
 
 function tour(tourId: number, departureDate: string, duration: number, status: TourSummary['status'], seats: number) {
   const [, month, day] = departureDate.split('-').map(Number)
@@ -172,8 +174,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function VoiceInput({ applySelection }: { applySelection: ApplySelection }) {
-  return <VoiceInputPanel applySelection={applySelection} createRecognizer={() => recognizer} />
+function VoiceInput({ applySelection, disabled }: VoiceInputProps) {
+  return <VoiceInputPanel applySelection={applySelection} disabled={disabled} createRecognizer={() => recognizer} />
 }
 
 function renderPage() {
@@ -690,6 +692,42 @@ describe('오류', () => {
 
     slow.resolve(jsonResponse(200, quoteFor({ tourId: 4, level: 'GRAND', headcount: 2, optionIds: [] })))
     expect(await panel().findByText(PRICED)).toBeInTheDocument()
+  })
+})
+
+describe('신청 결과를 모를 때', () => {
+  it('상품 선택 화면이 결과를 확인할 때까지 말하기·칸·확인을 막고 까닭을 알린 뒤, 결과를 받으면 풀어 준다', async () => {
+    const user = renderPage()
+    await speak(user, heardAll)
+    await user.click(confirmButton())
+    await screen.findByText('가격 요약')
+    await speak(user, heardAll, '다시 말한 골프 투어')
+    expect(confirmButton()).toBeEnabled()
+
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await screen.findByRole('button', { name: '결과 확인' })
+
+    expect(panel().getByText(DISABLED)).toBeInTheDocument()
+    expect(panel().getByRole('button', { name: '다시 말하기' })).toBeDisabled()
+    expect(confirmButton()).toBeDisabled()
+    expect(panel().getByLabelText('테마')).toBeDisabled()
+    expect(panel().getByLabelText('인원')).toBeDisabled()
+    expect(panel().getByRole('radio', { name: /12\/27 출발 4일/ })).toBeDisabled()
+
+    replyOnce(APPLY, jsonResponse(201, { bookingId: 7, status: 'CONFIRMED' }))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    expect(panel().queryByText(DISABLED)).not.toBeInTheDocument()
+    expect(panel().getByRole('button', { name: '다시 말하기' })).toBeEnabled()
+    expect(confirmButton()).toBeEnabled()
+  })
+
+  it('막혀 있으면 말하기를 누를 수 없다', () => {
+    render(<VoiceInputPanel applySelection={vi.fn()} disabled createRecognizer={() => recognizer} />)
+    expect(panel().getByText(DISABLED)).toBeInTheDocument()
+    expect(panel().getByRole('button', { name: '말하기' })).toBeDisabled()
+    expect(recognizer.started).toBe(0)
   })
 })
 

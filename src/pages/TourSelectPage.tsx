@@ -500,7 +500,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">여행 상품 선택</h1>
-        {/* 신청하는 동안은 화면 안의 "다른 상품 고르기"처럼 막는다 */}
+        {/* 신청하는 동안 떠나면 결과를 못 보고 다시 신청할 수 있어, 화면 안의 "다른 상품 고르기"처럼 막는다 */}
         {applyBusy ? (
           <Button variant="outline" disabled>
             고객 메뉴

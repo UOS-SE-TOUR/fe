@@ -8,6 +8,7 @@ import { GATEWAY_TIMEOUT_MESSAGE, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiCl
 import { AuthStore } from '@/modules/AuthStore'
 import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
+import { leaveBlocked, waitUntilLeaveAllowed } from '@/test/leave'
 
 let fetchMock: ReturnType<typeof stubFetch>
 
@@ -183,6 +184,7 @@ describe('물품 추가', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('물품 이름은 100자 이하로 입력해 주세요.')
     expect(screen.getByRole('button', { name: '추가' })).toBeEnabled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
+    await waitUntilLeaveAllowed()
   })
 
   it.each([
@@ -259,19 +261,12 @@ describe('물품 추가', () => {
     await act(() => router.navigate(-1))
     expect(router.state.location.pathname).toBe('/staff/items')
     expect(info).toHaveBeenCalledWith('추가가 끝날 때까지 이 화면에 있어 주세요.', expect.anything())
-    const leaving = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(leaving)
-    expect(leaving.defaultPrevented).toBe(true)
+    expect(leaveBlocked()).toBe(true)
 
     respond(jsonResponse(200, { ...golfBall, quantity: 10 }))
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 10개)'))
     expect(screen.getByRole('link', { name: '직원 메뉴' })).toBeInTheDocument()
-    // 막기를 푸는 effect는 화면이 바뀐 다음에 돌 수 있어(느린 CI에서 실패), 풀릴 때까지 기다린다
-    await waitFor(() => {
-      const leavingAfter = new Event('beforeunload', { cancelable: true })
-      window.dispatchEvent(leavingAfter)
-      expect(leavingAfter.defaultPrevented).toBe(false)
-    })
+    await waitUntilLeaveAllowed()
     await act(() => router.navigate(-1))
     expect(router.state.location.pathname).toBe('/staff')
   })
@@ -282,12 +277,15 @@ describe('물품 추가', () => {
       .mockResolvedValueOnce(jsonResponse(401, { message: '로그인이 필요합니다.' }))
     const router = renderPage()
     await screen.findByText('창고에 물품이 없습니다.')
+    const info = vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
 
     const user = await fillForm('골프공', '골프 챌린지 투어', '10')
     await user.click(screen.getByRole('button', { name: '추가' }))
 
     expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/login')
+    expect(info).not.toHaveBeenCalled()
+    await waitUntilLeaveAllowed()
   })
 
   it('처리됐는지 모르면 다시 보내지 않고, 입력을 비우고, 목록을 다시 불러온 뒤에 단추를 연다', async () => {
@@ -310,6 +308,8 @@ describe('물품 추가', () => {
     expect(screen.getByRole('textbox', { name: '수량' })).toHaveValue('')
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(screen.getByText('물품 목록을 불러오는 중입니다.')).toBeInTheDocument()
+    // 추가 요청은 끝났으니 목록을 다시 읽는 동안에는 떠날 수 있다
+    await waitUntilLeaveAllowed()
 
     respondList(jsonResponse(200, [{ ...golfBall, quantity: 30 }]))
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '30개']]))

@@ -22,6 +22,7 @@ import {
   type VoiceSelection,
 } from '@/pages/TourSelectPage'
 import { jsonResponse, stubFetch } from '@/test/http'
+import { leaveBlocked, waitUntilLeaveAllowed } from '@/test/leave'
 
 const SEAT_SHORTAGE = '남은 자리보다 인원이 많습니다.'
 const NEGATIVE_PRICE = '고른 옵션으로는 가격을 계산할 수 없습니다. 다른 옵션을 골라 주세요.'
@@ -722,6 +723,7 @@ describe('신청', () => {
     expect((await screen.findAllByText('남은 자리 1명')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('인원')).toBeEnabled()
+    await waitUntilLeaveAllowed()
   })
 
   it('409면 문구를 보여 주고 그 테마의 상품 목록을 다시 불러온다', async () => {
@@ -734,6 +736,7 @@ describe('신청', () => {
     expect(await screen.findByText('출발일이 오늘이거나 지난 상품은 신청할 수 없습니다.')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
     expect(countOf(TOURS)).toBe(2)
+    await waitUntilLeaveAllowed()
   })
 
   it.each([
@@ -751,6 +754,7 @@ describe('신청', () => {
     expect(await screen.findByText(/남은 자리 8명/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
     expect(countOf(APPLY)).toBe(1)
+    await waitUntilLeaveAllowed()
   })
 
   it('신청하면 신청 인원을 더한 남은 자리를 다시 불러와 보인다', async () => {
@@ -795,18 +799,11 @@ describe('신청', () => {
     await act(() => router.navigate(-1))
     expect(router.state.location.pathname).toBe('/tours')
     expect(info).toHaveBeenCalledWith('신청이 끝날 때까지 이 화면에 있어 주세요.', expect.anything())
-    const leaving = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(leaving)
-    expect(leaving.defaultPrevented).toBe(true)
+    expect(leaveBlocked()).toBe(true)
 
     finish(jsonResponse(201, { bookingId: 7, status: 'RECRUITING' }))
     expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
-    // 막기를 푸는 effect는 화면이 바뀐 다음에 돌 수 있어(느린 CI에서 실패), 풀릴 때까지 기다린다
-    await waitFor(() => {
-      const leavingAfter = new Event('beforeunload', { cancelable: true })
-      window.dispatchEvent(leavingAfter)
-      expect(leavingAfter.defaultPrevented).toBe(false)
-    })
+    await waitUntilLeaveAllowed()
     await act(() => router.navigate(-1))
     expect(router.state.location.pathname).toBe('/')
   })

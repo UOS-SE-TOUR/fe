@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,7 @@ import {
 } from '@/lib/tours'
 import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
-import type { ApplySelection, VoiceSelection } from '@/pages/TourSelectPage'
+import type { VoiceInputProps, VoiceSelection } from '@/pages/TourSelectPage'
 
 // voice/parse의 본문(be VoiceParseRequest·TourSelection). 뽑지 못한 항목은 null이다
 interface VoiceParseRequest {
@@ -52,6 +52,7 @@ const CHOOSE_MESSAGE = '출발일이 같은 상품이 여럿입니다. 하나를
 const PICK_MESSAGE = '후보 상품을 골라 주세요.'
 const SPEAK_AGAIN_MESSAGE = '내용을 고치거나 다시 말해 주세요.'
 const PRICED_MESSAGE = '말한 내용으로 가격을 계산했습니다. 아래에서 확인해 주세요.'
+const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
 
 // 받은 내용을 고객이 고치는 칸. 뽑지 못한 칸은 빈 값이다
 interface Draft {
@@ -118,8 +119,7 @@ function selectionOf(draft: Draft): VoiceSelection | null {
   return { theme, tourId, level, headcount }
 }
 
-interface VoiceInputPanelProps {
-  applySelection: ApplySelection
+interface VoiceInputPanelProps extends VoiceInputProps {
   // 테스트는 가짜를 넣는다(테스트 환경에는 브라우저 음성인식이 없다)
   createRecognizer?: () => Recognizer
 }
@@ -128,7 +128,8 @@ function newRecognizer(): Recognizer {
   return new SpeechRecognizer()
 }
 
-export function VoiceInputPanel({ applySelection, createRecognizer = newRecognizer }: VoiceInputPanelProps) {
+// disabled면 상품 선택 화면이 신청 결과를 확인하기 전이다. 말하기와 확인을 막는다(설계 3.1 VoiceInputPanel)
+export function VoiceInputPanel({ applySelection, disabled, createRecognizer = newRecognizer }: VoiceInputPanelProps) {
   const [supported] = useState(() => createRecognizer().isSupported())
   const [step, setStep] = useState<Step>('idle')
   // 서버가 푸는 중인 말
@@ -153,6 +154,22 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
       recognizer.current?.abort()
     }
   }, [])
+
+  // 막히면 듣기·말 풀기를 그만두고 지난 알림을 지운다(풀린 뒤 낡은 알림이 다시 보이지 않게)
+  const [wasDisabled, setWasDisabled] = useState(disabled)
+  if (disabled !== wasDisabled) {
+    setWasDisabled(disabled)
+    if (disabled) {
+      setStep('idle')
+      setNotice(null)
+    }
+  }
+  // 그린 직후 같은 차례에 정리해, 그사이 도착한 음성 해석 응답이 막힌 패널을 바꾸지 못하게 한다
+  useLayoutEffect(() => {
+    if (!disabled) return
+    session.current += 1
+    recognizerRef.current?.abort()
+  }, [disabled])
 
   function updateDraft(patch: Partial<Draft>) {
     setDraft((current) => (current ? { ...current, ...patch } : current))
@@ -314,6 +331,11 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
           )}
           {supported && (
             <>
+              {disabled && (
+                <Alert>
+                  <AlertDescription>{DISABLED_MESSAGE}</AlertDescription>
+                </Alert>
+              )}
               {notice && (
                 <Alert variant={notice.tone === 'error' ? 'destructive' : 'default'}>
                   <AlertDescription>{notice.message}</AlertDescription>
@@ -342,6 +364,7 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
                 <DraftForm
                   draft={draft}
                   applying={step === 'applying'}
+                  disabled={disabled}
                   onChangeTarget={changeTarget}
                   onChange={(patch) => updateDraft({ ...patch, rejection: null })}
                   onRetryCandidates={() =>
@@ -358,7 +381,7 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
                 <Button
                   variant={draft ? 'outline' : 'default'}
                   onClick={startVoiceInput}
-                  disabled={step === 'applying'}
+                  disabled={step === 'applying' || disabled}
                 >
                   {draft ? '다시 말하기' : '말하기'}
                 </Button>
@@ -374,14 +397,16 @@ export function VoiceInputPanel({ applySelection, createRecognizer = newRecogniz
 interface DraftFormProps {
   draft: Draft
   applying: boolean
+  disabled: boolean
   onChangeTarget(theme: Theme | '', departureDate: string): void
   onChange(patch: Pick<Partial<Draft>, 'level' | 'headcount' | 'tourId'>): void
   onRetryCandidates(): void
   onConfirm(): void
 }
 
-function DraftForm({ draft, applying, ...props }: DraftFormProps) {
+function DraftForm({ draft, applying, disabled, ...props }: DraftFormProps) {
   const { candidates } = draft
+  const locked = applying || disabled
   const choosable = choosableOf(candidates)
   const missing = isMissing(draft)
   const noCandidate = !!draft.theme && !!draft.departureDate && candidates.status === 'loaded' && choosable.length === 0
@@ -402,7 +427,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
             id="voice-theme"
             className="w-full"
             value={draft.theme}
-            disabled={applying}
+            disabled={locked}
             onChange={(event) => props.onChangeTarget(event.target.value as Theme | '', draft.departureDate)}
           >
             <NativeSelectOption value="">테마 선택</NativeSelectOption>
@@ -419,7 +444,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
             id="voice-date"
             type="date"
             value={draft.departureDate}
-            disabled={applying}
+            disabled={locked}
             onChange={(event) => props.onChangeTarget(draft.theme, event.target.value)}
           />
         </div>
@@ -429,7 +454,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
             id="voice-level"
             className="w-full"
             value={draft.level}
-            disabled={applying}
+            disabled={locked}
             onChange={(event) => props.onChange({ level: event.target.value as TourLevel | '' })}
           >
             <NativeSelectOption value="">투어 등급 선택</NativeSelectOption>
@@ -449,7 +474,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
             min={1}
             step={1}
             value={draft.headcount}
-            disabled={applying}
+            disabled={locked}
             onChange={(event) => props.onChange({ headcount: event.target.value })}
           />
         </div>
@@ -459,7 +484,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
       {candidates.status === 'failed' && (
         <div className="flex items-center gap-4">
           <p className="text-sm text-muted-foreground">후보 상품을 불러오지 못했습니다.</p>
-          <Button type="button" variant="outline" onClick={props.onRetryCandidates} disabled={applying}>
+          <Button type="button" variant="outline" onClick={props.onRetryCandidates} disabled={locked}>
             다시 찾기
           </Button>
         </div>
@@ -470,7 +495,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
           <RadioGroup
             value={draft.tourId === null ? '' : String(draft.tourId)}
             onValueChange={(value) => props.onChange({ tourId: Number(value) })}
-            disabled={applying}
+            disabled={locked}
           >
             {candidates.list.map((tour) => (
               <div key={tour.tourId} className="flex items-start gap-2">
@@ -506,7 +531,7 @@ function DraftForm({ draft, applying, ...props }: DraftFormProps) {
         </Alert>
       )}
 
-      <Button type="button" onClick={props.onConfirm} disabled={applying || !selectionOf(draft)}>
+      <Button type="button" onClick={props.onConfirm} disabled={locked || !selectionOf(draft)}>
         {applying ? '가격을 계산하는 중' : '확인'}
       </Button>
     </form>

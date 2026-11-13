@@ -14,8 +14,8 @@ import type {
   TourOptionsResponse,
   TourSummary,
 } from '@/lib/tours'
-import { UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
-import { HEADCOUNT_DELAY_MS, TourSelectPage, type ApplySelection, type VoiceSelection } from '@/pages/TourSelectPage'
+import { CONNECTION_FAILED_MESSAGE, GATEWAY_TIMEOUT_MESSAGE, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
+import { HEADCOUNT_DELAY_MS, TourSelectPage, type VoiceInputProps, type VoiceSelection } from '@/pages/TourSelectPage'
 import { jsonResponse, stubFetch } from '@/test/http'
 import { leaveBlocked, waitUntilLeaveAllowed } from '@/test/leave'
 
@@ -160,6 +160,15 @@ function countOf(key: string): number {
   return fetchMock.mock.calls.filter(([input, init]) => requestKey(input, init) === key).length
 }
 
+// 요청마다 실어 보낸 신청 키(요청 머리 Idempotency-Key)
+function idempotencyKeysOf(key: string): (string | undefined)[] {
+  return fetchMock.mock.calls
+    .filter(([input, init]) => requestKey(input, init) === key)
+    .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.['Idempotency-Key'])
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
 function failWith(status: number, message: string): Response {
   return jsonResponse(status, { message })
 }
@@ -198,7 +207,7 @@ afterEach(() => {
 })
 
 // 고객 메뉴에서 들어온 것처럼 띄운다(뒤로 가기가 고객 메뉴로 간다)
-function renderWithRouter(voiceInput?: ComponentType<{ applySelection: ApplySelection }>) {
+function renderWithRouter(voiceInput?: ComponentType<VoiceInputProps>) {
   const router = createMemoryRouter(
     [
       { path: '/tours', element: <TourSelectPage voiceInput={voiceInput} /> },
@@ -210,7 +219,7 @@ function renderWithRouter(voiceInput?: ComponentType<{ applySelection: ApplySele
   return { user: userEvent.setup(), router }
 }
 
-function renderPage(voiceInput?: ComponentType<{ applySelection: ApplySelection }>) {
+function renderPage(voiceInput?: ComponentType<VoiceInputProps>) {
   return renderWithRouter(voiceInput).user
 }
 
@@ -734,21 +743,18 @@ describe('신청', () => {
     await waitUntilLeaveAllowed()
   })
 
-  it.each([
-    ['500', () => failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.')],
-    ['본문이 빈 성공 응답', () => new Response('', { status: 201 })],
-  ])('처리됐는지 모르는 실패(%s)면 단추를 다시 열지 않고 상품 목록을 다시 불러온다', async (_, response) => {
+  it('404면(상품이 없어짐) 알리고 상품 목록을 다시 불러온다', async () => {
     const user = renderPage()
     await priced(user)
 
-    replyOnce(APPLY, response())
-    replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 8 }, ...golfTours.slice(1)]))
+    replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    replyOnce(TOURS, jsonResponse(200, golfTours.slice(1)))
     await user.click(screen.getByRole('button', { name: '신청하기' }))
 
-    expect(await screen.findByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
-    expect(await screen.findByText(/남은 자리 8명/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
-    expect(countOf(APPLY)).toBe(1)
+    expect(await screen.findByRole('button', { name: /1\/3 출발 3일/ })).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(2)
     await waitUntilLeaveAllowed()
   })
 
@@ -760,6 +766,42 @@ describe('신청', () => {
     await user.click(screen.getByRole('button', { name: '신청하기' }))
     expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
     expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
+    expect(idempotencyKeysOf(APPLY)).toEqual([expect.stringMatching(UUID)])
+  })
+
+  it('신청하기를 누를 때마다 새 신청 키를 만든다', async () => {
+    const user = renderPage()
+    await priced(user)
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await screen.findByText(SEAT_SHORTAGE)
+
+    await priceWith(user, /^그랜드/, '1')
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+
+    const [first, second] = idempotencyKeysOf(APPLY)
+    expect(first).toMatch(UUID)
+    expect(second).toMatch(UUID)
+    expect(second).not.toBe(first)
+  })
+
+  it('crypto.randomUUID가 없는 브라우저(Safari 15.4 이전)에서도 UUID 모양의 신청 키를 만든다', async () => {
+    const { getRandomValues } = crypto
+    vi.stubGlobal('crypto', { getRandomValues: getRandomValues.bind(crypto) })
+    const user = renderPage()
+    await priced(user)
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await screen.findByText(SEAT_SHORTAGE)
+    await priceWith(user, /^그랜드/, '1')
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+
+    const [first, second] = idempotencyKeysOf(APPLY)
+    expect(first).toMatch(UUID)
+    expect(second).toMatch(UUID)
+    expect(second).not.toBe(first)
   })
 
   it('요청이 끝날 때까지 단추를 막아 두 번 눌러도 한 번만 신청한다', async () => {
@@ -804,11 +846,255 @@ describe('신청', () => {
   })
 })
 
+describe('신청 결과를 모를 때', () => {
+  const unknownResults: [string, () => Response | Promise<Response>, string][] = [
+    ['500', () => failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'), UNKNOWN_RESULT_MESSAGE],
+    ['본문이 빈 성공 응답', () => new Response('', { status: 201 }), UNKNOWN_RESULT_MESSAGE],
+    ['504', () => new Response('', { status: 504 }), GATEWAY_TIMEOUT_MESSAGE],
+    ['연결 끊김', () => Promise.reject(new TypeError('Failed to fetch')), UNKNOWN_RESULT_MESSAGE],
+  ]
+
+  // 그랜드 2명·5등급 호텔로 가격을 받아 신청하고, 그 신청의 결과를 모르게 한다
+  async function applyUnknown(user: UserEvent) {
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await openOptions(user)
+    await user.click(screen.getByRole('radio', { name: /^5등급 호텔/ }))
+    await screen.findByText('최종 가격 3,400,000원')
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await screen.findByRole('button', { name: '결과 확인' })
+  }
+
+  it.each(unknownResults)(
+    '%s면 상품 화면에 머물러 문구와 결과 확인을 보이고, 결과를 알 때까지 고른 내용을 바꾸지 못하게 막는다',
+    async (_, response, message) => {
+      const user = renderPage()
+      await openTour(user)
+      await priceWith(user, /^그랜드/, '2')
+      await screen.findByText('가격 요약')
+
+      replyOnce(APPLY, response)
+      replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 8 }, ...golfTours.slice(1)]))
+      await user.click(screen.getByRole('button', { name: '신청하기' }))
+
+      expect(await screen.findByText(message)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '결과 확인' })).toBeEnabled()
+      expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
+      expect(screen.getByText('가격 요약')).toBeInTheDocument()
+      for (const radio of screen.getAllByRole('radio')) expect(radio).toBeDisabled()
+      expect(screen.getByLabelText('인원')).toBeDisabled()
+      expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeEnabled()
+      // 신청이 됐으면 줄었을 남은 자리를 다시 불러와 보인다
+      expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
+      expect(countOf(TOURS)).toBe(2)
+      expect(countOf(APPLY)).toBe(1)
+      await waitUntilLeaveAllowed()
+    },
+  )
+
+  it('남은 자리를 다시 불러오지 못해도 따로 알리지 않는다(결과를 모른다는 문구 하나만 둔다)', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    replyOnce(TOURS, () => Promise.reject(new TypeError('Failed to fetch')))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+
+    expect(await screen.findByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+    await waitFor(() => expect(countOf(TOURS)).toBe(2))
+    await sleep(0)
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(screen.getByText('남은 자리 10명')).toBeInTheDocument()
+  })
+
+  it('옵션 패널을 연 채 신청했으면 패널을 닫는다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+    expect(screen.queryByRole('button', { name: '옵션 고르기 끝' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '옵션 바꾸기' })).not.toBeInTheDocument()
+  })
+
+  it('결과 확인은 같은 신청 키로 같은 내용을 다시 보내고, 받은 상품 상태를 그대로 보인다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, jsonResponse(201, { bookingId: 7, status: 'CANCELLED' }))
+    replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 8 }, ...golfTours.slice(1)]))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+
+    expect(await screen.findByText('신청했습니다. 지금 상품 상태는 ‘취소’입니다.')).toBeInTheDocument()
+    expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
+    expect(screen.queryByText(UNKNOWN_RESULT_MESSAGE)).not.toBeInTheDocument()
+    const sent = { tourId: 1, level: 'GRAND', headcount: 2, optionIds: [13] }
+    expect(bodiesOf(APPLY)).toEqual([sent, sent])
+    const [first, second] = idempotencyKeysOf(APPLY)
+    expect(first).toMatch(UUID)
+    expect(second).toBe(first)
+  })
+
+  it('결과를 확인하는 동안은 단추를 막고 화면 이동과 탭 닫기도 막는다', async () => {
+    let finish: (response: Response) => void = () => {}
+    const { user, router } = renderWithRouter()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, () => new Promise<Response>((resolve) => (finish = resolve)))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(screen.getByRole('button', { name: '결과를 확인하는 중' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '다른 상품 고르기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '골프 챌린지 투어' })).toBeDisabled()
+    vi.spyOn(toast, 'info').mockImplementation(() => 'toast')
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/tours')
+    expect(leaveBlocked()).toBe(true)
+
+    finish(jsonResponse(201, { bookingId: 7, status: 'RECRUITING' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    await waitUntilLeaveAllowed()
+    expect(countOf(APPLY)).toBe(2)
+  })
+
+  it('결과 확인도 결과를 모르면 같은 안내와 단추를 다시 보이고, 다음 결과 확인도 같은 신청 키를 쓴다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, new Response('', { status: 504 }))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(GATEWAY_TIMEOUT_MESSAGE)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '결과 확인' })).toBeEnabled()
+    expect(screen.getByLabelText('인원')).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const keys = idempotencyKeysOf(APPLY)
+    expect(keys).toHaveLength(3)
+    expect(new Set(keys).size).toBe(1)
+  })
+
+  it('결과 확인이 400이면 문구를 보여 주고 투어 등급과 인원을 다시 받으며, 다시 신청하면 새 신청 키를 쓴다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    replyOnce(TOURS, jsonResponse(200, [{ ...golfTours[0], remainingSeats: 1 }, ...golfTours.slice(1)]))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+
+    expect(await screen.findByText(SEAT_SHORTAGE)).toBeInTheDocument()
+    expect((await screen.findAllByText('남은 자리 1명')).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
+    expect(screen.queryByText(UNKNOWN_RESULT_MESSAGE)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('인원')).toBeEnabled()
+
+    await priceWith(user, /^그랜드/, '1')
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const [first, check, again] = idempotencyKeysOf(APPLY)
+    expect(check).toBe(first)
+    expect(again).toMatch(UUID)
+    expect(again).not.toBe(first)
+  })
+
+  it('결과 확인이 409면 문구를 보여 주고 그 테마의 상품 목록을 다시 불러온다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, failWith(409, CLOSED))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+
+    expect(await screen.findByText(CLOSED)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(3)
+  })
+
+  it('결과 확인이 404면(상품이 없어져 신청이 되지 않음) 알리고 상품 목록을 다시 불러온다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    replyOnce(TOURS, jsonResponse(200, golfTours.slice(1)))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+
+    expect(await screen.findByRole('button', { name: /1\/3 출발 3일/ })).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(3)
+  })
+
+  it('오프라인으로 끊겨도 신청 키가 있으니 결과를 모름으로 두고, 같은 신청 키로 다시 확인할 수 있다', async () => {
+    const user = renderPage()
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    await screen.findByText('가격 요약')
+
+    // 요청이 서버에 닿은 뒤 와이파이가 끊겨도 같은 꼴이라, 보내지 못했다고 짐작하지 않는다
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+
+    replyOnce(APPLY, () => Promise.reject(new TypeError('Failed to fetch')))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByRole('button', { name: '결과 확인' })).toBeEnabled()
+    expect(screen.getByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+    expect(toast.error).not.toHaveBeenCalledWith(CONNECTION_FAILED_MESSAGE)
+
+    online.mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const keys = idempotencyKeysOf(APPLY)
+    expect(keys).toHaveLength(3)
+    expect(new Set(keys).size).toBe(1)
+  })
+
+  it('결과 확인이 400·404·409 밖의 이유로 거부되면(403) 들고 있던 신청 키로 다시 확인할 수 있다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, failWith(403, '권한이 없습니다.'))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('권한이 없습니다.', { id: 'forbidden' }))
+    expect(await screen.findByRole('button', { name: '결과 확인' })).toBeEnabled()
+    expect(screen.getByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+    expect(screen.getByLabelText('인원')).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const keys = idempotencyKeysOf(APPLY)
+    expect(keys).toHaveLength(3)
+    expect(new Set(keys).size).toBe(1)
+  })
+
+  it('다른 상품 고르기를 누르면 들고 있던 신청 키를 버리고, 다시 신청하면 새 신청 키를 쓴다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    await user.click(screen.getByRole('button', { name: '다른 상품 고르기' }))
+    await user.click(await screen.findByRole('button', { name: /12\/20 출발 5일/ }))
+    await screen.findByRole('radio', { name: /^그랜드/ })
+    expect(screen.getByLabelText('인원')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
+
+    await priceWith(user, /^그랜드/, '2')
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    const [first, second] = idempotencyKeysOf(APPLY)
+    expect(second).toMatch(UUID)
+    expect(second).not.toBe(first)
+    expect(bodiesOf(APPLY).at(-1)).toEqual({ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] })
+  })
+})
+
 describe('applySelection(음성으로 채운 내용)', () => {
   const selection: VoiceSelection = { theme: 'GOLF', tourId: 1, level: 'GRAND', headcount: 2 }
 
   // VoiceInputPanel(#7) 대신 applySelection을 부르고 결과를 보여 준다
-  function FakeVoiceInput({ applySelection }: { applySelection: ApplySelection }) {
+  function FakeVoiceInput({ applySelection, disabled }: VoiceInputProps) {
     const [result, setResult] = useState('')
     async function apply(next: VoiceSelection) {
       const outcome = await applySelection(next)
@@ -821,6 +1107,7 @@ describe('applySelection(음성으로 채운 내용)', () => {
         <button onClick={() => void apply({ ...selection, level: 'CLASSIC' })}>음성 결과 쓰기(클래식)</button>
         <button onClick={() => void apply({ ...selection, headcount: 0 })}>음성 결과 쓰기(0명)</button>
         <output aria-label="음성 결과">{result}</output>
+        <output aria-label="음성 입력 막힘">{String(disabled)}</output>
       </div>
     )
   }
@@ -967,6 +1254,41 @@ describe('applySelection(음성으로 채운 내용)', () => {
 
     finish(jsonResponse(201, { bookingId: 7, status: 'CONFIRMED' }))
     expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+  })
+
+  it('신청 결과를 모르는 동안은 음성 입력을 막고, 채운 내용을 보내도 받지 않는다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    expect(screen.getByRole('status', { name: '음성 입력 막힘' })).toHaveTextContent('false')
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    await screen.findByRole('button', { name: '결과 확인' })
+    expect(screen.getByRole('status', { name: '음성 입력 막힘' })).toHaveTextContent('true')
+
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(다른 상품)' }))
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('신청 결과를 확인한 뒤 다시 시도해 주세요.')
+    expect(countOf('GET /api/v1/tours/3/levels')).toBe(0)
+    expect(screen.getByRole('button', { name: '결과 확인' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+    expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: '음성 입력 막힘' })).toHaveTextContent('false')
+  })
+
+  it('다른 상품 고르기로 신청 키를 버리면 음성 입력을 다시 쓸 수 있다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    await screen.findByRole('button', { name: '결과 확인' })
+
+    await user.click(screen.getByRole('button', { name: '다른 상품 고르기' }))
+    expect(screen.getByRole('status', { name: '음성 입력 막힘' })).toHaveTextContent('false')
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(다른 상품)' }))
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('priced')
   })
 })
 

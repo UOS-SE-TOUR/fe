@@ -17,7 +17,8 @@ export class ApiError extends Error {
   readonly status: number | null
   // ApiClient가 이미 알렸다(401·403). 화면은 보여 주지 않는다
   readonly handled: boolean
-  // unsafeToRetry 요청을 서버가 처리했는지 알 수 없다. 화면은 단추를 다시 열지 않고 결과를 다시 읽는다
+  // unsafeToRetry 요청을 서버가 처리했는지 알 수 없다. 화면은 단추를 다시 열지 않는다
+  // (신청은 같은 신청 키로 다시 보내고, 상품 등록·창고 추가는 결과를 다시 읽는다)
   readonly resultUnknown: boolean
 
   constructor(
@@ -37,12 +38,22 @@ export function hasStatus(error: unknown, status: number): error is ApiError {
   return error instanceof ApiError && error.status === status
 }
 
-interface RequestOptions {
+type RequestOptions = {
   // false면 401·403도 처리하지 않는다(AuthStore.restore)
   handleAuthErrors?: boolean
-  // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)
-  unsafeToRetry?: boolean
-}
+} & (
+  | {
+      // 다시 보내면 두 번 처리되는 요청(신청·상품 등록·창고 추가)
+      unsafeToRetry?: boolean
+      idempotencyKey?: undefined
+    }
+  | {
+      unsafeToRetry: true
+      // 신청 키. 요청 머리 Idempotency-Key로 보낸다. 같은 키로 다시 보낸 신청은 서버가 두 번 신청하지 않는다.
+      // 결과를 모를 때 resultUnknown을 받아야 같은 키로 다시 보낼 수 있어 unsafeToRetry와 함께만 준다
+      idempotencyKey: string
+    }
+)
 
 // AuthStore가 불러와질 때 등록한다. ApiClient는 AuthStore를 import하지 않는다(설계의 의존 방향).
 // 화면 이동은 하지 않는다 — 로그인 상태가 바뀌면 라우터(PageGate)가 로그인 화면이나 자기 첫 화면으로 보낸다
@@ -105,9 +116,10 @@ export function unknownResult(status: number | null): ApiError {
   return new ApiError(UNKNOWN_RESULT_MESSAGE, status, { resultUnknown: true })
 }
 
-// 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음). 오프라인이었으면 요청이 나가지 않았다
+// 서버에 닿았는지 모르는 실패(연결 끊김, 성공 응답의 본문을 못 받음). 오프라인이었으면 요청이 나가지 않았다고 본다.
+// 신청 키가 있으면 이 짐작을 쓰지 않는다(보낸 뒤 끊겼을 수 있고, 같은 키로 다시 보내도 안전하다)
 function connectionLost(status: number | null, options: RequestOptions): ApiError {
-  const unsent = status === null && !navigator.onLine
+  const unsent = status === null && !navigator.onLine && options.idempotencyKey === undefined
   return options.unsafeToRetry && !unsent ? unknownResult(status) : new ApiError(CONNECTION_FAILED_MESSAGE, status)
 }
 
@@ -120,7 +132,11 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
   try {
     response = await fetch(path, {
       method,
-      headers: { Accept: 'application/json', ...(body !== undefined && { 'Content-Type': 'application/json' }) },
+      headers: {
+        Accept: 'application/json',
+        ...(body !== undefined && { 'Content-Type': 'application/json' }),
+        ...(options.idempotencyKey !== undefined && { 'Idempotency-Key': options.idempotencyKey }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
@@ -164,7 +180,7 @@ async function request<T>(method: 'GET' | 'POST', path: string, body: unknown, o
 }
 
 export const ApiClient = {
-  get<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  get<T = unknown>(path: string, options: Pick<RequestOptions, 'handleAuthErrors'> = {}): Promise<T> {
     return request<T>('GET', path, undefined, options)
   },
 

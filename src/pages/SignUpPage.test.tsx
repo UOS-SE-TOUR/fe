@@ -479,13 +479,13 @@ describe('SignUpPage', () => {
     expect(address).toHaveValue('서울시 동대문구 서울시립대로 163')
   })
 
-  it('검색 팝업에서 직접 입력하기를 누르면 팝업을 닫고 주소 칸을 열어, 친 주소로 가입할 수 있다', async () => {
+  it('검색 팝업에서 주소 직접 입력하기를 누르면 팝업을 닫고 주소 칸을 열어, 친 주소로 가입할 수 있다', async () => {
     fetchMock.mockResolvedValue(jsonResponse(201, { memberId: 7 }))
     renderAt('/signup')
     await fillForm({ address: null })
 
     await openAddressSearch()
-    await user.click(screen.getByRole('button', { name: '검색이 안 되면 주소를 직접 입력하기' }))
+    await user.click(screen.getByRole('button', { name: '주소 직접 입력하기' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     const address = screen.getByLabelText('주소')

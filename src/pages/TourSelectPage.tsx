@@ -430,8 +430,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (!current || current.applyResult || current.quoting || pending || applying.current) return
     let apply: ApplyRequest
     if (current.unknownApply) {
-      const { idempotencyKey, request } = current.unknownApply
-      apply = { idempotencyKey, request }
+      apply = current.unknownApply
     } else {
       if (!current.quote || !current.priced) return
       const { summary } = current.quote
@@ -475,6 +474,10 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         await askLevelAgain(error.message, apply.request.tourId, seq)
       } else if (hasStatus(error, 409)) {
         showTourList(error.message)
+      } else if (hasStatus(error, 404)) {
+        // 상품이 없어져 신청은 되지 않았다(결과 확인이어도 서버는 같은 신청 키의 신청부터 찾는다). 목록을 다시 불러온다
+        showError(error)
+        showTourList(null)
       } else {
         // 결과 확인이 나가지 못했거나 거부됐으면 앞 신청의 결과는 아직 모른다. 들고 있던 신청 키는 그대로 둔다
         showError(error)

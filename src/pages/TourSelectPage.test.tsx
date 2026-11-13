@@ -748,6 +748,21 @@ describe('신청', () => {
     await waitUntilLeaveAllowed()
   })
 
+  it('404면(상품이 없어짐) 알리고 상품 목록을 다시 불러온다', async () => {
+    const user = renderPage()
+    await priced(user)
+
+    replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    replyOnce(TOURS, jsonResponse(200, golfTours.slice(1)))
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+
+    expect(await screen.findByRole('button', { name: /1\/3 출발 3일/ })).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(2)
+    await waitUntilLeaveAllowed()
+  })
+
   it('신청하면 신청 인원을 더한 남은 자리를 다시 불러와 보인다', async () => {
     const user = renderPage()
     await priced(user)
@@ -959,6 +974,21 @@ describe('신청 결과를 모를 때', () => {
 
     expect(await screen.findByText(CLOSED)).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(2)
+  })
+
+  it('결과 확인이 404면(상품이 없어져 신청이 되지 않음) 알리고 상품 목록을 다시 불러온다', async () => {
+    const user = renderPage()
+    await applyUnknown(user)
+
+    replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    replyOnce(TOURS, jsonResponse(200, golfTours.slice(1)))
+    await user.click(screen.getByRole('button', { name: '결과 확인' }))
+
+    expect(await screen.findByRole('button', { name: /1\/3 출발 3일/ })).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(screen.queryByRole('button', { name: /12\/20 출발 5일/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '결과 확인' })).not.toBeInTheDocument()
     expect(countOf(TOURS)).toBe(2)
   })

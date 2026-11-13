@@ -59,6 +59,8 @@ function choose(data: Partial<PostcodeData>) {
     zonecode: '02504',
     roadAddress: '서울 동대문구 서울시립대로 163',
     jibunAddress: '서울 동대문구 전농동 90',
+    autoRoadAddress: '',
+    autoJibunAddress: '',
     userSelectedType: 'R',
     ...data,
   })
@@ -101,7 +103,7 @@ describe('AddressSearch.load', () => {
     expect(postcodeScripts()).toHaveLength(0)
   })
 
-  it('정한 시간 안에 받지 못하면 거절한다', async () => {
+  it('정한 시간 안에 받지 못하면 거절하고, 다시 부르면 받던 스크립트를 새로 붙이지 않고 기다린다', async () => {
     vi.useFakeTimers()
     const loading = module.AddressSearch.load()
     const rejected = expect(loading).rejects.toThrow()
@@ -109,9 +111,30 @@ describe('AddressSearch.load', () => {
     vi.advanceTimersByTime(module.POSTCODE_LOAD_TIMEOUT_MS - 1)
     expect(postcodeScripts()).toHaveLength(1)
     vi.advanceTimersByTime(1)
-
     await rejected
-    expect(postcodeScripts()).toHaveLength(0)
+
+    const retried = module.AddressSearch.load()
+    expect(postcodeScripts()).toHaveLength(1)
+    finishLoading(postcodeScripts()[0])
+    await expect(retried).resolves.toBeUndefined()
+  })
+
+  it('시간이 지난 뒤 받던 스크립트가 실패하면, 다음에 부를 때 새로 붙인다', async () => {
+    vi.useFakeTimers()
+    const loading = module.AddressSearch.load()
+    const rejected = expect(loading).rejects.toThrow()
+    vi.advanceTimersByTime(module.POSTCODE_LOAD_TIMEOUT_MS)
+    await rejected
+
+    const late = postcodeScripts()[0]
+    late.dispatchEvent(new Event('error'))
+    expect(late.isConnected).toBe(false)
+
+    const retried = module.AddressSearch.load()
+    expect(postcodeScripts()).toHaveLength(1)
+    expect(postcodeScripts()[0]).not.toBe(late)
+    finishLoading(postcodeScripts()[0])
+    await expect(retried).resolves.toBeUndefined()
   })
 })
 
@@ -147,7 +170,19 @@ describe('AddressSearch.embed', () => {
     expect(onselect).toHaveBeenCalledWith('(02504) 서울 동대문구 전농동 90')
   })
 
-  it('고른 종류의 주소가 비었으면 다른 종류의 주소를 준다', async () => {
+  it('고른 종류의 주소가 비었으면 같은 종류의 auto 주소를 준다', async () => {
+    const search = await loadedSearch()
+    const onselect = vi.fn()
+    search.embed(document.createElement('div'), onselect)
+
+    choose({ userSelectedType: 'J', jibunAddress: '', autoJibunAddress: '서울 동대문구 전농동 90-1' })
+    choose({ userSelectedType: 'R', roadAddress: '', autoRoadAddress: '서울 동대문구 서울시립대로 165' })
+
+    expect(onselect).toHaveBeenNthCalledWith(1, '(02504) 서울 동대문구 전농동 90-1')
+    expect(onselect).toHaveBeenNthCalledWith(2, '(02504) 서울 동대문구 서울시립대로 165')
+  })
+
+  it('고른 종류의 주소가 auto 칸까지 비었으면 다른 종류의 주소를 준다', async () => {
     const search = await loadedSearch()
     const onselect = vi.fn()
     search.embed(document.createElement('div'), onselect)

@@ -432,6 +432,22 @@ describe('SignUpPage', () => {
     expect(phone).toHaveFocus()
   })
 
+  it('다시 눌러 또 불러오지 못하면, 불러오는 동안 비운 알림 자리에 문구를 다시 넣는다', async () => {
+    vi.mocked(AddressSearch.load).mockRejectedValueOnce(new Error('offline'))
+    renderAt('/signup')
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+    await expectAddressSearchFailed()
+
+    let failLoading: () => void = () => {}
+    vi.mocked(AddressSearch.load).mockReturnValueOnce(new Promise((_, reject) => (failLoading = () => reject(new Error('offline')))))
+    await user.click(screen.getByRole('button', { name: '주소 검색' }))
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(screen.getByLabelText('주소')).not.toHaveAttribute('readonly')
+
+    act(() => failLoading())
+    await expectAddressSearchFailed()
+  })
+
   it('불러오지 못한 뒤 다시 눌러 불러오면 알림을 지우고 검색 팝업을 연다', async () => {
     vi.mocked(AddressSearch.load).mockRejectedValueOnce(new Error('offline'))
     renderAt('/signup')

@@ -53,6 +53,8 @@ export function SignUpPage() {
   const [submitting, setSubmitting] = useState(false)
   const [addressSearchLoading, setAddressSearchLoading] = useState(false)
   const [addressSearchOpen, setAddressSearchOpen] = useState(false)
+  // 열 때마다 검색 자리를 새로 만든다. 닫히는 중에 다시 열어 남은 자리를 그대로 쓰면, 주소를 고르며 비워진 자리라 빈 팝업이 된다
+  const [addressSearchCount, setAddressSearchCount] = useState(0)
   const [addressSearchFailed, setAddressSearchFailed] = useState(false)
   // 우편번호 서비스를 불러오지 못하면 주소를 직접 입력하게 연다. 다시 불러와도 검색에서 주소를 고르기 전까지는 연 채로 둔다
   const [addressByHand, setAddressByHand] = useState(false)
@@ -101,6 +103,8 @@ export function SignUpPage() {
 
   async function openAddressSearch() {
     setAddressSearchLoading(true)
+    // 다시 실패해도 화면 낭독기가 읽게, 불러오는 동안은 실패 문구를 비운다
+    setAddressSearchFailed(false)
     try {
       await AddressSearch.load()
     } catch {
@@ -113,8 +117,8 @@ export function SignUpPage() {
     } finally {
       setAddressSearchLoading(false)
     }
-    setAddressSearchFailed(false)
     addressSelected.current = false
+    setAddressSearchCount((count) => count + 1)
     setAddressSearchOpen(true)
   }
 
@@ -332,7 +336,7 @@ export function SignUpPage() {
               </Button>
             </DialogClose>
           </DialogHeader>
-          <div ref={showAddressSearch} className="-mx-4 h-[clamp(400px,calc(100svh-10rem),500px)] sm:mx-0" />
+          <div key={addressSearchCount} ref={showAddressSearch} className="-mx-4 h-[clamp(400px,calc(100svh-10rem),500px)] sm:mx-0" />
         </DialogContent>
       </Dialog>
     </main>

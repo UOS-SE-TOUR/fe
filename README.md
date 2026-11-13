@@ -2,6 +2,7 @@
 
 미스터 월드 테마 여행 서비스(MWT)의 화면입니다. 소프트웨어공학(26-2) 팀 최백문 과제입니다.
 
+- 운영 화면: https://uos-mwt.vercel.app — 운영 서버에 붙어 있어서, 가입·신청한 데이터가 운영 DB에 남습니다(아래 "서버 연결"의 배포)
 - 서버: [UOS-SE-TOUR/be](https://github.com/UOS-SE-TOUR/be) — API 문서는 운영 서버의 [Swagger](https://uos-mwt.duckdns.org/api/swagger-ui.html)
 - 설계·분석 산출물: [UOS-SE-TOUR/docs](https://github.com/UOS-SE-TOUR/docs) — 화면 클래스는 설계산출물 3장, 서버 API 표는 4.9
 
@@ -43,9 +44,9 @@ Chrome에서 http://localhost:5173 으로 엽니다. 로그인 쿠키는 HTTPS�
   API_PROXY_TARGET=https://uos-mwt.duckdns.org
   ```
 
-- **배포:** Vercel에 올리면 `vercel.json`이 `/api` 요청을 운영 서버로 넘기고, `/tours` 같은 화면 주소에서 새로고침해도 `index.html`을 돌려줍니다(빌드 파일이 든 `/assets/`만 빼고). 두 규칙의 순서는 바꾸지 않습니다. Node 버전은 `package.json`의 `engines`를 따릅니다.
+- **배포:** 운영 화면은 Vercel 프로젝트 `uos-mwt`에 올라가 있고, 주소는 https://uos-mwt.vercel.app 입니다. `main`에 머지하면 Vercel이 운영 화면을 새로 배포합니다. `vercel.json`이 `/api` 요청을 운영 서버로 넘기고, `/tours` 같은 화면 주소에서 새로고침해도 `index.html`을 돌려줍니다(빌드 파일이 든 `/assets/`만 빼고). 두 규칙의 순서는 바꾸지 않습니다. Node 버전은 `package.json`의 `engines`를 따릅니다.
 
-  PR마다 생기는 프리뷰 배포도 같은 규칙으로 운영 서버에 붙습니다. 프리뷰에서도 가입·신청은 시험하지 않습니다.
+  PR마다 생기는 프리뷰 배포도 같은 규칙으로 운영 서버에 붙습니다. 운영 화면과 프리뷰에서는 가입·신청을 시험하지 않습니다 — 데이터가 운영 DB에 남고, 신청하면 실제 확정 문자가 나갈 수 있습니다.
 
 서버 쪽 규칙(오류 응답 `{"message": "…"}`, 로그인과 권한)은 be README의 [화면과 연결](https://github.com/UOS-SE-TOUR/be#화면과-연결)·[오류 응답](https://github.com/UOS-SE-TOUR/be#오류-응답)·[로그인과 권한](https://github.com/UOS-SE-TOUR/be#로그인과-권한)에 있습니다.
 

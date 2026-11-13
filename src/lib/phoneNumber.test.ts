@@ -153,10 +153,12 @@ describe('editPhoneNumber', () => {
       value: '010123456789',
       caret: 1,
     })
-    expect(editPhoneNumber('010123456789', '01012345678', 11, 'deleteContentBackward', { start: 12, end: 12 })).toEqual({
-      value: '010-1234-5678',
-      caret: 13,
-    })
+    expect(editPhoneNumber('010123456789', '01012345678', 11, 'deleteContentBackward', { start: 12, end: 12 })).toEqual(
+      {
+        value: '010-1234-5678',
+        caret: 13,
+      },
+    )
   })
 
   it('바꿔서 01로 시작하는 11자리 넘는 번호가 되면 받지 않는다', () => {

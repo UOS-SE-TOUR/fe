@@ -22,6 +22,8 @@ Chrome에서 http://localhost:5173 으로 엽니다. 로그인 쿠키는 HTTPS�
 | --- | --- |
 | `npm run dev` | 개발 서버(고친 코드가 바로 반영됩니다) |
 | `npm run lint` | ESLint 검사 |
+| `npm run format` | Prettier로 코드 서식 맞추기(설정은 `.prettierrc`, 마크다운은 대상이 아닙니다) |
+| `npm run format:check` | 서식이 맞는지 검사만 하기(CI에서 돕니다) |
 | `npm test` | 테스트(Vitest) 한 번 실행 |
 | `npm run build` | 타입 검사 뒤 `dist/`에 배포용 파일 만들기 |
 | `npm run preview` | 만든 `dist/`를 띄워 보기 |

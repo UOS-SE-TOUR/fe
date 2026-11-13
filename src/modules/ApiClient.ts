@@ -3,7 +3,8 @@ import type { MemberType } from '@/lib/pages'
 
 // 504 문구는 서버 앞단 Nginx가 504에 주는 문구와 같다
 export const CONNECTION_FAILED_MESSAGE = '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'
-export const GATEWAY_TIMEOUT_MESSAGE = '서버 응답이 늦어 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
+export const GATEWAY_TIMEOUT_MESSAGE =
+  '서버 응답이 늦어 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
 export const UNKNOWN_RESULT_MESSAGE = '요청이 처리됐는지 알 수 없습니다. 결과를 확인한 뒤 다시 시도해 주세요.'
 const UNAUTHORIZED_MESSAGE = '로그인이 필요합니다.'
 export const FORBIDDEN_MESSAGE = '권한이 없습니다.'

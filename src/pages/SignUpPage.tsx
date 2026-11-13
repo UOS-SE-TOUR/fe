@@ -4,8 +4,23 @@ import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { memberTypeLabels } from '@/lib/labels'
@@ -113,7 +128,9 @@ export function SignUpPage() {
       setAddressByHand(true)
       // 기다리는 사이 다른 칸으로 옮겼으면 초점을 빼앗지 않는다
       const focused = document.activeElement
-      if (!focused || focused === document.body || focused === addressSearchButton.current) addressInput.current?.focus()
+      if (!focused || focused === document.body || focused === addressSearchButton.current) {
+        addressInput.current?.focus()
+      }
       return
     } finally {
       setAddressSearchLoading(false)
@@ -168,7 +185,10 @@ export function SignUpPage() {
     const request = { ...fields, address: joinAddress(fields.address, addressDetail) }
     try {
       // 직원 코드는 직원으로 가입할 때만 보낸다(고객이면 서버도 보지 않는다)
-      await ApiClient.post('/api/v1/members/signup', request.memberType === 'STAFF' ? { ...request, staffCode } : request)
+      await ApiClient.post(
+        '/api/v1/members/signup',
+        request.memberType === 'STAFF' ? { ...request, staffCode } : request,
+      )
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 400) setError(caught.message)
       else showError(caught)
@@ -283,7 +303,9 @@ export function SignUpPage() {
                   ref={phoneInput}
                   onChange={updatePhone}
                 />
-                <FieldDescription id="signup-phone-help">여행이 확정되면 이 휴대폰 번호로 문자를 보냅니다.</FieldDescription>
+                <FieldDescription id="signup-phone-help">
+                  여행이 확정되면 이 휴대폰 번호로 문자를 보냅니다.
+                </FieldDescription>
               </Field>
               <FieldSet>
                 <FieldLegend variant="label">회원 구분</FieldLegend>
@@ -314,7 +336,9 @@ export function SignUpPage() {
                     value={form.staffCode}
                     onChange={(event) => update('staffCode', event.target.value)}
                   />
-                  <FieldDescription id="signup-staff-code-help">회사에서 받은 직원 코드를 입력해 주세요.</FieldDescription>
+                  <FieldDescription id="signup-staff-code-help">
+                    회사에서 받은 직원 코드를 입력해 주세요.
+                  </FieldDescription>
                 </Field>
               )}
               {error && <FieldError>{error}</FieldError>}
@@ -341,7 +365,9 @@ export function SignUpPage() {
           <DialogHeader className="flex-row items-start justify-between gap-4">
             <div className="flex flex-col gap-2">
               <DialogTitle>주소 검색</DialogTitle>
-              <DialogDescription>도로명·건물명·지번으로 찾은 뒤, 나온 주소를 누르면 주소 칸에 들어갑니다.</DialogDescription>
+              <DialogDescription>
+                도로명·건물명·지번으로 찾은 뒤, 나온 주소를 누르면 주소 칸에 들어갑니다.
+              </DialogDescription>
               <p className="text-sm text-muted-foreground">
                 검색이 안 되나요?{' '}
                 <Button variant="link" className="h-auto p-0 font-normal" onClick={typeAddressByHand}>
@@ -355,7 +381,11 @@ export function SignUpPage() {
               </Button>
             </DialogClose>
           </DialogHeader>
-          <div key={addressSearchCount} ref={showAddressSearch} className="-mx-4 h-[clamp(400px,calc(100svh-11rem),500px)] sm:mx-0" />
+          <div
+            key={addressSearchCount}
+            ref={showAddressSearch}
+            className="-mx-4 h-[clamp(400px,calc(100svh-11rem),500px)] sm:mx-0"
+          />
         </DialogContent>
       </Dialog>
     </main>

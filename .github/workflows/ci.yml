@@ -22,7 +22,11 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      - id: install
+        run: npm ci
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      # 서식은 npm run format으로 바로 고쳐지니 맨 뒤에 두되, 앞 단계가 실패해도 결과가 함께 보이게 따로 돌린다
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run format:check

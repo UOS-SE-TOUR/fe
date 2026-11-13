@@ -164,7 +164,9 @@ describe('SignUpPage', () => {
   })
 
   it('연락처 칸이 받지 않은 입력으로는 실패 문구를 지우지 않는다', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(400, { message: '연락처는 휴대폰 번호로 입력해 주세요(예: 010-1234-5678).' }))
+    fetchMock.mockResolvedValue(
+      jsonResponse(400, { message: '연락처는 휴대폰 번호로 입력해 주세요(예: 010-1234-5678).' }),
+    )
     renderAt('/signup')
 
     await fillForm()
@@ -420,7 +422,9 @@ describe('SignUpPage', () => {
 
   it('불러오기를 기다리는 사이 다른 칸으로 옮겼으면, 실패해도 초점을 빼앗지 않는다', async () => {
     let failLoading: () => void = () => {}
-    vi.mocked(AddressSearch.load).mockReturnValue(new Promise((_, reject) => (failLoading = () => reject(new Error('timeout')))))
+    vi.mocked(AddressSearch.load).mockReturnValue(
+      new Promise((_, reject) => (failLoading = () => reject(new Error('timeout')))),
+    )
     renderAt('/signup')
 
     await user.click(screen.getByRole('button', { name: '주소 검색' }))
@@ -439,7 +443,9 @@ describe('SignUpPage', () => {
     await expectAddressSearchFailed()
 
     let failLoading: () => void = () => {}
-    vi.mocked(AddressSearch.load).mockReturnValueOnce(new Promise((_, reject) => (failLoading = () => reject(new Error('offline')))))
+    vi.mocked(AddressSearch.load).mockReturnValueOnce(
+      new Promise((_, reject) => (failLoading = () => reject(new Error('offline')))),
+    )
     await user.click(screen.getByRole('button', { name: '주소 검색' }))
     expect(screen.getByRole('status')).toBeEmptyDOMElement()
     expect(screen.getByLabelText('주소')).not.toHaveAttribute('readonly')

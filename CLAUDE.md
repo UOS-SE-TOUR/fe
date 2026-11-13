@@ -32,7 +32,7 @@
 
 - 실행: `npm ci` → `npm run dev` → Chrome에서 `http://localhost:5173`.
 - AI 기본 게이트: 코드·설정을 고쳤으면 `npm run format:check && npm run lint && npm test && npm run build`(빌드에 타입 검사가 들어 있다), `.claude/skills/`·`.gitignore`를 고쳤으면 `bash .claude/skills/issue/tests/run.sh`(스킬 테스트가 `.gitignore`도 본다).
-- 운영 서버에 붙인 화면(`API_PROXY_TARGET`을 바꾼 로컬, Vercel 프리뷰·운영)에서는 데이터를 남기는 일(가입·신청·상품 등록·창고 추가)을 시험하지 않는다 — 운영 DB에 남고 실제 문자가 나갈 수 있다(README "운영 서버에 붙인 화면에서 지킬 것").
+- 운영 서버에 붙인 화면(`API_PROXY_TARGET`을 바꾼 로컬, Vercel 프리뷰·운영)에서는 README "운영 서버에 붙인 화면에서 지킬 것"을 따른다 — 데이터를 남기는 일은 시험하지 않고(운영 DB에 남고 실제 문자가 나갈 수 있다), 음성으로 고르기는 음성 쪽을 고쳤을 때만 확인한다.
 ## Git / 협업 규칙
 
 - `main` 직접 push 금지. 흐름: **이슈 먼저** → 최신 `main`에서 `<타입>/<기능>` 브랜치 → PR 본문 첫 줄에 `Closes #<이슈번호>`.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { Link } from 'react-router'
 import { toast } from 'sonner'
+import { MenuLink } from '@/components/MenuLink'
 import { OptionPanel } from '@/components/OptionPanel'
 import { PriceSummary } from '@/components/PriceSummary'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -501,15 +501,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">여행 상품 선택</h1>
         {/* 신청하는 동안 떠나면 결과를 못 보고 다시 신청할 수 있어, 화면 안의 "다른 상품 고르기"처럼 막는다 */}
-        {applyBusy ? (
-          <Button variant="outline" disabled>
-            고객 메뉴
-          </Button>
-        ) : (
-          <Button variant="outline" asChild>
-            <Link to={pagePaths.CustomerMainPage}>고객 메뉴</Link>
-          </Button>
-        )}
+        <MenuLink to={pagePaths.CustomerMainPage} label="고객 메뉴" disabled={applyBusy} />
       </header>
 
       {VoiceInput && <VoiceInput applySelection={applySelection} />}

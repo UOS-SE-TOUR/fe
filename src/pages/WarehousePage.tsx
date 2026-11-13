@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
+import { MenuLink } from '@/components/MenuLink'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -165,15 +165,7 @@ export function WarehousePage() {
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">창고</h1>
-        {adding ? (
-          <Button variant="outline" disabled>
-            직원 메뉴
-          </Button>
-        ) : (
-          <Button variant="outline" asChild>
-            <Link to={pagePaths.StaffMainPage}>직원 메뉴</Link>
-          </Button>
-        )}
+        <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={adding} />
       </header>
 
       <section className="flex flex-col gap-4" aria-labelledby="add-item-heading">

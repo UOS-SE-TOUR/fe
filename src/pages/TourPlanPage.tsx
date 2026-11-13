@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { Link } from 'react-router'
+import { MenuLink } from '@/components/MenuLink'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
@@ -317,15 +317,7 @@ export function TourPlanPage() {
     <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">상품 기획</h1>
-        {submitting ? (
-          <Button variant="outline" disabled>
-            직원 메뉴
-          </Button>
-        ) : (
-          <Button variant="outline" asChild>
-            <Link to={pagePaths.StaffMainPage}>직원 메뉴</Link>
-          </Button>
-        )}
+        <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={submitting} />
       </header>
 
       {registered ? (

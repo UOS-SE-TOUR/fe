@@ -11,6 +11,10 @@ export function useLogOut() {
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
 
+  function showLoginPage() {
+    navigate(pagePaths.LoginPage, { replace: true })
+  }
+
   async function logOut() {
     setLoggingOut(true)
     try {
@@ -22,7 +26,7 @@ export function useLogOut() {
     }
     clearFromLogin()
     AuthStore.clear()
-    navigate(pagePaths.LoginPage, { replace: true })
+    showLoginPage()
   }
 
   return { logOut, loggingOut }

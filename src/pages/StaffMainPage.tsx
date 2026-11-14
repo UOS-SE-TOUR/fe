@@ -5,7 +5,6 @@ import { useLogOut } from '@/lib/logOut'
 import { pagePaths } from '@/lib/pages'
 import { useAuthState } from '@/modules/AuthStore'
 
-// 설계의 requestPlanTour·requestAddItem은 상품 기획·창고 화면으로 가는 링크다
 const menus = [
   { to: pagePaths.TourPlanPage, title: '상품 기획', description: '새 여행 상품을 등록합니다.' },
   { to: pagePaths.WarehousePage, title: '창고', description: '창고 물품을 보고 수량을 더합니다.' },

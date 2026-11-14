@@ -243,6 +243,23 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (detailRef.current) writeDetail({ ...detailRef.current, ...patch })
   }
 
+  // 받은 상품 목록을 화면 상태에 넣는다. 상품 목록 화면으로 돌아가는 것은 아래 showTourList다
+  function showTours(list: TourSummary[]) {
+    setTours({ status: 'loaded', list })
+  }
+
+  function showLevels(levels: TourLevelsResponse) {
+    updateDetail({ levels })
+  }
+
+  function showApplyResult(result: ApplyTourResponse) {
+    updateDetail({ applyResult: result, unknownApply: null, optionPanelOpen: false })
+  }
+
+  function requestCustomize() {
+    updateDetail({ optionPanelOpen: true, optionMessage: null })
+  }
+
   // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다.
   // quiet면 실패를 알리지 않는다(이미 다른 실패를 보이고 있을 때)
   async function loadTours(forTheme: Theme, seq: number, { quiet = false } = {}): Promise<TourSummary[] | null> {
@@ -250,7 +267,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     const latest = () => isCurrent(seq) && request === toursRequest.current
     try {
       const list = await getTours(forTheme)
-      if (latest()) setTours({ status: 'loaded', list })
+      if (latest()) showTours(list)
       return list
     } catch (error) {
       if (latest()) {
@@ -269,7 +286,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     setListMessage(next.message ?? null)
     setPending(null)
     if (next.list) {
-      setTours({ status: 'loaded', list: next.list })
+      showTours(next.list)
     } else {
       setTours({ status: 'loading' })
       void loadTours(next.theme, seq)
@@ -293,7 +310,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     setPending('levels')
     try {
       const levels = await getLevels(tourId)
-      if (isCurrent(seq)) updateDetail({ levels })
+      if (isCurrent(seq)) showLevels(levels)
     } catch (error) {
       if (!isCurrent(seq)) return
       showError(error)
@@ -469,7 +486,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (!isCurrent(seq)) return
     try {
       if (outcome.ok) {
-        updateDetail({ applyResult: outcome.result, unknownApply: null, optionPanelOpen: false })
+        showApplyResult(outcome.result)
         // 신청 인원을 더한 남은 자리를 보인다
         if (theme) void loadTours(theme, seq)
         return
@@ -532,7 +549,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         return { status: 'failed' }
       }
       if (!isCurrent(seq)) return { status: 'failed' }
-      updateDetail({ levels })
+      showLevels(levels)
       const check = checkSelection(levels, selection.level, String(selection.headcount))
       if (!('selection' in check)) {
         return { status: 'rejected', error: new ApiError(check.message ?? LEVEL_MESSAGE, 400) }
@@ -618,7 +635,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
           onChangeHeadcount={changeHeadcount}
           onQuoteNow={quoteNow}
           onConfirmPrice={() => updateDetail({ discountConfirmed: true })}
-          onOpenOptions={() => updateDetail({ optionPanelOpen: true, optionMessage: null })}
+          onOpenOptions={requestCustomize}
           onChangeOptions={changeOptions}
           onFinishOptions={() => updateDetail({ optionPanelOpen: false, optionMessage: null })}
           onApply={() => void applyTour()}

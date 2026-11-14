@@ -21,6 +21,10 @@ function Row({ label, value, strong = false }: { label: string; value: string; s
 
 // 할인은 서버가 계산한 값을 그대로 보여 준다. 확인할 때 서버를 다시 부르지 않는다
 export function PriceSummary({ quote, confirming, onConfirmPrice }: PriceSummaryProps) {
+  function confirmPrice() {
+    onConfirmPrice()
+  }
+
   if (confirming) {
     return (
       <Card>
@@ -35,7 +39,7 @@ export function PriceSummary({ quote, confirming, onConfirmPrice }: PriceSummary
           </dl>
         </CardContent>
         <CardFooter>
-          <Button onClick={onConfirmPrice}>확인</Button>
+          <Button onClick={confirmPrice}>확인</Button>
         </CardFooter>
       </Card>
     )

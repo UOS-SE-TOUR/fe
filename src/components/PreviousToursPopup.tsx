@@ -16,7 +16,7 @@ interface PreviousToursPopupProps {
   tours: PreviousTourResponse[]
 }
 
-// 설계 showPreviousTours(tours)는 받은 목록으로 그리는 것이다. 상품 이름의 날짜엔 연도가 없어 출발일을 따로 보인다
+// 상품 이름의 날짜엔 연도가 없어 출발일을 따로 보인다
 export function PreviousToursPopup({ tours }: PreviousToursPopupProps) {
   const [open, setOpen] = useState(true)
 

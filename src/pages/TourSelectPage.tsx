@@ -256,7 +256,6 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     updateDetail({ applyResult: result, unknownApply: null, optionPanelOpen: false })
   }
 
-  // 옵션 패널을 연다
   function requestCustomize() {
     updateDetail({ optionPanelOpen: true, optionMessage: null })
   }
@@ -295,8 +294,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     return seq
   }
 
-  // 상품 목록 화면으로 돌아가 목록을 새로 보여 준다(처음 받은 목록이면 방금 마감된 상품을 또 고를 수 있다).
-  // 받은 목록을 화면 상태에 넣기만 하는 것은 위 showTours다
+  // 상품 목록으로 돌아가 목록을 새로 보여 준다(처음 받은 목록이면 방금 마감된 상품을 또 고를 수 있다)
   function showTourList(message: string | null, list?: TourSummary[]) {
     if (theme) resetTo({ theme, detail: null, message, list })
   }

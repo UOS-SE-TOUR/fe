@@ -156,19 +156,11 @@ function quote(tourId: number, selection: PricedSelection, optionIds: number[]):
   return ApiClient.post<PriceQuote>('/api/v1/bookings/quote', request)
 }
 
-function TourList({
-  tours,
-  theme,
-  onSelect,
-}: {
-  tours: TourSummary[]
-  theme: Theme | null
-  onSelect(tourId: number): void
-}) {
+function TourList({ tours, theme, onSelect }: { tours: TourSummary[]; theme: Theme; onSelect(tourId: number): void }) {
   if (tours.length === 0) {
     return <p className="text-sm text-muted-foreground">이 테마에는 지금 신청할 수 있는 상품이 없습니다.</p>
   }
-  const look = theme ? themeLooks[theme] : null
+  const look = themeLooks[theme]
   return (
     <ul className="space-y-3">
       {tours.map((tour) => (
@@ -179,13 +171,9 @@ function TourList({
             disabled={!canApply(tour)}
             onClick={() => onSelect(tour.tourId)}
           >
-            {look && (
-              <span
-                className={cn('hidden size-11 shrink-0 items-center justify-center rounded-full sm:flex', look.tint)}
-              >
-                <look.icon className="size-5" />
-              </span>
-            )}
+            <span className={cn('hidden size-11 shrink-0 items-center justify-center rounded-full sm:flex', look.tint)}>
+              <look.icon className="size-5" />
+            </span>
             <span className="min-w-0 flex-1 space-y-1">
               <span className="block text-base font-semibold">{tour.title}</span>
               <span className="block text-muted-foreground">{tourSummaryLine(tour)}</span>
@@ -649,7 +637,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
               </Button>
             </div>
           )}
-          {tourList && <TourList tours={tourList} theme={theme} onSelect={(tourId) => void selectTour(tourId)} />}
+          {tourList && theme && (
+            <TourList tours={tourList} theme={theme} onSelect={(tourId) => void selectTour(tourId)} />
+          )}
         </section>
       )}
 
@@ -747,7 +737,7 @@ function TourDetail(props: TourDetailProps) {
                   {levels.levels.map((item) => (
                     <div
                       key={item.level}
-                      className="relative flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
+                      className="relative flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors hover:border-primary/40 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
                     >
                       <RadioGroupItem id={`level-${item.level}`} value={item.level} className="mt-0.5" />
                       {/* 칸의 여백을 눌러도 골라지게 Label이 칸 전체를 덮는다 */}

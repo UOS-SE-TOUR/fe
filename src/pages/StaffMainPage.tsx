@@ -18,9 +18,9 @@ export function StaffMainPage() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-start justify-between gap-4 rounded-2xl bg-primary p-6 text-primary-foreground shadow-sm sm:p-8">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">직원 메뉴</h1>
-          {member && <p className="mt-1 text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
+          {member && <p className="mt-1 wrap-anywhere text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
         </div>
         <Button variant="secondary" onClick={() => void logOut()} disabled={loggingOut}>
           로그아웃

@@ -166,10 +166,7 @@ export function WarehousePage() {
         <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={adding} />
       </header>
 
-      <section
-        className="flex flex-col gap-4 rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10"
-        aria-labelledby="add-item-heading"
-      >
+      <section className="panel flex flex-col gap-4" aria-labelledby="add-item-heading">
         <h2 id="add-item-heading" className="text-lg font-semibold">
           물품 추가
         </h2>
@@ -235,10 +232,7 @@ export function WarehousePage() {
         </p>
       </section>
 
-      <section
-        className="flex flex-col gap-4 rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10"
-        aria-labelledby="items-heading"
-      >
+      <section className="panel flex flex-col gap-4" aria-labelledby="items-heading">
         <h2 id="items-heading" className="text-lg font-semibold">
           물품 목록
         </h2>

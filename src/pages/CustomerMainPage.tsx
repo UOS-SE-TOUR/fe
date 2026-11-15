@@ -70,11 +70,13 @@ export function CustomerMainPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      {/* 인사말이 두 줄이 되거나 좁은 화면에서 폭이 넓어져도 그림의 산과 겹치지 않게 띠 높이를 잡는다 */}
-      <header className="hero-scene flex min-h-[max(14rem,40vw)] items-start justify-between gap-4 overflow-hidden rounded-2xl bg-bottom p-6 text-primary-foreground shadow-sm sm:min-h-64 sm:p-8">
-        <div>
+      {/* 글자가 그림의 왼쪽 위 하늘에만 놓이게 한다: 글자 칸은 폭 13rem·인사말 두 줄까지, 띠는 그 아래로 산이 오는 높이 */}
+      <header className="hero-scene flex min-h-[max(14rem,40vw)] items-start justify-between gap-4 rounded-2xl bg-bottom p-6 text-primary-foreground shadow-sm sm:min-h-72 sm:p-8">
+        <div className="max-w-52 min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">고객 메뉴</h1>
-          {member && <p className="mt-1 text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
+          {member && (
+            <p className="mt-1 line-clamp-2 wrap-anywhere text-primary-foreground/90">{member.name}님, 안녕하세요.</p>
+          )}
         </div>
         <Button variant="secondary" onClick={() => void logOut()} disabled={loggingOut}>
           로그아웃

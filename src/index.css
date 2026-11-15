@@ -147,3 +147,8 @@
   background-image: linear-gradient(to bottom, var(--hero-shade), transparent 70%), url('./assets/hero-landscape.svg');
   background-size: cover;
 }
+
+/* 상품 기획·창고의 폼과 목록을 담는 흰 칸. shadcn Card와 같은 테두리·그림자에 글자 크기는 그대로 둔다 */
+@utility panel {
+  @apply rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10;
+}

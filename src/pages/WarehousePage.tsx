@@ -61,10 +61,6 @@ export function WarehousePage() {
   const loadSeq = useRef(0)
   useBlockLeaving(adding, '추가가 끝날 때까지 이 화면에 있어 주세요.')
 
-  const showItems = useCallback((items: Item[]) => {
-    setItemsState({ status: 'loaded', items })
-  }, [])
-
   // 늦게 온 앞선 응답은 버린다(추가한 뒤 다시 읽은 목록을 덮지 않게)
   const loadItems = useCallback(() => {
     const seq = ++loadSeq.current
@@ -77,7 +73,7 @@ export function WarehousePage() {
           showError(new Error('창고 물품 목록 응답이 물품 배열이 아니다'))
           return
         }
-        showItems(items)
+        setItemsState({ status: 'loaded', items })
         setNeedsRecheck(false)
       },
       (error: unknown) => {
@@ -86,7 +82,7 @@ export function WarehousePage() {
         showError(error)
       },
     )
-  }, [showItems])
+  }, [])
 
   // 다시 읽는 동안 옛 수량을 지금 수량처럼 보이지 않게 표를 내린다
   function reload() {

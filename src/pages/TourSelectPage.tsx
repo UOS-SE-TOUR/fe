@@ -416,6 +416,20 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (detailRef.current) void selectLevel(detailRef.current)
   }
 
+  // 단골 할인 "확인" 단추는 PriceSummary 안에 있다
+  function confirmPrice() {
+    updateDetail({ discountConfirmed: true })
+  }
+
+  function requestCustomize() {
+    updateDetail({ optionPanelOpen: true, optionMessage: null })
+  }
+
+  // "옵션 고르기 끝" 단추는 OptionPanel 안에 있다
+  function finishCustomize() {
+    updateDetail({ optionPanelOpen: false, optionMessage: null })
+  }
+
   function changeOptions(optionIds: number[]) {
     const current = detailRef.current
     if (!current?.submitted || pending || current.quoting || current.unknownApply) return
@@ -617,10 +631,10 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
           onChangeLevel={changeLevel}
           onChangeHeadcount={changeHeadcount}
           onQuoteNow={quoteNow}
-          onConfirmPrice={() => updateDetail({ discountConfirmed: true })}
-          onOpenOptions={() => updateDetail({ optionPanelOpen: true, optionMessage: null })}
+          onConfirmPrice={confirmPrice}
+          onOpenOptions={requestCustomize}
           onChangeOptions={changeOptions}
-          onFinishOptions={() => updateDetail({ optionPanelOpen: false, optionMessage: null })}
+          onFinishOptions={finishCustomize}
           onApply={() => void applyTour()}
         />
       )}

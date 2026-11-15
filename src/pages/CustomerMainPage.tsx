@@ -70,7 +70,8 @@ export function CustomerMainPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      <header className="hero-scene flex min-h-48 items-start justify-between gap-4 overflow-hidden rounded-2xl p-6 text-primary-foreground shadow-sm sm:min-h-64 sm:p-8">
+      {/* 인사말이 두 줄이 되거나 좁은 화면에서 폭이 넓어져도 그림의 산과 겹치지 않게 띠 높이를 잡는다 */}
+      <header className="hero-scene flex min-h-[max(14rem,40vw)] items-start justify-between gap-4 overflow-hidden rounded-2xl bg-bottom p-6 text-primary-foreground shadow-sm sm:min-h-64 sm:p-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">고객 메뉴</h1>
           {member && <p className="mt-1 text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
@@ -97,10 +98,7 @@ export function CustomerMainPage() {
                 {themes.map((theme) => {
                   const look = themeLooks[theme.value]
                   return (
-                    <li
-                      key={theme.value}
-                      className="flex flex-col items-center gap-2 rounded-lg bg-muted p-3 text-center"
-                    >
+                    <li key={theme.value} className="flex flex-col items-center gap-2 text-center">
                       <span className={cn('flex size-10 items-center justify-center rounded-full', look.tint)}>
                         <look.icon className="size-5" />
                       </span>

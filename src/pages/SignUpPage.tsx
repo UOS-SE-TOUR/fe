@@ -204,7 +204,7 @@ export function SignUpPage() {
   }
 
   return (
-    <main className="hero-scene flex flex-1 items-center justify-center p-6">
+    <main className="hero-scene flex flex-1 items-center justify-center bg-top p-6">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
           <CardTitle>

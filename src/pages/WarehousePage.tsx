@@ -167,7 +167,7 @@ export function WarehousePage() {
       </header>
 
       <section
-        className="flex flex-col gap-4 rounded-xl border bg-card p-6 shadow-xs"
+        className="flex flex-col gap-4 rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10"
         aria-labelledby="add-item-heading"
       >
         <h2 id="add-item-heading" className="text-lg font-semibold">
@@ -235,7 +235,10 @@ export function WarehousePage() {
         </p>
       </section>
 
-      <section className="flex flex-col gap-4 rounded-xl border bg-card p-6 shadow-xs" aria-labelledby="items-heading">
+      <section
+        className="flex flex-col gap-4 rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10"
+        aria-labelledby="items-heading"
+      >
         <h2 id="items-heading" className="text-lg font-semibold">
           물품 목록
         </h2>

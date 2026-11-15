@@ -50,7 +50,7 @@ export function LoginPage() {
   const errorProps = error ? { 'aria-invalid': true, 'aria-describedby': 'login-error' } : {}
 
   return (
-    <main className="hero-scene flex flex-1 items-center justify-center p-6">
+    <main className="hero-scene flex flex-1 items-center justify-center bg-top p-6">
       <div className="grid w-full max-w-3xl items-center gap-10 lg:grid-cols-[1fr_auto]">
         <div className="hidden text-primary-foreground lg:block">
           <p className="text-4xl leading-tight font-bold tracking-tight">

@@ -335,7 +335,7 @@ export function TourPlanPage() {
         <form
           noValidate
           onSubmit={registerTour}
-          className="flex flex-col gap-8 rounded-xl border bg-card p-6 shadow-xs"
+          className="flex flex-col gap-8 rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10"
         >
           {/* 보내는 동안 고친 값은 등록되지 않으니 입력을 막는다 */}
           <fieldset disabled={submitting} className="min-w-0">

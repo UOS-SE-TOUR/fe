@@ -77,8 +77,8 @@
   --theme-parents: oklch(0.55 0.12 65);
   --theme-golf: oklch(0.5 0.12 150);
   --theme-trekking: oklch(0.5 0.09 200);
-  /* 풍경 그림 위쪽을 덮는 색. --primary와 같은 색에 투명도만 준다 */
-  --hero-shade: oklch(0.47 0.13 245 / 55%);
+  /* 풍경 그림 위쪽을 덮는 색 */
+  --hero-shade: color-mix(in oklab, var(--primary) 55%, transparent);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -141,9 +141,9 @@
   }
 }
 
-/* 로그인·가입 화면과 고객 첫 화면에 까는 풍경 그림. 위에 놓이는 흰 글자가 읽히게 위쪽을 덮는다 */
+/* 로그인·가입 화면과 고객 첫 화면에 까는 풍경 그림. 위에 놓이는 흰 글자가 읽히게 위쪽을 덮는다.
+   그림의 어느 쪽을 남길지는 쓰는 자리에서 bg-top(하늘)·bg-bottom(산과 바다)으로 정한다 */
 @utility hero-scene {
   background-image: linear-gradient(to bottom, var(--hero-shade), transparent 70%), url('./assets/hero-landscape.svg');
   background-size: cover;
-  background-position: center bottom;
 }

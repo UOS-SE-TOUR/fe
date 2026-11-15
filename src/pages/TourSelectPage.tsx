@@ -747,10 +747,14 @@ function TourDetail(props: TourDetailProps) {
                   {levels.levels.map((item) => (
                     <div
                       key={item.level}
-                      className="flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
+                      className="relative flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
                     >
                       <RadioGroupItem id={`level-${item.level}`} value={item.level} className="mt-0.5" />
-                      <Label htmlFor={`level-${item.level}`} className="flex flex-1 flex-col items-start gap-1">
+                      {/* 칸의 여백을 눌러도 골라지게 Label이 칸 전체를 덮는다 */}
+                      <Label
+                        htmlFor={`level-${item.level}`}
+                        className="flex flex-1 flex-col items-start gap-1 after:absolute after:inset-0"
+                      >
                         <span>
                           {item.name} · 1인 {formatWon(item.price)}
                         </span>

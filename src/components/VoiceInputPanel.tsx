@@ -320,7 +320,7 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
 
   return (
     <section aria-label="음성으로 고르기">
-      <Card className="border-primary/20 bg-secondary/60">
+      <Card className="bg-secondary/60 ring-primary/20">
         <CardHeader>
           <CardTitle className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">

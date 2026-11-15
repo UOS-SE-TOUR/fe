@@ -2,9 +2,9 @@
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#16467f" />
-      <stop offset="0.5" stop-color="#3f86c4" />
-      <stop offset="0.78" stop-color="#f3b98c" />
-      <stop offset="0.86" stop-color="#fbe0bd" />
+      <stop offset="0.62" stop-color="#2f6fb0" />
+      <stop offset="0.82" stop-color="#f3b98c" />
+      <stop offset="0.88" stop-color="#fbe0bd" />
     </linearGradient>
     <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3c8cc2" />
@@ -16,8 +16,8 @@
     </radialGradient>
   </defs>
   <rect width="1200" height="600" fill="url(#sky)" />
-  <circle cx="600" cy="400" r="190" fill="url(#glow)" />
-  <circle cx="600" cy="400" r="52" fill="#fff1cf" />
+  <circle cx="760" cy="392" r="160" fill="url(#glow)" />
+  <circle cx="760" cy="392" r="52" fill="#fff1cf" />
   <g fill="#ffffff" opacity="0.4">
     <path d="M640 190h150a26 26 0 0 0 0-52 30 30 0 0 0-22 9 44 44 0 0 0-84 6 28 28 0 0 0-44 37z" />
     <path d="M1030 330h120a21 21 0 0 0 0-42 24 24 0 0 0-18 7 35 35 0 0 0-67 5 22 22 0 0 0-35 30z" />
@@ -27,10 +27,10 @@
   <path d="M290 362 322 383 300 392 276 384 258 384Z M950 372 978 392 956 398 934 392 922 392Z" fill="#ffffff" opacity="0.7" />
   <rect y="496" width="1200" height="104" fill="url(#sea)" />
   <g stroke="#fff1cf" stroke-linecap="round" opacity="0.6">
-    <path d="M560 512h80" stroke-width="3" />
-    <path d="M540 528h120" stroke-width="3" />
-    <path d="M572 544h56" stroke-width="3" />
-    <path d="M550 562h100" stroke-width="2" />
+    <path d="M720 512h80" stroke-width="3" />
+    <path d="M700 528h120" stroke-width="3" />
+    <path d="M732 544h56" stroke-width="3" />
+    <path d="M710 562h100" stroke-width="2" />
   </g>
   <g>
     <path d="M318 538h64l-10 14h-44z" fill="#ffffff" />

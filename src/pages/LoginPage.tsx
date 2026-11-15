@@ -58,7 +58,7 @@ export function LoginPage() {
             <br />
             나만의 여행
           </p>
-          <p className="mt-4 text-primary-foreground/90">네 가지 테마 여행을 만나 보세요.</p>
+          <p className="mt-4">네 가지 테마 여행을 만나 보세요.</p>
           <ul className="mt-6 flex max-w-sm flex-wrap gap-2">
             {themes.map((theme) => {
               const Icon = themeLooks[theme.value].icon

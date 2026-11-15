@@ -6,7 +6,7 @@ interface ThemeLook {
   tint: string
 }
 
-// 테마마다 화면에 쓰는 그림과 색. 색 값은 src/index.css의 --theme-* 변수다
+// 테마마다 화면에 쓰는 아이콘과 색. 색 값은 src/index.css의 --theme-* 변수다
 export const themeLooks: Record<Theme, ThemeLook> = {
   HONEYMOON: { icon: Sparkles, tint: 'bg-theme-honeymoon/10 text-theme-honeymoon' },
   PARENTS: { icon: HeartHandshake, tint: 'bg-theme-parents/10 text-theme-parents' },
@@ -14,7 +14,7 @@ export const themeLooks: Record<Theme, ThemeLook> = {
   TREKKING: { icon: MountainSnow, tint: 'bg-theme-trekking/10 text-theme-trekking' },
 }
 
-// 서버가 준 테마 값의 그림과 색. 모르는 값이면 undefined
+// 서버가 준 테마 값의 아이콘과 색. 모르는 값이면 undefined
 export function themeLookOf(value: string): ThemeLook | undefined {
   return Object.hasOwn(themeLooks, value) ? themeLooks[value as Theme] : undefined
 }

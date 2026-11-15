@@ -96,7 +96,8 @@ export function CustomerMainPage() {
               <CardDescription>테마 여행 상품을 고르고 신청합니다.</CardDescription>
             </CardHeader>
             <CardContent>
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {/* 링크 이름은 제목과 설명으로 충분해서, 꾸밈으로 보이는 테마 넷은 화면 읽기 프로그램에 읽히지 않게 한다 */}
+              <ul aria-hidden="true" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {themes.map((theme) => {
                   const look = themeLooks[theme.value]
                   return (
@@ -104,7 +105,7 @@ export function CustomerMainPage() {
                       <span className={cn('flex size-10 items-center justify-center rounded-full', look.tint)}>
                         <look.icon className="size-5" />
                       </span>
-                      <span className="text-sm font-medium">{theme.label}</span>
+                      <span className="text-sm font-medium break-keep">{theme.label}</span>
                     </li>
                   )
                 })}

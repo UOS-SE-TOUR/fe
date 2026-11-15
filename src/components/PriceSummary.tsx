@@ -12,9 +12,9 @@ interface PriceSummaryProps {
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className={strong ? 'text-base font-semibold' : undefined}>{value}</dd>
+    <div className={strong ? 'flex items-baseline justify-between gap-4 border-t pt-3' : 'flex justify-between gap-4'}>
+      <dt className={strong ? 'font-medium' : 'text-muted-foreground'}>{label}</dt>
+      <dd className={strong ? 'text-xl font-semibold text-primary' : 'text-right'}>{value}</dd>
     </div>
   )
 }

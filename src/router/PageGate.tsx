@@ -6,7 +6,7 @@ import { AuthStore, useAuthState } from '@/modules/AuthStore'
 
 function Restoring() {
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
+    <main className="flex flex-1 items-center justify-center p-6">
       <p className="text-sm text-muted-foreground">로그인 상태를 확인하는 중입니다.</p>
     </main>
   )

@@ -204,8 +204,8 @@ export function SignUpPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
+    <main className="hero-scene flex flex-1 items-center justify-center p-6">
+      <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
           <CardTitle>
             <h1 className="text-xl font-semibold">회원가입</h1>

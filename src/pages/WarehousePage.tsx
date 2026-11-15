@@ -7,7 +7,9 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { themeLabel, themes, type Theme } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
+import { themeLookOf } from '@/lib/themeLook'
 import { useBlockLeaving } from '@/lib/useBlockLeaving'
+import { cn } from '@/lib/utils'
 import { ApiClient, ApiError, showError, unknownResult } from '@/modules/ApiClient'
 
 const ITEMS_PATH = '/api/v1/staff/items'
@@ -158,13 +160,16 @@ export function WarehousePage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">창고</h1>
+        <h1 className="text-2xl font-bold tracking-tight">창고</h1>
         <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={adding} />
       </header>
 
-      <section className="flex flex-col gap-4" aria-labelledby="add-item-heading">
+      <section
+        className="flex flex-col gap-4 rounded-xl border bg-card p-6 shadow-xs"
+        aria-labelledby="add-item-heading"
+      >
         <h2 id="add-item-heading" className="text-lg font-semibold">
           물품 추가
         </h2>
@@ -230,7 +235,7 @@ export function WarehousePage() {
         </p>
       </section>
 
-      <section className="flex flex-col gap-4" aria-labelledby="items-heading">
+      <section className="flex flex-col gap-4 rounded-xl border bg-card p-6 shadow-xs" aria-labelledby="items-heading">
         <h2 id="items-heading" className="text-lg font-semibold">
           물품 목록
         </h2>
@@ -258,13 +263,27 @@ export function WarehousePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {itemsState.items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="whitespace-normal">{item.name}</TableCell>
-                  <TableCell>{themeLabel(item.theme)}</TableCell>
-                  <TableCell className="text-right">{formatCount(item.quantity)}개</TableCell>
-                </TableRow>
-              ))}
+              {itemsState.items.map((item) => {
+                const look = themeLookOf(item.theme)
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-normal">{item.name}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-2">
+                        {look && (
+                          <span
+                            className={cn('hidden size-6 items-center justify-center rounded-full sm:flex', look.tint)}
+                          >
+                            <look.icon className="size-3.5" />
+                          </span>
+                        )}
+                        {themeLabel(item.theme)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCount(item.quantity)}개</TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         )}

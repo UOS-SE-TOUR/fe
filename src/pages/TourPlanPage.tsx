@@ -310,9 +310,9 @@ export function TourPlanPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">상품 기획</h1>
+        <h1 className="text-2xl font-bold tracking-tight">상품 기획</h1>
         <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={submitting} />
       </header>
 
@@ -332,7 +332,11 @@ export function TourPlanPage() {
           </CardFooter>
         </Card>
       ) : (
-        <form noValidate onSubmit={registerTour} className="flex flex-col gap-8">
+        <form
+          noValidate
+          onSubmit={registerTour}
+          className="flex flex-col gap-8 rounded-xl border bg-card p-6 shadow-xs"
+        >
           {/* 보내는 동안 고친 값은 등록되지 않으니 입력을 막는다 */}
           <fieldset disabled={submitting} className="min-w-0">
             <FieldGroup>

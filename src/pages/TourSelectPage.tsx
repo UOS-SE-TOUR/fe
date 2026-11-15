@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
+import { ChevronLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { MenuLink } from '@/components/MenuLink'
 import { OptionPanel } from '@/components/OptionPanel'
@@ -13,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { formatDate, formatWon } from '@/lib/format'
 import { themeLabel, themes, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
+import { themeLooks } from '@/lib/themeLook'
 import { useBlockLeaving } from '@/lib/useBlockLeaving'
 import {
   canApply,
@@ -28,6 +30,7 @@ import {
   type ToursState,
   type TourSummary,
 } from '@/lib/tours'
+import { cn } from '@/lib/utils'
 import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 
 // 음성(VoiceInputPanel)이 채운 내용
@@ -153,22 +156,38 @@ function quote(tourId: number, selection: PricedSelection, optionIds: number[]):
   return ApiClient.post<PriceQuote>('/api/v1/bookings/quote', request)
 }
 
-function TourList({ tours, onSelect }: { tours: TourSummary[]; onSelect(tourId: number): void }) {
+function TourList({
+  tours,
+  theme,
+  onSelect,
+}: {
+  tours: TourSummary[]
+  theme: Theme | null
+  onSelect(tourId: number): void
+}) {
   if (tours.length === 0) {
     return <p className="text-sm text-muted-foreground">이 테마에는 지금 신청할 수 있는 상품이 없습니다.</p>
   }
+  const look = theme ? themeLooks[theme] : null
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-3">
       {tours.map((tour) => (
         <li key={tour.tourId}>
           <Button
             variant="outline"
-            className="h-auto w-full justify-between gap-4 py-3 text-left whitespace-normal"
+            className="h-auto w-full justify-start gap-4 bg-card p-4 text-left whitespace-normal shadow-xs hover:border-primary/40 hover:bg-card hover:shadow-md"
             disabled={!canApply(tour)}
             onClick={() => onSelect(tour.tourId)}
           >
-            <span className="space-y-1">
-              <span className="block font-medium">{tour.title}</span>
+            {look && (
+              <span
+                className={cn('hidden size-11 shrink-0 items-center justify-center rounded-full sm:flex', look.tint)}
+              >
+                <look.icon className="size-5" />
+              </span>
+            )}
+            <span className="min-w-0 flex-1 space-y-1">
+              <span className="block text-base font-semibold">{tour.title}</span>
               <span className="block text-muted-foreground">{tourSummaryLine(tour)}</span>
             </span>
             <Badge variant={canApply(tour) ? 'secondary' : 'outline'}>{tourStatusLabel(tour.status)}</Badge>
@@ -575,27 +594,40 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   useBlockLeaving(applyBusy, '신청이 끝날 때까지 이 화면에 있어 주세요.')
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">여행 상품 선택</h1>
+        <h1 className="text-2xl font-bold tracking-tight">여행 상품 선택</h1>
         {/* 신청하는 동안 떠나면 결과를 못 보고 다시 신청할 수 있어, 화면 안의 "다른 상품 고르기"처럼 막는다 */}
         <MenuLink to={pagePaths.CustomerMainPage} label="고객 메뉴" disabled={applyBusy} />
       </header>
 
       {VoiceInput && <VoiceInput applySelection={applySelection} disabled={Boolean(detail?.unknownApply)} />}
 
-      <section aria-label="테마" className="flex flex-wrap gap-2">
-        {themes.map((item) => (
-          <Button
-            key={item.value}
-            variant={theme === item.value ? 'default' : 'outline'}
-            aria-pressed={theme === item.value}
-            disabled={applyBusy}
-            onClick={() => selectTheme(item.value)}
-          >
-            {item.label}
-          </Button>
-        ))}
+      <section aria-label="테마" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {themes.map((item) => {
+          const look = themeLooks[item.value]
+          const chosen = theme === item.value
+          return (
+            <Button
+              key={item.value}
+              variant={chosen ? 'default' : 'outline'}
+              aria-pressed={chosen}
+              disabled={applyBusy}
+              onClick={() => selectTheme(item.value)}
+              className={cn('h-auto flex-col gap-2 py-4 whitespace-normal', !chosen && 'bg-card shadow-xs')}
+            >
+              <span
+                className={cn(
+                  'flex size-10 items-center justify-center rounded-full',
+                  chosen ? 'bg-primary-foreground/20' : look.tint,
+                )}
+              >
+                <look.icon className="size-5" />
+              </span>
+              {item.label}
+            </Button>
+          )
+        })}
       </section>
 
       {!detail && (
@@ -617,7 +649,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
               </Button>
             </div>
           )}
-          {tourList && <TourList tours={tourList} onSelect={(tourId) => void selectTour(tourId)} />}
+          {tourList && <TourList tours={tourList} theme={theme} onSelect={(tourId) => void selectTour(tourId)} />}
         </section>
       )}
 
@@ -673,27 +705,36 @@ function TourDetail(props: TourDetailProps) {
   // 입력 검사 문구가 먼저고, 없으면 서버의 400 문구다
   const levelMessage = ('message' in check ? check.message : null) ?? detail.levelMessage
   const title = tour?.title ?? priceQuote?.summary.title ?? (theme ? themeLabel(theme) : '고른 상품')
+  const look = theme ? themeLooks[theme] : null
 
   return (
     <section aria-label="고른 상품" className="space-y-4">
-      <Button variant="ghost" onClick={props.onBack} disabled={pending === 'apply'}>
+      <Button variant="ghost" onClick={props.onBack} disabled={pending === 'apply'} className="-ml-2">
+        <ChevronLeft />
         다른 상품 고르기
       </Button>
 
       <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          {tour && (
-            <p className="text-sm text-muted-foreground">
-              {formatDate(tour.departureDate)} 출발 · {tour.duration}일
-            </p>
+        <CardHeader className="flex items-center gap-4">
+          {look && (
+            <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-full', look.tint)}>
+              <look.icon className="size-5" />
+            </span>
           )}
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-lg">{title}</CardTitle>
+            {tour && (
+              <p className="text-sm text-muted-foreground">
+                {formatDate(tour.departureDate)} 출발 · {tour.duration}일
+              </p>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {!levels && <p className="text-sm text-muted-foreground">투어 등급을 불러오는 중입니다.</p>}
           {levels && (
             <form className="space-y-4" onSubmit={(event) => event.preventDefault()} noValidate>
-              <p className="text-sm text-muted-foreground">
+              <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
                 모든 등급에 포함: {levels.service} · {levels.souvenir} · {levels.vehicle}
               </p>
               <fieldset className="space-y-2">
@@ -704,9 +745,12 @@ function TourDetail(props: TourDetailProps) {
                   disabled={locked}
                 >
                   {levels.levels.map((item) => (
-                    <div key={item.level} className="flex items-start gap-2">
+                    <div
+                      key={item.level}
+                      className="flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
+                    >
                       <RadioGroupItem id={`level-${item.level}`} value={item.level} className="mt-0.5" />
-                      <Label htmlFor={`level-${item.level}`} className="flex flex-col items-start gap-1">
+                      <Label htmlFor={`level-${item.level}`} className="flex flex-1 flex-col items-start gap-1">
                         <span>
                           {item.name} · 1인 {formatWon(item.price)}
                         </span>
@@ -807,7 +851,7 @@ function TourDetail(props: TourDetailProps) {
 
       {!unknownApply && detail.priced && priceQuote && !confirming && !applyResult && (
         <div className="space-y-2">
-          <Button onClick={props.onApply} disabled={busy || edited}>
+          <Button size="lg" className="w-full" onClick={props.onApply} disabled={busy || edited}>
             {pending === 'apply' ? '신청하는 중' : '신청하기'}
           </Button>
         </div>

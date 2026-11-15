@@ -416,7 +416,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (detailRef.current) void selectLevel(detailRef.current)
   }
 
-  // 단추는 PriceSummary 안에 있다
+  // 단골 할인 "확인" 단추는 PriceSummary 안에 있다
   function confirmPrice() {
     updateDetail({ discountConfirmed: true })
   }

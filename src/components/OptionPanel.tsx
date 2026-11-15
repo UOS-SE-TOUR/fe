@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -87,15 +87,11 @@ export function OptionPanel(props: OptionPanelProps) {
   // 불러오지 못했을 때 다시 불러오기를 누르면 올린다
   const [attempt, setAttempt] = useState(0)
 
-  const showOptions = useCallback((result: TourOptionsResponse) => {
-    setOptions(result)
-  }, [])
-
   useEffect(() => {
     let active = true
     ApiClient.get<TourOptionsResponse>(`/api/v1/tours/${tourId}/options?level=${level}`)
       .then((result) => {
-        if (active) showOptions(result)
+        if (active) setOptions(result)
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -105,7 +101,7 @@ export function OptionPanel(props: OptionPanelProps) {
     return () => {
       active = false
     }
-  }, [tourId, level, attempt, showOptions])
+  }, [tourId, level, attempt])
 
   function retry() {
     setOptions(undefined)
@@ -120,10 +116,6 @@ export function OptionPanel(props: OptionPanelProps) {
   function toggleExtra(optionId: number, checked: boolean) {
     const others = optionIds.filter((id) => id !== optionId)
     onChangeOptions(checked ? [...others, optionId] : others)
-  }
-
-  function finishCustomize() {
-    onFinish()
   }
 
   return (
@@ -206,7 +198,7 @@ export function OptionPanel(props: OptionPanelProps) {
               : `최종 가격 ${formatWon(price)}`}
         </p>
         {/* 가격 계산 중에 닫으면 그 결과의 문구(닫힌 패널 안)를 못 본다 */}
-        <Button variant="outline" onClick={finishCustomize} disabled={disabled}>
+        <Button variant="outline" onClick={onFinish} disabled={disabled}>
           옵션 고르기 끝
         </Button>
       </CardFooter>

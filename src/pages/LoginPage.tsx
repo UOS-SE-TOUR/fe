@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { clearFromLogin, markFromLogin } from '@/lib/fromLogin'
@@ -79,7 +79,6 @@ export function LoginPage() {
             <CardTitle>
               <h1 className="text-xl font-semibold">로그인</h1>
             </CardTitle>
-            <CardDescription>미스터 월드 테마 여행</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit}>

@@ -737,7 +737,7 @@ function TourDetail(props: TourDetailProps) {
                   {levels.levels.map((item) => (
                     <div
                       key={item.level}
-                      className="relative flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors hover:has-enabled:border-primary/40 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
+                      className="relative flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors hover:not-has-data-[state=checked]:has-enabled:border-primary/40 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-secondary"
                     >
                       <RadioGroupItem id={`level-${item.level}`} value={item.level} className="mt-0.5" />
                       {/* 칸의 여백을 눌러도 골라지게 Label이 칸 전체를 덮는다 */}

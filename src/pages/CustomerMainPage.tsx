@@ -70,17 +70,18 @@ export function CustomerMainPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
-      {/* 글자가 그림의 왼쪽 위 하늘에만 놓이게 한다: 글자 칸은 폭 13rem·인사말 두 줄까지, 띠는 그 아래로 산이 오는 높이 */}
-      <header className="hero-scene flex min-h-[max(14rem,40vw)] items-start justify-between gap-4 rounded-2xl bg-bottom p-6 text-primary-foreground shadow-sm sm:min-h-72 sm:p-8">
-        <div className="max-w-52 min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight">고객 메뉴</h1>
-          {member && (
-            <p className="mt-1 line-clamp-2 wrap-anywhere text-primary-foreground/90">{member.name}님, 안녕하세요.</p>
-          )}
+      {/* 글자는 강조색 머리에, 풍경 그림은 그 아래 칸에 둔다. 글자가 그림 위에 놓이지 않아 이름이 길어도 읽힌다 */}
+      <header className="rounded-2xl bg-primary text-primary-foreground shadow-sm">
+        <div className="flex items-start justify-between gap-4 p-6 pb-4 sm:p-8 sm:pb-5">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight">고객 메뉴</h1>
+            {member && <p className="mt-1 wrap-anywhere text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
+          </div>
+          <Button variant="secondary" onClick={() => void logOut()} disabled={loggingOut}>
+            로그아웃
+          </Button>
         </div>
-        <Button variant="secondary" onClick={() => void logOut()} disabled={loggingOut}>
-          로그아웃
-        </Button>
+        <div aria-hidden="true" className="hero-scene h-36 rounded-b-2xl bg-bottom sm:h-48" />
       </header>
       <nav className="grid gap-4">
         <Link

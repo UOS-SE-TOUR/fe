@@ -320,7 +320,7 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
 
   return (
     <section aria-label="음성으로 고르기">
-      <Card className="bg-secondary/60 ring-primary/20">
+      <Card className="ring-primary/30">
         <CardHeader>
           <CardTitle className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -514,13 +514,7 @@ function DraftForm({ draft, applying, disabled, ...props }: DraftFormProps) {
                 <Label htmlFor={`voice-tour-${tour.tourId}`} className="flex flex-col items-start gap-1">
                   <span className="flex items-center gap-2">
                     {tour.title}
-                    {/* 카드 바탕이 secondary 색이라 이름표 바탕은 흰색으로 둔다 */}
-                    <Badge
-                      variant={canApply(tour) ? 'secondary' : 'outline'}
-                      className={canApply(tour) ? 'bg-card' : undefined}
-                    >
-                      {tourStatusLabel(tour.status)}
-                    </Badge>
+                    <Badge variant={canApply(tour) ? 'secondary' : 'outline'}>{tourStatusLabel(tour.status)}</Badge>
                   </span>
                   <span className="text-muted-foreground">{tourSummaryLine(tour)}</span>
                 </Label>

@@ -416,7 +416,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (detailRef.current) void selectLevel(detailRef.current)
   }
 
-  // 단골 할인 확인. 단추는 PriceSummary 안에 있다
+  // 단추는 PriceSummary 안에 있다
   function confirmPrice() {
     updateDetail({ discountConfirmed: true })
   }
@@ -425,7 +425,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     updateDetail({ optionPanelOpen: true, optionMessage: null })
   }
 
-  // 옵션 패널 닫기. "옵션 고르기 끝" 단추는 OptionPanel 안에 있다
+  // "옵션 고르기 끝" 단추는 OptionPanel 안에 있다
   function finishCustomize() {
     updateDetail({ optionPanelOpen: false, optionMessage: null })
   }

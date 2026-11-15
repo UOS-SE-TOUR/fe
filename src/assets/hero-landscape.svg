@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" width="1200" height="600">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16467f" />
+      <stop offset="0.62" stop-color="#2f6fb0" />
+      <stop offset="0.82" stop-color="#f3b98c" />
+      <stop offset="0.88" stop-color="#fbe0bd" />
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3c8cc2" />
+      <stop offset="1" stop-color="#143f6b" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff3d6" stop-opacity="0.9" />
+      <stop offset="1" stop-color="#fff3d6" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="600" fill="url(#sky)" />
+  <circle cx="860" cy="392" r="160" fill="url(#glow)" />
+  <circle cx="860" cy="392" r="52" fill="#fff1cf" />
+  <g fill="#ffffff" opacity="0.4">
+    <path d="M900 112h150a26 26 0 0 0 0-52 30 30 0 0 0-22 9 44 44 0 0 0-84 6 28 28 0 0 0-44 37z" />
+    <path d="M1030 330h120a21 21 0 0 0 0-42 24 24 0 0 0-18 7 35 35 0 0 0-67 5 22 22 0 0 0-35 30z" />
+  </g>
+  <path d="M0 500 0 452 90 404 170 440 290 362 400 432 500 388 610 450 720 404 830 446 950 372 1060 430 1200 384 1200 500Z" fill="#7fb0d8" opacity="0.75" />
+  <path d="M0 500 0 470 130 424 240 468 370 410 480 462 590 436 700 474 840 416 960 466 1090 428 1200 462 1200 500Z" fill="#3d76ad" />
+  <path d="M290 362 322 383 300 392 276 384 258 384Z M950 372 978 392 956 398 934 392 922 392Z" fill="#ffffff" opacity="0.7" />
+  <rect y="496" width="1200" height="104" fill="url(#sea)" />
+  <g stroke="#fff1cf" stroke-linecap="round" opacity="0.6">
+    <path d="M820 512h80" stroke-width="3" />
+    <path d="M800 528h120" stroke-width="3" />
+    <path d="M832 544h56" stroke-width="3" />
+    <path d="M810 562h100" stroke-width="2" />
+  </g>
+  <g>
+    <path d="M318 538h64l-10 14h-44z" fill="#ffffff" />
+    <path d="M350 478v56h-30z" fill="#ffffff" />
+    <path d="M356 490v44h24z" fill="#ffd9b0" />
+  </g>
+  <g>
+    <path d="M1015 548h44l-7 10h-30z" fill="#ffffff" opacity="0.9" />
+    <path d="M1037 508v37h-20z" fill="#ffffff" opacity="0.9" />
+  </g>
+  <path d="M780 270C830 250 884 226 936 196" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-dasharray="3 12" stroke-linecap="round" opacity="0.7" />
+  <g transform="translate(974 182) rotate(-20) scale(1.5)" fill="#ffffff">
+    <path d="M-20 0Q-20-4-12-4H14Q22-3 22 0 22 3 14 4H-12Q-20 4-20 0Z" />
+    <path d="M-18-3-24-14H-18L-10-4Z" />
+    <path d="M-2 2-12 16H-6L8 2Z" />
+    <path d="M0-3-8-13H-4L8-3Z" />
+  </g>
+</svg>

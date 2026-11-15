@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Mic } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -319,9 +320,14 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
 
   return (
     <section aria-label="음성으로 고르기">
-      <Card>
+      <Card className="ring-primary/30">
         <CardHeader>
-          <CardTitle>음성으로 고르기</CardTitle>
+          <CardTitle className="flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <Mic className="size-4" />
+            </span>
+            음성으로 고르기
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {!supported && (

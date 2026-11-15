@@ -3,7 +3,7 @@ import { XIcon } from 'lucide-react'
 import { Link, useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogClose,
@@ -204,13 +204,12 @@ export function SignUpPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
-      <Card className="w-full max-w-md">
+    <main className="hero-scene flex flex-1 items-center justify-center bg-top p-6">
+      <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
           <CardTitle>
             <h1 className="text-xl font-semibold">회원가입</h1>
           </CardTitle>
-          <CardDescription>미스터 월드 테마 여행</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit}>

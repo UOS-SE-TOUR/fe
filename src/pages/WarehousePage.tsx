@@ -7,7 +7,9 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { themeLabel, themes, type Theme } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
+import { themeLookOf } from '@/lib/themeLook'
 import { useBlockLeaving } from '@/lib/useBlockLeaving'
+import { cn } from '@/lib/utils'
 import { ApiClient, ApiError, showError, unknownResult } from '@/modules/ApiClient'
 
 const ITEMS_PATH = '/api/v1/staff/items'
@@ -158,13 +160,13 @@ export function WarehousePage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-6">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">창고</h1>
+        <h1 className="text-2xl font-bold tracking-tight">창고</h1>
         <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={adding} />
       </header>
 
-      <section className="flex flex-col gap-4" aria-labelledby="add-item-heading">
+      <section className="panel flex flex-col gap-4" aria-labelledby="add-item-heading">
         <h2 id="add-item-heading" className="text-lg font-semibold">
           물품 추가
         </h2>
@@ -224,13 +226,13 @@ export function WarehousePage() {
         {needsRecheck && (
           <p className="text-sm text-muted-foreground">물품 목록을 다시 불러온 뒤에 추가할 수 있습니다.</p>
         )}
-        {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다 */}
-        <p role="status" className="text-sm">
+        {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다. 비어 있을 땐 칸 아래 여백이 늘지 않게 사이 간격을 지운다 */}
+        <p role="status" className="text-sm empty:-mt-4">
           {addResult}
         </p>
       </section>
 
-      <section className="flex flex-col gap-4" aria-labelledby="items-heading">
+      <section className="panel flex flex-col gap-4" aria-labelledby="items-heading">
         <h2 id="items-heading" className="text-lg font-semibold">
           물품 목록
         </h2>
@@ -258,13 +260,27 @@ export function WarehousePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {itemsState.items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="whitespace-normal">{item.name}</TableCell>
-                  <TableCell>{themeLabel(item.theme)}</TableCell>
-                  <TableCell className="text-right">{formatCount(item.quantity)}개</TableCell>
-                </TableRow>
-              ))}
+              {itemsState.items.map((item) => {
+                const look = themeLookOf(item.theme)
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-normal">{item.name}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-2">
+                        {look && (
+                          <span
+                            className={cn('hidden size-6 items-center justify-center rounded-full sm:flex', look.tint)}
+                          >
+                            <look.icon className="size-3.5" />
+                          </span>
+                        )}
+                        {themeLabel(item.theme)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCount(item.quantity)}개</TableCell>
+                  </TableRow>
+                )
+              })}
             </TableBody>
           </Table>
         )}

@@ -77,7 +77,13 @@ export function CustomerMainPage() {
             <h1 className="text-3xl font-bold tracking-tight">고객 메뉴</h1>
             {member && <p className="mt-1 wrap-anywhere text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
           </div>
-          <Button variant="secondary" onClick={() => void logOut()} disabled={loggingOut}>
+          {/* 강조색 바탕 위라 초점 테두리를 밝은 색으로 둔다 */}
+          <Button
+            variant="secondary"
+            className="focus-visible:ring-primary-foreground/70"
+            onClick={() => void logOut()}
+            disabled={loggingOut}
+          >
             로그아웃
           </Button>
         </div>

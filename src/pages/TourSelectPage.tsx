@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { formatDate, formatWon } from '@/lib/format'
 import { themeLabel, themes, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
-import { themeLooks } from '@/lib/themeLook'
+import { themeLookOf, themeLooks } from '@/lib/themeLook'
 import { useBlockLeaving } from '@/lib/useBlockLeaving'
 import {
   canApply,
@@ -160,7 +160,8 @@ function TourList({ tours, theme, onSelect }: { tours: TourSummary[]; theme: The
   if (tours.length === 0) {
     return <p className="text-sm text-muted-foreground">이 테마에는 지금 신청할 수 있는 상품이 없습니다.</p>
   }
-  const look = themeLooks[theme]
+  // 음성으로 채운 테마는 서버가 준 값이라, 모르는 값이면 아이콘 없이 그린다
+  const look = themeLookOf(theme)
   return (
     <ul className="space-y-3">
       {tours.map((tour) => (
@@ -171,9 +172,13 @@ function TourList({ tours, theme, onSelect }: { tours: TourSummary[]; theme: The
             disabled={!canApply(tour)}
             onClick={() => onSelect(tour.tourId)}
           >
-            <span className={cn('hidden size-11 shrink-0 items-center justify-center rounded-full sm:flex', look.tint)}>
-              <look.icon className="size-5" />
-            </span>
+            {look && (
+              <span
+                className={cn('hidden size-11 shrink-0 items-center justify-center rounded-full sm:flex', look.tint)}
+              >
+                <look.icon className="size-5" />
+              </span>
+            )}
             <span className="min-w-0 flex-1 space-y-1">
               <span className="block text-base font-semibold">{tour.title}</span>
               <span className="block text-muted-foreground">{tourSummaryLine(tour)}</span>
@@ -695,7 +700,7 @@ function TourDetail(props: TourDetailProps) {
   // 입력 검사 문구가 먼저고, 없으면 서버의 400 문구다
   const levelMessage = ('message' in check ? check.message : null) ?? detail.levelMessage
   const title = tour?.title ?? priceQuote?.summary.title ?? (theme ? themeLabel(theme) : '고른 상품')
-  const look = theme ? themeLooks[theme] : null
+  const look = theme ? themeLookOf(theme) : undefined
 
   return (
     <section aria-label="고른 상품" className="space-y-4">

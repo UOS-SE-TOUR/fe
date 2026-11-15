@@ -141,14 +141,16 @@
   }
 }
 
-/* 로그인·가입 화면과 고객 첫 화면에 까는 풍경 그림. 위에 놓이는 흰 글자가 읽히게 위쪽을 덮는다.
+/* 로그인·가입 화면과 고객 메뉴에 까는 풍경 그림. 위쪽을 강조색으로 덮어, 로그인 화면에서는 그 위의 흰 글자가
+   읽히고 고객 메뉴에서는 강조색 머리와 이어진다.
    그림의 어느 쪽을 남길지는 쓰는 자리에서 bg-top(하늘)·bg-bottom(산과 바다)으로 정한다 */
 @utility hero-scene {
   background-image: linear-gradient(to bottom, var(--hero-shade), transparent 70%), url('./assets/hero-landscape.svg');
   background-size: cover;
 }
 
-/* 상품 기획·창고의 폼과 목록을 담는 흰 칸. shadcn Card와 같은 테두리·그림자에 글자 크기는 그대로 둔다 */
+/* 상품 기획·창고의 폼과 목록을 담는 흰 칸. Card는 안의 글자 크기까지 줄여서 쓰지 않고, 테두리·그림자만
+   src/components/ui/card.tsx의 값을 옮겨 왔다(Card 모양을 바꾸면 여기도 맞춘다) */
 @utility panel {
   @apply rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10;
 }

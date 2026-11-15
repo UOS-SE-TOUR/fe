@@ -226,8 +226,8 @@ export function WarehousePage() {
         {needsRecheck && (
           <p className="text-sm text-muted-foreground">물품 목록을 다시 불러온 뒤에 추가할 수 있습니다.</p>
         )}
-        {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다 */}
-        <p role="status" className="text-sm">
+        {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다. 비어 있을 땐 칸 아래 여백이 늘지 않게 사이 간격을 지운다 */}
+        <p role="status" className="text-sm empty:-mt-4">
           {addResult}
         </p>
       </section>

@@ -1124,6 +1124,21 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(bodiesOf(QUOTE)).toEqual([{ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] }])
   })
 
+  it('서버가 모르는 테마를 받아도 상품 목록으로 돌아올 수 있다', async () => {
+    // 음성 결과의 테마는 서버가 준 값이다. 테마 아이콘이 없는 값이어도 목록을 그린다
+    const unknownTheme = { ...selection, theme: 'SKI' } as unknown as VoiceSelection
+    function UnknownThemeVoiceInput({ applySelection }: VoiceInputProps) {
+      return <button onClick={() => void applySelection(unknownTheme)}>음성 결과 쓰기(모르는 테마)</button>
+    }
+    always.set('GET /api/v1/tours?theme=SKI', () => jsonResponse(200, golfTours))
+    const user = renderPage(UnknownThemeVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(모르는 테마)' }))
+    await screen.findByText('가격 요약')
+
+    await user.click(screen.getByRole('button', { name: '다른 상품 고르기' }))
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+  })
+
   it.each([
     [400, '골프 챌린지 투어는 2명만 신청할 수 있습니다.'],
     [409, CLOSED],

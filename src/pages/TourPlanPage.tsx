@@ -250,10 +250,6 @@ export function TourPlanPage() {
     if (focusLost()) addTransportRef.current?.focus()
   }
 
-  function showRegisterResult(tourId: number | null) {
-    setRegistered({ tourId })
-  }
-
   function showRegisterFailure(error: unknown) {
     if (error instanceof ApiError) {
       if (error.resultUnknown) setResultUnknown(true)
@@ -295,7 +291,7 @@ export function TourPlanPage() {
     submittingRef.current = true
     setSubmitting(true)
     const settle = await ApiClient.post('/api/v1/staff/tours', request, { unsafeToRetry: true }).then(
-      (body) => () => showRegisterResult(tourIdOf(body)),
+      (body) => () => setRegistered({ tourId: tourIdOf(body) }),
       (error: unknown) => () => showRegisterFailure(error),
     )
     submittingRef.current = false

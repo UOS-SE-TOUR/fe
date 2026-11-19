@@ -708,24 +708,34 @@ describe('1인당 개수 바꾸기', () => {
     expect(getCount()).toBe(1)
   })
 
-  it('성공 응답인데 본문이 물품이 아니면 창을 닫고 목록을 다시 불러온다', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
-      .mockResolvedValueOnce(new Response('', { status: 200 }))
-      .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, perPerson: 3 }]))
-    renderPage()
-    await screen.findByRole('table')
+  it.each([
+    ['비었으면', () => new Response('', { status: 200 })],
+    ['물품이 아니면', () => jsonResponse(200, { result: 'ok' })],
+  ])(
+    '성공 응답인데 본문이 %s 처리됐는지 모른다고 알리고, 창을 열어 둔 채 목록을 다시 불러온다',
+    async (_, response) => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
+        .mockResolvedValueOnce(response())
+        .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, perPerson: 3 }]))
+      renderPage()
+      await screen.findByRole('table')
 
-    const { user, dialog } = await openDialog('골프공', '1인당 개수 바꾸기', '3')
-    await user.click(within(dialog).getByRole('button', { name: '확인' }))
+      const { user, dialog } = await openDialog('골프공', '1인당 개수 바꾸기', '3')
+      await user.click(within(dialog).getByRole('button', { name: '확인' }))
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
-    await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '3개', '20개']]))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
-    // 다시 보내도 결과가 같아 단추는 막지 않는다
-    expect(within(rowOf('골프공')).getByRole('button', { name: '1인당 개수 바꾸기' })).toBeEnabled()
-  })
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
+      expect(screen.getByRole('dialog', { name: '1인당 개수 바꾸기' })).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: '확인' })).toBeEnabled()
+      await waitFor(() => expect(getCount()).toBe(2))
+
+      await user.click(within(dialog).getByRole('button', { name: '취소' }))
+      await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '3개', '20개']]))
+      expect(screen.getByRole('status')).toBeEmptyDOMElement()
+      // 다시 보내도 결과가 같아 단추는 막지 않는다
+      expect(within(rowOf('골프공')).getByRole('button', { name: '1인당 개수 바꾸기' })).toBeEnabled()
+    },
+  )
 
   it('보내는 동안 창을 닫을 수 없지만, 화면 이동은 막지 않는다', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, [golfBall])).mockReturnValueOnce(new Promise(() => {}))

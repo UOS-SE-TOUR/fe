@@ -263,11 +263,10 @@ export function WarehousePage() {
       }
       return
     }
-    // 성공 응답인데 본문이 물품이 아니면 바뀌었는지 알 수 없다. 창을 닫고 목록을 다시 읽어 결과를 보게 한다
+    // 성공 응답인데 본문이 물품이 아니면 바뀌었는지 알 수 없다. 다른 실패처럼 창은 열어 두고 목록을 다시 읽는다
     if (!isItem(sent.body)) {
-      setDialogOpen(false)
       showError(unknownResult(null))
-      reload()
+      loadItems()
       return
     }
     const changed = sent.body

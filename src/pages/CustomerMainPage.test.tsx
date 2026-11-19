@@ -71,7 +71,7 @@ describe('CustomerMainPage', () => {
   })
 
   it('내 신청 카드로 내 신청 화면에 간다', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, []))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
     const router = renderAt('/')
 
     await userEvent.setup().click(await screen.findByRole('link', { name: /^내 신청/ }))

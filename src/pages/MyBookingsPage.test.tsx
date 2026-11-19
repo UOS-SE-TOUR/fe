@@ -90,7 +90,8 @@ describe('신청 목록', () => {
   it.each(['CONFIRMED', 'FULL', 'CANCELLED', 'IN_PROGRESS', 'COMPLETED'])(
     '상품 상태가 %s면 확정까지 남은 인원을 보여 주지 않는다',
     async (status) => {
-      fetchMock.mockResolvedValueOnce(jsonResponse(200, [{ ...recruiting, status, headcountToConfirm: 0 }]))
+      // 서버가 남은 인원을 주더라도 모집 중이 아니면 보이지 않는다
+      fetchMock.mockResolvedValueOnce(jsonResponse(200, [{ ...recruiting, status, headcountToConfirm: 2 }]))
       renderAt('/bookings')
 
       expect(await screen.findByRole('listitem')).toBeInTheDocument()

@@ -8,7 +8,12 @@ import { useAuthState } from '@/modules/AuthStore'
 
 const menus = [
   { to: pagePaths.TourPlanPage, title: '상품 기획', description: '새 여행 상품을 등록합니다.', icon: ClipboardList },
-  { to: pagePaths.WarehousePage, title: '창고', description: '창고 물품을 보고 수량을 더합니다.', icon: Package },
+  {
+    to: pagePaths.WarehousePage,
+    title: '창고',
+    description: '창고 물품을 등록하고, 수량을 더하거나 1인당 개수를 바꿉니다.',
+    icon: Package,
+  },
 ]
 
 export function StaffMainPage() {

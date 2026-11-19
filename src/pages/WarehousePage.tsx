@@ -153,9 +153,10 @@ export function WarehousePage() {
     loadItems()
   }, [loadItems])
 
-  function showResult(text: string) {
-    setResult(text)
-    setFormError(null)
+  // 400·404는 창 안에 보인다. 404면 물품이 없어졌으니 목록도 다시 읽는다
+  function showDialogFailure(error: ApiError) {
+    setDialogError(error.message)
+    if (error.status === 404) loadItems()
   }
 
   // 다시 읽기 전에 표의 그 물품도 바로 바꾼다(알린 값과 표의 값이 어긋나 보이지 않게)
@@ -215,7 +216,7 @@ export function WarehousePage() {
       showUnknownResult(unknownResult(null))
       return
     }
-    showResult(`${sent.body.name} ${formatCount(sent.body.quantity)}개를 등록했습니다`)
+    setResult(`${sent.body.name} ${formatCount(sent.body.quantity)}개를 등록했습니다`)
     clearInput()
     loadItems()
   }
@@ -226,7 +227,7 @@ export function WarehousePage() {
     )
     if (!sent.ok) {
       const { error } = sent
-      if (hasStatus(error, 400) || hasStatus(error, 404)) setDialogError(error.message)
+      if (hasStatus(error, 400) || hasStatus(error, 404)) showDialogFailure(error)
       else if (error instanceof ApiError && error.resultUnknown) {
         setDialogOpen(false)
         showUnknownResult(error)
@@ -242,7 +243,7 @@ export function WarehousePage() {
     setDialogOpen(false)
     const now =
       added.quantity < 0 ? `아직 ${formatCount(-added.quantity)}개 부족` : `지금 ${formatCount(added.quantity)}개`
-    showResult(`${added.name} ${formatCount(count)}개를 더했습니다(${now})`)
+    setResult(`${added.name} ${formatCount(count)}개를 더했습니다(${now})`)
     showRow(added)
     loadItems()
   }
@@ -253,19 +254,24 @@ export function WarehousePage() {
     )
     if (!sent.ok) {
       const { error } = sent
-      if (hasStatus(error, 400) || hasStatus(error, 404)) setDialogError(error.message)
-      else showError(error)
+      if (hasStatus(error, 400) || hasStatus(error, 404)) showDialogFailure(error)
+      else {
+        // 다시 보내도 결과가 같아 창은 열어 둔다. 504·연결 끊김이면 바뀌었을 수 있어 표를 서버 값에 맞춘다
+        showError(error)
+        if (error instanceof ApiError && !error.handled) loadItems()
+      }
       return
     }
-    // 다시 보내도 결과가 같으니 창은 열어 두고, 바뀌었을 수 있어 목록을 다시 읽는다
+    // 성공 응답인데 본문이 물품이 아니면 바뀌었는지 알 수 없다. 창을 닫고 목록을 다시 읽어 결과를 보게 한다
     if (!isItem(sent.body)) {
-      showError(new Error('1인당 개수 바꾸기 응답이 물품이 아니다'))
-      loadItems()
+      setDialogOpen(false)
+      showError(unknownResult(null))
+      reload()
       return
     }
     const changed = sent.body
     setDialogOpen(false)
-    showResult(`${changed.name}의 1인당 개수를 ${formatCount(changed.perPerson)}개로 바꿨습니다`)
+    setResult(`${changed.name}의 1인당 개수를 ${formatCount(changed.perPerson)}개로 바꿨습니다`)
     showRow(changed)
     loadItems()
   }

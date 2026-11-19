@@ -45,6 +45,10 @@ function postCount() {
   return fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST').length
 }
 
+function getCount() {
+  return fetchMock.mock.calls.filter(([, init]) => init?.method === 'GET').length
+}
+
 async function fillForm(name: string, themeLabel: string, perPerson: string, quantity: string) {
   const user = userEvent.setup()
   if (name) await user.type(screen.getByRole('textbox', { name: '물품 이름' }), name)
@@ -444,12 +448,13 @@ describe('수량 더하기', () => {
   })
 
   it.each([
-    [400, '창고에 둘 수 있는 수량을 넘습니다.'],
-    [404, '창고 물품을 찾을 수 없습니다.'],
-  ])('%i이면 서버 문구를 창 안에 보여 주고 창을 열어 둔다', async (status, message) => {
+    [400, '창고에 둘 수 있는 수량을 넘습니다.', 1],
+    [404, '창고 물품을 찾을 수 없습니다.', 2],
+  ])('%i이면 서버 문구를 창 안에 보여 주고 창을 열어 둔다(404면 목록도 다시 읽는다)', async (status, message, gets) => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
       .mockResolvedValueOnce(jsonResponse(status, { message }))
+      .mockResolvedValueOnce(jsonResponse(200, []))
     renderPage()
     await screen.findByRole('table')
 
@@ -459,7 +464,27 @@ describe('수량 더하기', () => {
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(message)
     expect(screen.getByRole('dialog', { name: '수량 더하기' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: '확인' })).toBeEnabled()
+    await waitFor(() => expect(getCount()).toBe(gets))
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('수량을 더해도 새 물품 등록 칸의 오류 문구는 그대로 둔다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
+      .mockResolvedValueOnce(jsonResponse(400, { message: '이미 있는 물품입니다. 목록에서 수량을 더해 주세요.' }))
+      .mockResolvedValueOnce(jsonResponse(200, { ...golfBall, quantity: 30 }))
+      .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, quantity: 30 }]))
+    renderPage()
+    await screen.findByRole('table')
+    const user = await fillForm('골프공', '골프 챌린지 투어', '2', '10')
+    await user.click(screen.getByRole('button', { name: '등록' }))
+    await screen.findByRole('alert')
+
+    const { dialog } = await openDialog('골프공', '수량 더하기', '10')
+    await user.click(within(dialog).getByRole('button', { name: '확인' }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('골프공 10개를 더했습니다(지금 30개)'))
+    expect(screen.getByRole('alert')).toHaveTextContent('이미 있는 물품입니다. 목록에서 수량을 더해 주세요.')
   })
 
   it('그 밖의 실패는 공용 알림으로 알리고 창을 열어 둔다', async () => {
@@ -625,12 +650,13 @@ describe('1인당 개수 바꾸기', () => {
   })
 
   it.each([
-    [400, '1인당 개수는 0개부터 100개까지입니다.'],
-    [404, '창고 물품을 찾을 수 없습니다.'],
-  ])('%i이면 서버 문구를 창 안에 보여 주고 창을 열어 둔다', async (status, message) => {
+    [400, '1인당 개수는 0개부터 100개까지입니다.', 1],
+    [404, '창고 물품을 찾을 수 없습니다.', 2],
+  ])('%i이면 서버 문구를 창 안에 보여 주고 창을 열어 둔다(404면 목록도 다시 읽는다)', async (status, message, gets) => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
       .mockResolvedValueOnce(jsonResponse(status, { message }))
+      .mockResolvedValueOnce(jsonResponse(200, []))
     renderPage()
     await screen.findByRole('table')
 
@@ -639,23 +665,48 @@ describe('1인당 개수 바꾸기', () => {
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(message)
     expect(screen.getByRole('dialog', { name: '1인당 개수 바꾸기' })).toBeInTheDocument()
+    await waitFor(() => expect(getCount()).toBe(gets))
     expect(toast.error).not.toHaveBeenCalled()
   })
 
-  it('5xx는 서버 문구를 공용 알림으로 알리고 창을 열어 둔다(다시 보내도 결과가 같다)', async () => {
+  it('그 밖의 실패는 공용 알림으로 알리고, 창을 열어 둔 채 표를 서버 값에 맞춘다(다시 보내도 결과가 같다)', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
-      .mockResolvedValueOnce(jsonResponse(500, { message: '서버에 문제가 생겼습니다.' }))
+      .mockResolvedValueOnce(jsonResponse(504, {}))
+      .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, perPerson: 3 }]))
     renderPage()
     await screen.findByRole('table')
 
     const { user, dialog } = await openDialog('골프공', '1인당 개수 바꾸기', '3')
     await user.click(within(dialog).getByRole('button', { name: '확인' }))
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버에 문제가 생겼습니다.'))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(GATEWAY_TIMEOUT_MESSAGE))
     expect(screen.getByRole('dialog', { name: '1인당 개수 바꾸기' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: '확인' })).toBeEnabled()
+    await waitFor(() => expect(getCount()).toBe(2))
     expect(screen.queryByText('물품 목록을 다시 불러온 뒤에 등록하거나 고칠 수 있습니다.')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: '취소' }))
+    await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '3개', '20개']]))
+  })
+
+  it('성공 응답인데 본문이 물품이 아니면 창을 닫고 목록을 다시 불러온다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+      .mockResolvedValueOnce(jsonResponse(200, [{ ...golfBall, perPerson: 3 }]))
+    renderPage()
+    await screen.findByRole('table')
+
+    const { user, dialog } = await openDialog('골프공', '1인당 개수 바꾸기', '3')
+    await user.click(within(dialog).getByRole('button', { name: '확인' }))
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
+    await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '3개', '20개']]))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    // 다시 보내도 결과가 같아 단추는 막지 않는다
+    expect(within(rowOf('골프공')).getByRole('button', { name: '1인당 개수 바꾸기' })).toBeEnabled()
   })
 
   it('보내는 동안 창을 닫을 수 없지만, 화면 이동은 막지 않는다', async () => {

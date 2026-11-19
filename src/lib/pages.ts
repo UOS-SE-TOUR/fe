@@ -12,6 +12,7 @@ export type PageName =
   | 'SignUpPage'
   | 'CustomerMainPage'
   | 'TourSelectPage'
+  | 'MyBookingsPage'
   | 'StaffMainPage'
   | 'TourPlanPage'
   | 'WarehousePage'
@@ -21,6 +22,7 @@ export const pagePaths: Record<PageName, string> = {
   SignUpPage: '/signup',
   CustomerMainPage: '/',
   TourSelectPage: '/tours',
+  MyBookingsPage: '/bookings',
   StaffMainPage: '/staff',
   TourPlanPage: '/staff/tours/new',
   WarehousePage: '/staff/items',
@@ -32,6 +34,7 @@ export const pageAccess: Record<PageName, 'GUEST' | MemberType> = {
   SignUpPage: 'GUEST',
   CustomerMainPage: 'CUSTOMER',
   TourSelectPage: 'CUSTOMER',
+  MyBookingsPage: 'CUSTOMER',
   StaffMainPage: 'STAFF',
   TourPlanPage: 'STAFF',
   WarehousePage: 'STAFF',

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { ChevronLeft } from 'lucide-react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { MenuLink } from '@/components/MenuLink'
 import { OptionPanel } from '@/components/OptionPanel'
@@ -830,11 +831,16 @@ function TourDetail(props: TourDetailProps) {
       )}
 
       {applyResult && (
-        <Alert>
-          <AlertDescription>
-            신청했습니다. 지금 상품 상태는 ‘{tourStatusLabel(applyResult.status)}’입니다.
-          </AlertDescription>
-        </Alert>
+        <div className="space-y-2">
+          <Alert>
+            <AlertDescription>
+              신청했습니다. 지금 상품 상태는 ‘{tourStatusLabel(applyResult.status)}’입니다.
+            </AlertDescription>
+          </Alert>
+          <Button variant="outline" asChild>
+            <Link to={pagePaths.MyBookingsPage}>내 신청 보기</Link>
+          </Button>
+        </div>
       )}
 
       {unknownApply && (

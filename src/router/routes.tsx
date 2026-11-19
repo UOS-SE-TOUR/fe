@@ -3,7 +3,14 @@ import type { RouteObject } from 'react-router'
 import { pagePaths, type PageName } from '@/lib/pages'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
-import { CustomerMainPage, StaffMainPage, TourPlanPage, TourSelectPage, WarehousePage } from '@/router/memberPages'
+import {
+  CustomerMainPage,
+  MyBookingsPage,
+  StaffMainPage,
+  TourPlanPage,
+  TourSelectPage,
+  WarehousePage,
+} from '@/router/memberPages'
 import { GoHome, PageGate } from '@/router/PageGate'
 import { PageLoadError } from '@/router/PageLoadError'
 
@@ -13,6 +20,7 @@ const pageElements: Record<PageName, ReactNode> = {
   SignUpPage: <SignUpPage />,
   CustomerMainPage: <CustomerMainPage />,
   TourSelectPage: <TourSelectPage />,
+  MyBookingsPage: <MyBookingsPage />,
   StaffMainPage: <StaffMainPage />,
   TourPlanPage: <TourPlanPage />,
   WarehousePage: <WarehousePage />,

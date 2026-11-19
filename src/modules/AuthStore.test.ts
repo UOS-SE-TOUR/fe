@@ -139,7 +139,7 @@ describe('AuthStore.canOpen', () => {
   it('고객은 고객 화면만 열 수 있다', () => {
     AuthStore.setMember('CUSTOMER', '홍길동')
 
-    expect(openable()).toEqual(['CustomerMainPage', 'TourSelectPage'])
+    expect(openable()).toEqual(['CustomerMainPage', 'TourSelectPage', 'MyBookingsPage'])
   })
 
   it('직원은 직원 화면만 열 수 있다', () => {

@@ -9,26 +9,10 @@ import { themes } from '@/lib/labels'
 import { useLogOut } from '@/lib/logOut'
 import { pagePaths } from '@/lib/pages'
 import { themeLooks } from '@/lib/themeLook'
-import type { PreviousTourResponse } from '@/lib/tours'
+import { isPreviousTour, type PreviousTourResponse } from '@/lib/tours'
 import { cn } from '@/lib/utils'
 import { ApiClient, showError } from '@/modules/ApiClient'
 import { useAuthState } from '@/modules/AuthStore'
-
-function isPreviousTour(value: unknown): value is PreviousTourResponse {
-  if (typeof value !== 'object' || value === null) return false
-  const tour = value as Partial<PreviousTourResponse>
-  return (
-    typeof tour.bookingId === 'number' &&
-    typeof tour.tourId === 'number' &&
-    typeof tour.title === 'string' &&
-    typeof tour.departureDate === 'string' &&
-    typeof tour.duration === 'number' &&
-    typeof tour.level === 'string' &&
-    typeof tour.levelName === 'string' &&
-    typeof tour.headcount === 'number' &&
-    typeof tour.finalPrice === 'number'
-  )
-}
 
 export function CustomerMainPage() {
   const { member } = useAuthState()
@@ -118,6 +102,20 @@ export function CustomerMainPage() {
                 })}
               </ul>
             </CardContent>
+          </Card>
+        </Link>
+        <Link
+          to={pagePaths.MyBookingsPage}
+          className="group rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <Card className="h-full transition-shadow group-hover:shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between gap-4 text-lg">
+                내 신청
+                <ArrowRight className="size-5 text-primary transition-transform group-hover:translate-x-1" />
+              </CardTitle>
+              <CardDescription>신청한 여행과 상품 상태를 봅니다.</CardDescription>
+            </CardHeader>
           </Card>
         </Link>
       </nav>

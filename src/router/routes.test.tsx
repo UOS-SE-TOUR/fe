@@ -65,7 +65,7 @@ describe('ApiClient가 받은 401·403 뒤', () => {
 })
 
 describe('로그인하지 않았을 때', () => {
-  it.each(['/', '/tours', '/staff', '/staff/tours/new', '/staff/items'])(
+  it.each(['/', '/tours', '/bookings', '/staff', '/staff/tours/new', '/staff/items'])(
     '%s는 로그인 화면으로 보낸다',
     async (path) => {
       const router = renderAt(path)
@@ -113,6 +113,7 @@ describe('로그인했을 때', () => {
   it.each([
     ['CUSTOMER', '/staff/items', '/', '고객 메뉴'],
     ['STAFF', '/tours', '/staff', '직원 메뉴'],
+    ['STAFF', '/bookings', '/staff', '직원 메뉴'],
   ] as const)(
     '%s가 다른 회원 구분의 화면 주소(%s)로 오면 권한이 없다고 알리고 자기 첫 화면으로 보낸다',
     async (memberType, path, home, title) => {

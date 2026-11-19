@@ -212,6 +212,7 @@ function renderWithRouter(voiceInput?: ComponentType<VoiceInputProps>) {
     [
       { path: '/tours', element: <TourSelectPage voiceInput={voiceInput} /> },
       { path: '/', element: <h1>고객 메뉴</h1> },
+      { path: '/bookings', element: <h1>내 신청</h1> },
     ],
     { initialEntries: ['/', '/tours'], initialIndex: 1 },
   )
@@ -767,6 +768,18 @@ describe('신청', () => {
     expect(await screen.findByText(/신청했습니다/)).toBeInTheDocument()
     expect(await screen.findByText('남은 자리 8명')).toBeInTheDocument()
     expect(idempotencyKeysOf(APPLY)).toEqual([expect.stringMatching(UUID)])
+  })
+
+  it('신청 결과의 "내 신청 보기" 링크로 내 신청 화면에 간다', async () => {
+    const { user, router } = renderWithRouter()
+    await priced(user)
+    expect(screen.queryByRole('link', { name: '내 신청 보기' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    await user.click(await screen.findByRole('link', { name: '내 신청 보기' }))
+
+    expect(await screen.findByRole('heading', { name: '내 신청' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/bookings')
   })
 
   it('신청하기를 누를 때마다 새 신청 키를 만든다', async () => {

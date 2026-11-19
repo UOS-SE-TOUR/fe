@@ -149,7 +149,7 @@
   background-size: cover;
 }
 
-/* 상품 기획·창고의 폼과 목록을 담는 흰 칸. Card는 안의 글자 크기까지 줄여서 쓰지 않고, 테두리·그림자만
+/* 상품 기획·창고·내 신청의 폼과 목록을 담는 흰 칸. Card는 안의 글자 크기까지 줄여서 쓰지 않고, 테두리·그림자만
    src/components/ui/card.tsx의 값을 옮겨 왔다(Card 모양을 바꾸면 여기도 맞춘다) */
 @utility panel {
   @apply rounded-xl bg-card p-6 shadow-xs ring-1 ring-foreground/10;

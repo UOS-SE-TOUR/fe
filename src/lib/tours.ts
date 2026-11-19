@@ -97,6 +97,41 @@ export interface PreviousTourResponse {
   finalPrice: number
 }
 
+// 내 신청 한 줄. 이전 여행 한 줄에 신청한 때·상품의 지금 상태·확정까지 남은 인원을 더했다
+export interface MyBookingResponse extends PreviousTourResponse {
+  // UTC ISO 8601. 초 아래 자리는 없거나 자릿수가 다를 수 있다
+  appliedAt: string
+  status: TourStatus
+  // 모집 중일 때만 1 이상이고 다른 상태에서는 0. 허니문은 2명 단위
+  headcountToConfirm: number
+}
+
+export function isPreviousTour(value: unknown): value is PreviousTourResponse {
+  if (typeof value !== 'object' || value === null) return false
+  const tour = value as Partial<PreviousTourResponse>
+  return (
+    typeof tour.bookingId === 'number' &&
+    typeof tour.tourId === 'number' &&
+    typeof tour.title === 'string' &&
+    typeof tour.departureDate === 'string' &&
+    typeof tour.duration === 'number' &&
+    typeof tour.level === 'string' &&
+    typeof tour.levelName === 'string' &&
+    typeof tour.headcount === 'number' &&
+    typeof tour.finalPrice === 'number'
+  )
+}
+
+export function isMyBooking(value: unknown): value is MyBookingResponse {
+  if (!isPreviousTour(value)) return false
+  const booking = value as Partial<MyBookingResponse>
+  return (
+    typeof booking.appliedAt === 'string' &&
+    typeof booking.status === 'string' &&
+    typeof booking.headcountToConfirm === 'number'
+  )
+}
+
 // 받아 오는 상품 목록의 상태
 export type ToursState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; list: TourSummary[] }
 

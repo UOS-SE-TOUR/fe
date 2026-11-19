@@ -256,9 +256,10 @@ export function WarehousePage() {
       const { error } = sent
       if (hasStatus(error, 400) || hasStatus(error, 404)) showDialogFailure(error)
       else {
-        // 다시 보내도 결과가 같아 창은 열어 둔다. 504·연결 끊김이면 바뀌었을 수 있어 표를 서버 값에 맞춘다
+        // 다시 보내도 결과가 같아 창은 열어 둔다. 504·5xx면 바뀌었을 수 있어 표를 서버 값에 맞춘다.
+        // 응답 없이 끊겼으면 목록도 못 읽으니 다시 읽지 않는다(운영은 Nginx가 60초에 504를 줘 65초 시간 끝보다 먼저 온다)
         showError(error)
-        if (error instanceof ApiError && !error.handled) loadItems()
+        if (error instanceof ApiError && !error.handled && error.status !== null) loadItems()
       }
       return
     }

@@ -690,6 +690,24 @@ describe('1인당 개수 바꾸기', () => {
     await waitFor(() => expect(rowTexts()).toEqual([['골프공', '골프 챌린지 투어', '3개', '20개']]))
   })
 
+  it('응답 없이 끊겼으면 한 번만 알리고 목록은 다시 읽지 않는다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [golfBall]))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    renderPage()
+    await screen.findByRole('table')
+
+    const { user, dialog } = await openDialog('골프공', '1인당 개수 바꾸기', '3')
+    await user.click(within(dialog).getByRole('button', { name: '확인' }))
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith('서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.'),
+    )
+    expect(screen.getByRole('dialog', { name: '1인당 개수 바꾸기' })).toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(getCount()).toBe(1)
+  })
+
   it('성공 응답인데 본문이 물품이 아니면 창을 닫고 목록을 다시 불러온다', async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [golfBall]))

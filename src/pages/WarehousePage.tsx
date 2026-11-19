@@ -116,7 +116,7 @@ export function WarehousePage() {
   const sendingRef = useRef(false)
   const loadSeq = useRef(0)
   const locked = sending !== null || needsRecheck
-  // 다시 보내면 두 번 처리되는 요청이라 보내는 동안 떠나지 못하게 한다(1인당 개수 바꾸기는 다시 보내도 결과가 같다)
+  // 다시 보내면 두 번 처리되는 요청만 떠나지 못하게 한다
   const leavingBlocked = sending === 'register' || sending === 'quantity'
   useBlockLeaving(leavingBlocked, '처리가 끝날 때까지 이 화면에 있어 주세요.')
 
@@ -153,7 +153,7 @@ export function WarehousePage() {
     loadItems()
   }, [loadItems])
 
-  // 400·404는 창 안에 보인다. 404면 물품이 없어졌으니 목록도 다시 읽는다
+  // 404면 물품이 없어졌으니 목록도 다시 읽는다
   function showDialogFailure(error: ApiError) {
     setDialogError(error.message)
     if (error.status === 404) loadItems()
@@ -256,14 +256,13 @@ export function WarehousePage() {
       const { error } = sent
       if (hasStatus(error, 400) || hasStatus(error, 404)) showDialogFailure(error)
       else {
-        // 다시 보내도 결과가 같아 창은 열어 둔다. 504·5xx면 바뀌었을 수 있어 표를 서버 값에 맞춘다.
-        // 응답 없이 끊겼으면 목록도 못 읽으니 다시 읽지 않는다(운영은 Nginx가 60초에 504를 줘 65초 시간 끝보다 먼저 온다)
+        // 바뀌었을 수 있어 표를 서버 값에 맞춘다. 응답이 아예 없으면 목록도 못 읽는다
         showError(error)
         if (error instanceof ApiError && !error.handled && error.status !== null) loadItems()
       }
       return
     }
-    // 성공 응답인데 본문이 물품이 아니면 바뀌었는지 알 수 없다. 다른 실패처럼 창은 열어 두고 목록을 다시 읽는다
+    // 바뀌었는지 알 수 없어 목록을 다시 읽는다
     if (!isItem(sent.body)) {
       showError(unknownResult(null))
       loadItems()

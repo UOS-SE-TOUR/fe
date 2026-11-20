@@ -1,8 +1,6 @@
 import { ArrowRight, ClipboardList, Package } from 'lucide-react'
 import { Link } from 'react-router'
-import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useLogOut } from '@/lib/logOut'
 import { pagePaths } from '@/lib/pages'
 import { useAuthState } from '@/modules/AuthStore'
 
@@ -18,24 +16,14 @@ const menus = [
 
 export function StaffMainPage() {
   const { member } = useAuthState()
-  const { logOut, loggingOut } = useLogOut()
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-start justify-between gap-4 rounded-2xl bg-primary p-6 text-primary-foreground shadow-sm sm:p-8">
         <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight">직원 메뉴</h1>
           {member && <p className="mt-1 wrap-anywhere text-primary-foreground/90">{member.name}님, 안녕하세요.</p>}
         </div>
-        {/* 강조색 바탕 위라 초점 테두리를 밝은 색으로 둔다 */}
-        <Button
-          variant="secondary"
-          className="focus-visible:ring-primary-foreground/70"
-          onClick={() => void logOut()}
-          disabled={loggingOut}
-        >
-          로그아웃
-        </Button>
       </header>
       <nav className="grid gap-4 sm:grid-cols-2">
         {menus.map((menu) => (

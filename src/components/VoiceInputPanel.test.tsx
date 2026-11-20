@@ -219,7 +219,9 @@ function confirmButton() {
 describe('말해서 고르기', () => {
   it('말한 내용을 화면 이름으로 채우고, 확인하면 상품 선택 화면이 그 내용으로 가격을 계산한다', async () => {
     const user = renderPage()
-    expect(panel().getByText(/말하기를 누르고/)).toBeInTheDocument()
+    expect(
+            panel().getByRole('button', { name: '말하기' }),
+          ).toBeInTheDocument()
 
     replyOnce(PARSE, jsonResponse(200, heardAll))
     await user.click(panel().getByRole('button', { name: '말하기' }))

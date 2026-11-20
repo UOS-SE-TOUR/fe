@@ -22,6 +22,8 @@ interface OptionPanelProps {
   disabled: boolean
   onChangeOptions(optionIds: number[]): void
   onFinish(): void
+  // 끝 단추 문구. 신청 바꾸기 창은 "바꾸기 저장"으로 쓴다
+  finishLabel?: string
 }
 
 const DEFAULT_CHOICE = 'default'
@@ -79,9 +81,10 @@ function SingleChoice({ title, name, defaultLabel, items, optionIds, disabled, o
 }
 
 // 옵션 목록은 상품·투어 등급마다 불러온다(요금 차이가 등급 기준이다). 부르는 쪽이 상품·등급을 key로 주어,
-// 등급이 바뀌면 새로 그린다. 고른 옵션과 가격은 TourSelectPage가 갖는다
+// 등급이 바뀌면 새로 그린다. 고른 옵션과 가격은 부르는 쪽(TourSelectPage, MyBookingsPage의 바꾸기 창)이 갖는다
 export function OptionPanel(props: OptionPanelProps) {
   const { tourId, level, levelDetail, optionIds, price, message, disabled, onChangeOptions, onFinish } = props
+  const { finishLabel = '옵션 고르기 끝' } = props
   // undefined면 불러오는 중, null이면 불러오지 못했다
   const [options, setOptions] = useState<TourOptionsResponse | null | undefined>(undefined)
   // 불러오지 못했을 때 다시 불러오기를 누르면 올린다
@@ -199,7 +202,7 @@ export function OptionPanel(props: OptionPanelProps) {
         </p>
         {/* 가격 계산 중에 닫으면 그 결과의 문구(닫힌 패널 안)를 못 본다 */}
         <Button variant="outline" onClick={onFinish} disabled={disabled}>
-          옵션 고르기 끝
+          {finishLabel}
         </Button>
       </CardFooter>
     </Card>

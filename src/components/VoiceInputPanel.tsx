@@ -323,9 +323,7 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
 
   return (
     <section aria-label="음성으로 고르기">
-      <Card
-        className={cn('ring-primary/30', compact && 'gap-3 py-4 sm:flex-row sm:items-center sm:justify-between')}
-      >
+      <Card className={cn('ring-primary/30', compact && 'gap-3 py-4 sm:flex-row sm:items-center sm:justify-between')}>
         <CardHeader className={cn(compact && 'sm:min-w-0 sm:flex-1')}>
           <CardTitle className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">

@@ -309,7 +309,7 @@ export function WarehousePage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">창고</h1>
         <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={leavingBlocked} />

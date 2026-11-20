@@ -21,6 +21,7 @@ import {
 } from '@/lib/tours'
 import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
+import { cn } from '@/lib/utils'
 import type { VoiceInputProps, VoiceSelection } from '@/pages/TourSelectPage'
 
 // voice/parse의 본문(be VoiceParseRequest·TourSelection). 뽑지 못한 항목은 null이다
@@ -318,18 +319,23 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
     // failed는 상품 선택 화면이 이미 알렸다. 칸을 그대로 두어 다시 확인할 수 있다
   }
 
+  const compact = supported && !disabled && !notice && step === 'idle' && !draft
+
   return (
     <section aria-label="음성으로 고르기">
-      <Card className="ring-primary/30">
-        <CardHeader>
+      <Card className={cn('ring-primary/30', compact && 'gap-3 py-4 sm:flex-row sm:items-center sm:justify-between')}>
+        <CardHeader className={cn(compact && 'sm:min-w-0 sm:flex-1')}>
           <CardTitle className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <Mic className="size-4" />
             </span>
             음성으로 고르기
           </CardTitle>
+          {compact && (
+            <p className="text-sm text-muted-foreground">테마, 출발일, 투어 등급, 인원을 말하면 자동으로 채웁니다.</p>
+          )}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className={cn('space-y-4', compact && 'sm:w-auto sm:shrink-0')}>
           {!supported && (
             <Alert>
               <AlertDescription>{UNSUPPORTED_MESSAGE}</AlertDescription>
@@ -347,7 +353,7 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
                   <AlertDescription>{notice.message}</AlertDescription>
                 </Alert>
               )}
-              {step === 'idle' && !draft && (
+              {step === 'idle' && !draft && !compact && (
                 <p className="text-sm text-muted-foreground">
                   말하기를 누르고 테마, 출발일, 투어 등급, 인원을 말하면 칸을 채워 드립니다.
                 </p>
@@ -386,6 +392,7 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
               ) : (
                 <Button
                   variant={draft ? 'outline' : 'default'}
+                  className={compact ? 'w-full sm:min-w-28' : undefined}
                   onClick={startVoiceInput}
                   disabled={step === 'applying' || disabled}
                 >

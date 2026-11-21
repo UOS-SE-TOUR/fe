@@ -519,6 +519,37 @@ describe('신청', () => {
     expect(synthesizer.spoken.at(-1)).toBe(APPLIED)
   })
 
+  it('가격이 나온 뒤 화면이 다른 목록으로 바뀌었으면, 앞서 가격이 나온 내용으로 APPLY가 와도 다시 확인받는다', async () => {
+    const user = renderPage()
+    await start(user)
+    await confirmGolf()
+    await talk('효도 투어도 보여 주세요', chat('효도 힐링 투어 상품입니다.', { theme: 'PARENTS' }))
+    await talk('처음 걸로 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
+
+    expect(countOf(APPLY)).toBe(0)
+    expect(synthesizer.spoken.at(-1)).toBe(CONFIRM_AGAIN)
+  })
+
+  it('신청하라는 답을 읽는 동안 화면을 손으로 고치면, 신청하지 않고 다시 확인받는다', async () => {
+    const user = renderPage()
+    await start(user)
+    await confirmGolf()
+    synthesizer.hold = true
+    replyOnce(CHAT, jsonResponse(200, chat('신청하겠습니다.', golfDraft(), 'APPLY')))
+    recognizer.say('네, 신청해 주세요')
+    expect(await panel().findByText('말하는 중입니다.')).toBeInTheDocument()
+
+    const headcount = within(screen.getByRole('region', { name: '고른 상품' })).getByLabelText('인원')
+    await user.clear(headcount)
+    await user.type(headcount, '3{Enter}')
+    synthesizer.hold = false
+    act(() => synthesizer.cancel())
+
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe(CONFIRM_AGAIN))
+    expect(countOf(APPLY)).toBe(0)
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 4, level: 'GRAND', headcount: 2, optionIds: [] })
+  })
+
   it('대화 중에 화면에서 신청했으면, 같은 내용으로 APPLY가 와도 바로 신청하지 않고 다시 확인받는다', async () => {
     const user = renderPage()
     await start(user)

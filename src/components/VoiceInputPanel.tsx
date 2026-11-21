@@ -273,11 +273,13 @@ export function VoiceInputPanel({
         stopAfterFailure()
         return
       }
-      // 마지막으로 가격이 나와 고객이 본 내용과 같을 때만 신청하고, 아니면 다시 계산해 확인받는다
-      if (!sameSelection(pricedRef.current, selection)) {
-        return talkOn(CONFIRM_AGAIN_MESSAGE, draft, previousDraft, seq, { confirmAgain: true })
-      }
-      if (await say(reply, seq)) await applyFromVoice(selection, seq)
+      // 지금 화면에 가격이 나와 있는 내용과 같을 때만 신청하고, 아니면 다시 계산해 확인받는다.
+      // 답을 읽는 동안 화면을 손으로 바꿨을 수 있어 읽은 뒤에도 본다
+      const confirmAgain = () => talkOn(CONFIRM_AGAIN_MESSAGE, draft, previousDraft, seq, { confirmAgain: true })
+      if (!sameSelection(pricedRef.current, selection)) return confirmAgain()
+      if (!(await say(reply, seq))) return
+      if (!sameSelection(pricedRef.current, selection)) return confirmAgain()
+      await applyFromVoice(selection, seq)
       return
     }
     await talkOn(reply, draft, previousDraft, seq)
@@ -300,11 +302,12 @@ export function VoiceInputPanel({
       const outcome = await applySelection(selection)
       if (seq !== session.current) return
       if (outcome.status === 'failed') return stopAfterFailure()
-      if (outcome.status === 'priced') pricedRef.current = selection
-      // 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
-      else rejection = outcome.error.message
+      // 거부되면 화면에 가격이 없다. 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
+      pricedRef.current = outcome.status === 'priced' ? selection : null
+      if (outcome.status === 'rejected') rejection = outcome.error.message
     } else if (!selection && !sameChoice(previousDraft, draft)) {
       setStep('working')
+      pricedRef.current = null
       await previewSelection(draft)
       if (seq !== session.current) return
     }
@@ -324,15 +327,22 @@ export function VoiceInputPanel({
     setStep('working')
     const priced = await applySelection(selection)
     if (seq !== session.current) return
-    if (priced.status === 'rejected') return continueAfter(priced.error.message, seq)
     if (priced.status === 'failed') return stopAfterFailure()
+    if (priced.status === 'rejected') {
+      pricedRef.current = null
+      return continueAfter(priced.error.message, seq)
+    }
     const result = await applyTour()
     if (seq !== session.current) return
     if (result.status === 'applied') {
       if (await say(appliedMessage(result.tourStatus), seq)) stopVoiceInput()
       return
     }
-    if (result.status === 'rejected') return continueAfter(result.error.message, seq)
+    // 거부되면 화면이 등급·인원을 다시 받거나 상품 목록으로 돌아가 가격이 없다
+    if (result.status === 'rejected') {
+      pricedRef.current = null
+      return continueAfter(result.error.message, seq)
+    }
     // 결과를 모르면 화면이 "결과 확인"을 보이고 이 패널을 막는다
     if (result.status === 'unknown') stopVoiceInput()
     else stopAfterFailure()

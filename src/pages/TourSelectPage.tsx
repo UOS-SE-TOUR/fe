@@ -64,7 +64,7 @@ const CANNOT_APPLY_MESSAGE = '더는 신청할 수 없는 상품입니다. 다�
 const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
 const APPLYING_MESSAGE = '신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.'
 const CHECK_RESULT_FIRST_MESSAGE = '신청 결과를 확인한 뒤 다시 시도해 주세요.'
-const VOICE_APPLY_BLOCKED_MESSAGE = '지금은 음성으로 신청할 수 없습니다. 아래에서 확인한 뒤 신청해 주세요.'
+const VOICE_APPLY_BLOCKED_MESSAGE = '지금은 음성으로 신청할 수 없습니다. 화면에서 확인한 뒤 신청해 주세요.'
 // 인원을 치다가 이만큼 멈추면 가격을 계산한다(글자마다 서버를 부르지 않게)
 export const HEADCOUNT_DELAY_MS = 500
 

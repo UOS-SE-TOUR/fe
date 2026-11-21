@@ -1545,7 +1545,7 @@ describe('applyTour(음성에서 부른 신청)', () => {
     await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
 
     expect(await result()).toHaveTextContent('failed')
-    expect(toast.error).toHaveBeenCalledWith('지금은 음성으로 신청할 수 없습니다. 아래에서 확인한 뒤 신청해 주세요.')
+    expect(toast.error).toHaveBeenCalledWith('지금은 음성으로 신청할 수 없습니다. 화면에서 확인한 뒤 신청해 주세요.')
     expect(countOf(APPLY)).toBe(0)
   })
 

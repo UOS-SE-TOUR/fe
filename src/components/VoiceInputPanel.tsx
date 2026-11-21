@@ -19,15 +19,15 @@ import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/mo
 import { SpeechSynthesizer, type Synthesizer } from '@/modules/SpeechSynthesizer'
 import type { VoiceInputProps, VoiceSelection } from '@/pages/TourSelectPage'
 
-const UNSUPPORTED_MESSAGE = '이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 아래에서 직접 골라 주세요.'
-const MIC_DENIED_MESSAGE = '마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'
+const UNSUPPORTED_MESSAGE = '이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 화면에서 직접 골라 주세요.'
+const MIC_DENIED_MESSAGE = '마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 화면에서 직접 골라 주세요.'
 // 그 밖의 인식 오류(네트워크·마이크 없음·정책 차단 등). 잠깐의 실패인지 가릴 수 없어 대화는 두고 다시 말할 수 있게 한다
-const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 아래에서 직접 골라 주세요.'
-const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.'
+const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 화면에서 직접 골라 주세요.'
+const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 화면에서 직접 골라 주세요.'
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
 const INTRO_MESSAGE = '묻는 말에 답하면 여행을 고르고 신청까지 해 드립니다.'
-const STOPPED_MESSAGE = '음성 대화를 끝냈습니다. 아래에서 직접 고르거나 다시 시작해 주세요.'
+const STOPPED_MESSAGE = '음성 대화를 끝냈습니다. 화면에서 직접 고르거나 다시 시작해 주세요.'
 // 확인받지 않은 내용으로 APPLY가 왔을 때, 신청하지 않고 칸을 채운 뒤 읽는 말(가격이 나왔을 때만 읽는다)
 const CONFIRM_AGAIN_MESSAGE =
   '고른 내용으로 가격을 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
@@ -49,7 +49,7 @@ const STEP_MESSAGES: Record<'speaking' | 'listening' | 'waiting' | 'working', st
   speaking: '말하는 중입니다.',
   listening: '듣고 있습니다. 말씀해 주세요.',
   waiting: '답을 기다리는 중입니다.',
-  working: '아래 화면에 반영하는 중입니다.',
+  working: '화면에 반영하는 중입니다.',
 }
 
 // 상품·투어 등급·인원이 다 정해졌으면 상품 선택 화면에 넘길 값을 돌려준다

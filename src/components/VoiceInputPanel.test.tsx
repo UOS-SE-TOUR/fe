@@ -37,7 +37,7 @@ const SEAT_SHORTAGE = '남은 자리보다 인원이 많습니다.'
 const CLOSED = '마감된 상품입니다.'
 const SERVER_ERROR = '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'
 const APPLIED = '신청했습니다. 지금 상품 상태는 ‘확정’입니다.'
-const STOPPED = '음성 대화를 끝냈습니다. 아래에서 직접 고르거나 다시 시작해 주세요.'
+const STOPPED = '음성 대화를 끝냈습니다. 화면에서 직접 고르거나 다시 시작해 주세요.'
 const CONFIRM_AGAIN = '고른 내용으로 가격을 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
 
 const golf27: TourSummary = {
@@ -472,7 +472,7 @@ describe('대화', () => {
     replyOnce('GET /api/v1/tours/4/levels', slow.reply)
     replyOnce(CHAT, jsonResponse(200, chat('맞으세요?', golfDraft())))
     recognizer.say('그랜드로 둘이요')
-    expect(await panel().findByText('아래 화면에 반영하는 중입니다.')).toBeInTheDocument()
+    expect(await panel().findByText('화면에 반영하는 중입니다.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
     slow.resolve(jsonResponse(200, levels))
@@ -679,7 +679,7 @@ describe('끝내기와 실패', () => {
     await start(user)
     await talk('골프요', failWith(503, '음성으로 고르기를 지금 쓸 수 없습니다.'))
 
-    expect(panel().getByText('지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.')).toBeInTheDocument()
+    expect(panel().getByText('지금은 음성으로 고를 수 없습니다. 화면에서 직접 골라 주세요.')).toBeInTheDocument()
     expect(screen.queryByText('음성으로 고르기를 지금 쓸 수 없습니다.')).not.toBeInTheDocument()
     expect(toast.error).not.toHaveBeenCalled()
     expect(startButton()).toBeEnabled()
@@ -736,7 +736,7 @@ describe('끝내기와 실패', () => {
     recognizer.fail('not-allowed')
 
     expect(
-      panel().getByText('마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'),
+      panel().getByText('마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 화면에서 직접 골라 주세요.'),
     ).toBeInTheDocument()
     expect(startButton()).toBeEnabled()
     expect(panel().queryByRole('button', { name: '다시 말하기' })).not.toBeInTheDocument()
@@ -744,7 +744,7 @@ describe('끝내기와 실패', () => {
 
   it.each([
     ['no-speech', '말소리를 듣지 못했습니다. 다시 말해 주세요.'],
-    ['other', '음성을 인식하지 못했습니다. 아래에서 직접 골라 주세요.'],
+    ['other', '음성을 인식하지 못했습니다. 화면에서 직접 골라 주세요.'],
   ] as const)(
     '인식이 %s로 실패하면 문구와 다시 말하기를 보이고, 다시 말하면 인사 없이 듣고 대화를 이어 간다',
     async (reason, message) => {
@@ -786,7 +786,7 @@ describe('끝내기와 실패', () => {
     renderPage()
 
     expect(
-      panel().getByText('이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 아래에서 직접 골라 주세요.'),
+      panel().getByText('이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 화면에서 직접 골라 주세요.'),
     ).toBeInTheDocument()
     expect(startButton()).not.toBeInTheDocument()
   })

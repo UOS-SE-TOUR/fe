@@ -37,6 +37,9 @@ const SEAT_SHORTAGE = '남은 자리보다 인원이 많습니다.'
 const CLOSED = '마감된 상품입니다.'
 const SERVER_ERROR = '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'
 const APPLIED = '신청했습니다. 지금 상품 상태는 ‘확정’입니다.'
+const STOPPED = '음성 대화를 끝냈습니다. 아래에서 직접 고르거나 다시 시작해 주세요.'
+const CONFIRM_AGAIN =
+  '고른 내용이 바뀌어 가격을 다시 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
 
 const golf27: TourSummary = {
   tourId: 4,
@@ -286,6 +289,11 @@ async function talk(text: string, response: VoiceChatResponse | Response) {
   await settle(listened)
 }
 
+// 12/27 골프 그랜드 2명으로 칸을 채우고 요약을 묻는 차례. APPLY는 앞 답과 같은 내용일 때만 신청한다
+async function confirmGolf() {
+  await talk('그랜드로 둘이요', chat('맞으세요?', golfDraft()))
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -391,9 +399,27 @@ describe('대화', () => {
     await talk('그랜드로 둘이요', chat('맞으세요?', golfDraft()))
 
     expect(toast.error).toHaveBeenCalledWith(SERVER_ERROR)
+    expect(panel().getByText(STOPPED)).toBeInTheDocument()
     expect(synthesizer.spoken).toEqual([GREETING])
     expect(startButton()).toBeEnabled()
     expect(recognizer.started).toBe(1)
+  })
+
+  it('칸을 채우는 중에 화면에서 테마를 다시 고르면 대화를 끝내고 패널에 알린다', async () => {
+    const user = renderPage()
+    await start(user)
+    const slow = deferred()
+    replyOnce('GET /api/v1/tours/4/levels', slow.reply)
+    replyOnce(CHAT, jsonResponse(200, chat('맞으세요?', golfDraft())))
+    recognizer.say('그랜드로 둘이요')
+    expect(await panel().findByText('아래 화면에 반영하는 중입니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '골프 챌린지 투어' }))
+    slow.resolve(jsonResponse(200, levels))
+    expect(await panel().findByText(STOPPED)).toBeInTheDocument()
+    expect(synthesizer.spoken).toEqual([GREETING])
+    expect(countOf(QUOTE)).toBe(0)
+    expect(startButton()).toBeEnabled()
   })
 })
 
@@ -419,9 +445,30 @@ describe('신청', () => {
     expect(recognizer.started).toBe(2)
   })
 
+  it('APPLY인데 고른 내용이 앞 답과 다르면 신청하지 않고, 바뀐 내용으로 칸을 채운 뒤 다시 확인받는다', async () => {
+    const user = renderPage()
+    await start(user)
+    await confirmGolf()
+    await talk('네, 근데 셋이요', chat('세 명으로 신청하겠습니다.', golfDraft({ headcount: 3 }), 'APPLY'))
+
+    expect(countOf(APPLY)).toBe(0)
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 4, level: 'GRAND', headcount: 3, optionIds: [] })
+    expect(events.slice(-4)).toEqual([CHAT, QUOTE, `speak: ${CONFIRM_AGAIN}`, 'listen'])
+    expect(synthesizer.spoken).not.toContain('세 명으로 신청하겠습니다.')
+
+    await talk('네, 신청해 주세요', chat('신청하겠습니다.', golfDraft({ headcount: 3 }), 'APPLY'))
+    expect(bodiesOf<VoiceChatRequest>(CHAT)[2].messages.slice(-2)).toEqual([
+      system(CONFIRM_AGAIN),
+      customer('네, 신청해 주세요'),
+    ])
+    expect(bodiesOf(APPLY)).toEqual([{ tourId: 4, level: 'GRAND', headcount: 3, optionIds: [] }])
+    expect(synthesizer.spoken.at(-1)).toBe(APPLIED)
+  })
+
   it('APPLY에서 가격 계산이 거부되면 신청하지 않고 그 문구를 읽은 뒤 대화를 이어 간다', async () => {
     const user = renderPage()
     await start(user)
+    await confirmGolf()
     replyOnce(QUOTE, failWith(409, CLOSED))
     await talk('그대로 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
 
@@ -436,6 +483,7 @@ describe('신청', () => {
   ])('신청이 %i로 거부되면 그 문구를 읽고 대화를 이어 가고, 화면은 %s을 보인다', async (status, message, region) => {
     const user = renderPage()
     await start(user)
+    await confirmGolf()
     replyOnce(APPLY, failWith(status, message))
     await talk('그대로 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
 
@@ -448,14 +496,16 @@ describe('신청', () => {
   it('신청 결과를 모르면 대화를 끝내고, 화면이 결과를 확인할 때까지 패널을 막는다', async () => {
     const user = renderPage()
     await start(user)
+    await confirmGolf()
     replyOnce(APPLY, failWith(500, SERVER_ERROR))
     await talk('그대로 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
 
     expect(await screen.findByRole('button', { name: '결과 확인' })).toBeInTheDocument()
     expect(panel().getByText(DISABLED)).toBeInTheDocument()
+    expect(panel().queryByText(STOPPED)).not.toBeInTheDocument()
     expect(startButton()).toBeDisabled()
     expect(synthesizer.spoken.at(-1)).toBe('신청하겠습니다.')
-    expect(recognizer.started).toBe(1)
+    expect(recognizer.started).toBe(2)
 
     replyOnce(APPLY, jsonResponse(201, { bookingId: 7, status: 'CONFIRMED' }))
     await user.click(screen.getByRole('button', { name: '결과 확인' }))
@@ -467,17 +517,20 @@ describe('신청', () => {
   it('신청이 그 밖의 이유로 실패하면 대화를 끝낸다(화면이 알렸다)', async () => {
     const user = renderPage()
     await start(user)
+    await confirmGolf()
     replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
     await talk('그대로 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
 
     expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(panel().getByText(STOPPED)).toBeInTheDocument()
     expect(startButton()).toBeEnabled()
-    expect(recognizer.started).toBe(1)
+    expect(recognizer.started).toBe(2)
   })
 
   it('신청을 기다리는 동안 그만두어도 보낸 신청은 되돌리지 않고, 그 결과는 읽지 않는다', async () => {
     const user = renderPage()
     await start(user)
+    await confirmGolf()
     const slow = deferred()
     replyOnce(APPLY, slow.reply)
     replyOnce(CHAT, jsonResponse(200, chat('신청하겠습니다.', golfDraft(), 'APPLY')))
@@ -570,6 +623,7 @@ describe('끝내기와 실패', () => {
     await talk('골프요', failWith(500, SERVER_ERROR))
 
     expect(toast.error).toHaveBeenCalledWith(SERVER_ERROR)
+    expect(panel().getByText(STOPPED)).toBeInTheDocument()
     expect(startButton()).toBeEnabled()
   })
 
@@ -586,6 +640,7 @@ describe('끝내기와 실패', () => {
     await talk('골프요', jsonResponse(200, body))
 
     expect(toast.error).toHaveBeenCalledWith('문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.')
+    expect(panel().getByText(STOPPED)).toBeInTheDocument()
     expect(startButton()).toBeEnabled()
     expect(countOf(QUOTE)).toBe(0)
     expect(countOf(APPLY)).toBe(0)

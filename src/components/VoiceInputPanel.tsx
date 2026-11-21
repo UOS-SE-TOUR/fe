@@ -27,6 +27,9 @@ const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니�
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
 const INTRO_MESSAGE = '묻는 말에 답하면 여행을 고르고 신청까지 해 드립니다.'
+const STOPPED_MESSAGE = '음성 대화를 끝냈습니다. 아래에서 직접 고르거나 다시 시작해 주세요.'
+const CONFIRM_AGAIN_MESSAGE =
+  '고른 내용이 바뀌어 가격을 다시 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
 
 function greetingFor(name: string | null): string {
   return name ? `안녕하세요, ${name} 고객님. 어떤 여행을 찾으세요?` : '안녕하세요, 고객님. 어떤 여행을 찾으세요?'
@@ -218,13 +221,16 @@ export function VoiceInputPanel({
       // 503이면 서버 문구는 보이지 않는다(설계 3장 VoiceInputPanel)
       if (hasStatus(error, 503)) setNotice(VOICE_UNAVAILABLE_MESSAGE)
       else if (hasStatus(error, 400)) setNotice(error.message)
-      else showError(error)
+      else {
+        showError(error)
+        setNotice(STOPPED_MESSAGE)
+      }
       return
     }
     if (seq !== session.current) return
     if (!isVoiceChatResponse(body)) {
-      stopVoiceInput()
       showError(new Error(`voice/chat 응답 모양이 다르다: ${JSON.stringify(body)}`))
+      stopAfterFailure()
       return
     }
     await answer(body, seq)
@@ -236,30 +242,34 @@ export function VoiceInputPanel({
     const previous = selectionOf(draftRef.current)
     const selection = selectionOf(draft)
     draftRef.current = draft
-    if (next === 'APPLY') {
-      // 서버는 상품·투어 등급·인원이 다 정해졌을 때만 APPLY를 준다
-      if (!selection) {
-        stopVoiceInput()
-        showError(new Error(`voice/chat이 고르지 않은 칸이 있는 채로 APPLY를 줬다: ${JSON.stringify(draft)}`))
-        return
-      }
-      if (await say(reply, seq)) await applyFromVoice(selection, seq)
-      return
-    }
     if (next === 'STOP') {
       if (await say(reply, seq)) stopVoiceInput()
       return
     }
+    if (next === 'APPLY') {
+      // 서버는 상품·투어 등급·인원이 다 정해졌을 때만 APPLY를 준다
+      if (!selection) {
+        showError(new Error(`voice/chat이 고르지 않은 칸이 있는 채로 APPLY를 줬다: ${JSON.stringify(draft)}`))
+        stopAfterFailure()
+        return
+      }
+      // 고객이 확인한 요약은 앞 답의 고른 내용이다. 그와 같을 때만 신청하고, 다르면 바뀐 내용으로 칸을 채워 다시 확인받는다
+      // (be가 고른 값을 빼면 APPLY를 TALK로 바꾸고 답을 고정 문장으로 바꾸는 것과 같은 까닭이다)
+      if (!sameSelection(previous, selection)) return talkOn(CONFIRM_AGAIN_MESSAGE, selection, previous, seq)
+      if (await say(reply, seq)) await applyFromVoice(selection, seq)
+      return
+    }
+    await talkOn(reply, selection, previous, seq)
+  }
+
+  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 화면의 칸을 채운 뒤 말을 읽고 다시 듣는다
+  async function talkOn(reply: string, selection: VoiceSelection | null, previous: VoiceSelection | null, seq: number) {
     let rejection: string | null = null
     if (selection && !sameSelection(previous, selection)) {
       setStep('working')
       const outcome = await applySelection(selection)
       if (seq !== session.current) return
-      // 그 밖의 실패는 상품 선택 화면이 이미 알렸다
-      if (outcome.status === 'failed') {
-        stopVoiceInput()
-        return
-      }
+      if (outcome.status === 'failed') return stopAfterFailure()
       // 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
       if (outcome.status === 'rejected') rejection = outcome.error.message
     }
@@ -279,7 +289,7 @@ export function VoiceInputPanel({
     const priced = await applySelection(selection)
     if (seq !== session.current) return
     if (priced.status === 'rejected') return continueAfter(priced.error.message, seq)
-    if (priced.status === 'failed') return stopVoiceInput()
+    if (priced.status === 'failed') return stopAfterFailure()
     const result = await applyTour()
     if (seq !== session.current) return
     if (result.status === 'applied') {
@@ -287,8 +297,16 @@ export function VoiceInputPanel({
       return
     }
     if (result.status === 'rejected') return continueAfter(result.error.message, seq)
-    // 결과를 모르면 화면이 "결과 확인"을 보이고 이 패널을 막는다. 그 밖의 실패는 화면이 이미 알렸다
+    // 결과를 모르면 화면이 "결과 확인"을 보이고 이 패널을 막는다
+    if (result.status === 'unknown') stopVoiceInput()
+    else stopAfterFailure()
+  }
+
+  // 실패로 대화를 끝낸다. 까닭은 공용 알림이나 화면이 보이고(화면을 다시 고른 때처럼 알림이 없을 수도 있다),
+  // 패널에는 대화가 끝났다는 것을 보인다
+  function stopAfterFailure() {
     stopVoiceInput()
+    setNotice(STOPPED_MESSAGE)
   }
 
   // 대화를 끝낸다. 듣기·읽기를 멈추고(마이크를 놓고) 그 뒤에 도착한 서버 응답은 버린다. 이미 보낸 신청은 되돌리지 않는다

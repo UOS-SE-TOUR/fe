@@ -527,6 +527,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         },
       }
     }
+    const confirmedBefore = current.discountConfirmed
     if (fromVoice) updateDetail({ discountConfirmed: true })
     applying.current = true
     const seq = context.current
@@ -556,6 +557,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         if (shownTheme) void loadTours(shownTheme, seq, { quiet: true })
         return { status: 'unknown' }
       }
+      // 신청되지 않았다. 음성이 켠 할인 확인을 되돌려, 화면에서 다시 낸 가격의 할인은 화면에서 확인받는다
+      if (fromVoice) updateDetail({ discountConfirmed: confirmedBefore })
       if (hasStatus(error, 400)) {
         updateDetail({ unknownApply: null })
         await askLevelAgain(error.message, apply.request.tourId, seq)

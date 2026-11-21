@@ -1412,6 +1412,21 @@ describe('applyTour(음성에서 부른 신청)', () => {
     expect(screen.getByText(/신청했습니다/)).toBeInTheDocument()
   })
 
+  it('음성 신청이 거부되면 켰던 할인 확인을 되돌려, 화면에서 다시 낸 가격의 할인은 다시 확인받는다', async () => {
+    always.set(QUOTE, (body) => jsonResponse(200, quoteFor(body as QuoteRequest, 100_000)))
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+    expect(await result()).toHaveTextContent(`rejected: ${SEAT_SHORTAGE}`)
+    await waitFor(() => expect(countOf(TOURS)).toBe(2))
+
+    const headcount = screen.getByLabelText('인원')
+    await user.clear(headcount)
+    await user.type(headcount, '1{Enter}')
+    expect(await screen.findByText('단골 할인이 적용됩니다')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
+  })
+
   it('409면 상품 목록으로 돌아가 문구를 보이고 거부로 돌려준다', async () => {
     replyOnce(APPLY, failWith(409, CLOSED))
     const user = renderPage(ApplyingVoiceInput)

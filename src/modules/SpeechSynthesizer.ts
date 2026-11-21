@@ -1,6 +1,6 @@
 // Chrome은 읽기가 끝났다는 신호(end)를 가끔 주지 않는다. 글자 수에 맞춘 이 시간이 지나면 끝난 것으로 본다.
-// 한국어 기본 속도는 1초에 대략 6~7자라 넉넉히 잡는다
-const SPEAK_MIN_MS = 1500
+// 한국어 기본 속도는 1초에 대략 6~7자라 넉넉히 잡고, 처음 읽을 때 목소리를 불러오느라 늦게 시작하는 몫도 둔다
+const SPEAK_MIN_MS = 3000
 const SPEAK_MS_PER_CHAR = 200
 
 export function speakTimeoutMs(text: string): number {

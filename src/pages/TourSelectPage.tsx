@@ -212,6 +212,8 @@ export interface VoiceInputProps {
   previewSelection: PreviewSelection
   applySelection: ApplySelection
   applyTour: ApplyTour
+  // 화면에서 손으로 고르거나 신청한 횟수
+  screenEdits: number
   disabled: boolean
 }
 
@@ -678,6 +680,12 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   const applyTourFromVoice: ApplyTour = () => applyTour({ fromVoice: true })
 
+  // 화면에서 손으로 고르거나 신청한 횟수. 음성 패널은 이 값이 바뀌면 음성이 가격을 낸 내용을 다시 확인받는다
+  const [screenEdits, setScreenEdits] = useState(0)
+  function touchScreen() {
+    setScreenEdits((count) => count + 1)
+  }
+
   const applyBusy = pending === 'apply'
   useBlockLeaving(applyBusy, '신청이 끝날 때까지 이 화면에 있어 주세요.')
 
@@ -699,6 +707,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
               previewSelection={previewSelection}
               applySelection={applySelection}
               applyTour={applyTourFromVoice}
+              screenEdits={screenEdits}
               disabled={Boolean(detail?.unknownApply)}
             />
           </div>
@@ -715,7 +724,10 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
                   variant={chosen ? 'default' : 'outline'}
                   aria-pressed={chosen}
                   disabled={applyBusy}
-                  onClick={() => selectTheme(item.value)}
+                  onClick={() => {
+                    touchScreen()
+                    selectTheme(item.value)
+                  }}
                   className={cn(
                     'h-auto flex-col gap-2 py-4 break-keep whitespace-normal',
                     !chosen && 'bg-card shadow-xs',
@@ -755,7 +767,14 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
                 </div>
               )}
               {tourList && theme && (
-                <TourList tours={tourList} theme={theme} onSelect={(tourId) => void selectTour(tourId)} />
+                <TourList
+                  tours={tourList}
+                  theme={theme}
+                  onSelect={(tourId) => {
+                    touchScreen()
+                    void selectTour(tourId)
+                  }}
+                />
               )}
             </section>
           )}
@@ -766,15 +785,33 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
               tour={tourList?.find((item) => item.tourId === detail.tourId)}
               theme={theme}
               pending={pending}
-              onBack={() => showTourList(null)}
-              onChangeLevel={changeLevel}
-              onChangeHeadcount={changeHeadcount}
-              onQuoteNow={quoteNow}
+              onBack={() => {
+                touchScreen()
+                showTourList(null)
+              }}
+              onChangeLevel={(level) => {
+                touchScreen()
+                changeLevel(level)
+              }}
+              onChangeHeadcount={(headcount) => {
+                touchScreen()
+                changeHeadcount(headcount)
+              }}
+              onQuoteNow={() => {
+                touchScreen()
+                quoteNow()
+              }}
               onConfirmPrice={confirmPrice}
               onOpenOptions={requestCustomize}
-              onChangeOptions={changeOptions}
+              onChangeOptions={(optionIds) => {
+                touchScreen()
+                changeOptions(optionIds)
+              }}
               onFinishOptions={finishCustomize}
-              onApply={() => void applyTour()}
+              onApply={() => {
+                touchScreen()
+                void applyTour()
+              }}
             />
           )}
         </div>

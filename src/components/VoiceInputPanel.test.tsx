@@ -489,20 +489,46 @@ describe('신청', () => {
     await start(user)
     await talk('그랜드로 둘이요, 샴페인도', chat('맞으세요?', golfDraft({ optionIds: [41] })))
 
-    // 대화하는 동안 화면에서 인원을 고쳐도, 신청 직전에 대화의 내용으로 다시 맞춘다
+    await talk('네, 그대로 신청해 주세요', chat('신청하겠습니다.', golfDraft({ optionIds: [41] }), 'APPLY'))
+    expect(events.slice(-5)).toEqual([CHAT, 'speak: 신청하겠습니다.', QUOTE, APPLY, `speak: ${APPLIED}`])
+    expect(bodiesOf(QUOTE)).toHaveLength(2)
+    expect(bodiesOf(APPLY)).toEqual([{ tourId: 4, level: 'GRAND', headcount: 2, optionIds: [41] }])
+    expect(lines().at(-1)).toBe(`시스템: ${APPLIED}`)
+    expect(within(screen.getByRole('region', { name: '고른 상품' })).getByText(APPLIED)).toBeInTheDocument()
+    expect(startButton()).toBeEnabled()
+    expect(recognizer.started).toBe(2)
+  })
+
+  it('화면에서 손으로 칸을 고친 뒤 APPLY가 오면 대화의 내용으로 다시 맞춰 계산하고, 다시 확인받은 뒤 신청한다', async () => {
+    const user = renderPage()
+    await start(user)
+    await talk('그랜드로 둘이요, 샴페인도', chat('맞으세요?', golfDraft({ optionIds: [41] })))
+
     const headcount = within(screen.getByRole('region', { name: '고른 상품' })).getByLabelText('인원')
     await user.clear(headcount)
     await user.type(headcount, '5{Enter}')
     await waitFor(() => expect(bodiesOf(QUOTE).at(-1)).toMatchObject({ headcount: 5 }))
 
     await talk('네, 그대로 신청해 주세요', chat('신청하겠습니다.', golfDraft({ optionIds: [41] }), 'APPLY'))
-    expect(events.slice(-5)).toEqual([CHAT, 'speak: 신청하겠습니다.', QUOTE, APPLY, `speak: ${APPLIED}`])
+    expect(countOf(APPLY)).toBe(0)
+    expect(events.slice(-4)).toEqual([CHAT, QUOTE, `speak: ${CONFIRM_AGAIN}`, 'listen'])
     expect(bodiesOf(QUOTE).at(-1)).toEqual({ tourId: 4, level: 'GRAND', headcount: 2, optionIds: [41] })
+
+    await talk('네', chat('신청하겠습니다.', golfDraft({ optionIds: [41] }), 'APPLY'))
     expect(bodiesOf(APPLY)).toEqual([{ tourId: 4, level: 'GRAND', headcount: 2, optionIds: [41] }])
-    expect(lines().at(-1)).toBe(`시스템: ${APPLIED}`)
-    expect(within(screen.getByRole('region', { name: '고른 상품' })).getByText(APPLIED)).toBeInTheDocument()
-    expect(startButton()).toBeEnabled()
-    expect(recognizer.started).toBe(2)
+    expect(synthesizer.spoken.at(-1)).toBe(APPLIED)
+  })
+
+  it('대화 중에 화면에서 신청했으면, 같은 내용으로 APPLY가 와도 바로 신청하지 않고 다시 확인받는다', async () => {
+    const user = renderPage()
+    await start(user)
+    await confirmGolf()
+    await user.click(screen.getByRole('button', { name: '신청하기' }))
+    expect(await within(screen.getByRole('region', { name: '고른 상품' })).findByText(APPLIED)).toBeInTheDocument()
+
+    await talk('네, 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
+    expect(countOf(APPLY)).toBe(1)
+    expect(synthesizer.spoken.at(-1)).toBe(CONFIRM_AGAIN)
   })
 
   it('APPLY인데 고른 내용이 앞 답과 다르면 신청하지 않고, 바뀐 내용으로 칸을 채운 뒤 다시 확인받는다', async () => {
@@ -833,6 +859,7 @@ describe('신청 결과를 모를 때', () => {
         previewSelection={vi.fn()}
         applySelection={vi.fn()}
         applyTour={vi.fn()}
+        screenEdits={0}
         disabled
         createRecognizer={() => recognizer}
         createSynthesizer={() => synthesizer}

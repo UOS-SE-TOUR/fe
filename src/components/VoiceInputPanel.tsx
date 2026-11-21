@@ -104,6 +104,7 @@ export function VoiceInputPanel({
   previewSelection,
   applySelection,
   applyTour,
+  screenEdits,
   disabled,
   createRecognizer = newRecognizer,
   createSynthesizer = newSynthesizer,
@@ -134,6 +135,11 @@ export function VoiceInputPanel({
       synthesizer.cancel()
     }
   }, [synthesizer])
+
+  // 화면에서 손으로 고르거나 신청했으면 화면이 음성이 가격을 낸 내용과 달라졌다. 다음 신청은 다시 계산해 확인받는다
+  useEffect(() => {
+    pricedRef.current = null
+  }, [screenEdits])
 
   // 대화가 길어지면 마지막 줄이 보이게 내린다
   useEffect(() => {

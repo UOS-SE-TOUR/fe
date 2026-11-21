@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from 'react'
 import type { RouteObject } from 'react-router'
+import { SiteHeader } from '@/components/SiteHeader'
 import { pagePaths, type PageName } from '@/lib/pages'
 import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
@@ -31,10 +32,22 @@ export const routes: RouteObject[] = [
     path: pagePaths[page],
     errorElement: <PageLoadError />,
     element: (
-      <PageGate page={page}>
-        <Suspense fallback={null}>{pageElements[page]}</Suspense>
-      </PageGate>
+      <>
+        <SiteHeader />
+        <PageGate page={page}>
+          <Suspense fallback={null}>{pageElements[page]}</Suspense>
+        </PageGate>
+      </>
     ),
   })),
-  { path: '*', element: <GoHome />, errorElement: <PageLoadError /> },
+  {
+    path: '*',
+    element: (
+      <>
+        <SiteHeader />
+        <GoHome />
+      </>
+    ),
+    errorElement: <PageLoadError />,
+  },
 ]

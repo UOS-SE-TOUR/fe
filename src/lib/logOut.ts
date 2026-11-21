@@ -25,6 +25,7 @@ export function useLogOut() {
       return
     }
     clearFromLogin()
+    setLoggingOut(false)
     AuthStore.clear()
     showLoginPage()
   }

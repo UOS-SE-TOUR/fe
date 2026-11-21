@@ -1,8 +1,15 @@
-import { act, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { act, screen, waitFor, within } from '@testing-library/react'
+import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MyBookingResponse } from '@/lib/tours'
+import { tourLevelLabel, type TourLevel } from '@/lib/labels'
+import type {
+  MyBookingResponse,
+  OptionCategory,
+  PriceQuote,
+  TourLevelsResponse,
+  TourOptionsResponse,
+} from '@/lib/tours'
 import { AuthStore } from '@/modules/AuthStore'
 import { jsonResponse, stubFetch } from '@/test/http'
 import { renderAt, sentRequest } from '@/test/router'
@@ -16,10 +23,12 @@ const recruiting: MyBookingResponse = {
   level: 'GRAND',
   levelName: '그랜드',
   headcount: 2,
+  optionIds: [22],
   finalPrice: 3_000_000,
   appliedAt: '2026-11-20T03:15:00.123456Z',
   status: 'RECRUITING',
   headcountToConfirm: 2,
+  changeable: true,
 }
 
 const confirmed: MyBookingResponse = {
@@ -31,10 +40,12 @@ const confirmed: MyBookingResponse = {
   level: 'PREMIUM',
   levelName: '프리미엄',
   headcount: 3,
+  optionIds: [],
   finalPrice: 1_350_000,
   appliedAt: '2026-11-19T10:00:00Z',
   status: 'CONFIRMED',
   headcountToConfirm: 0,
+  changeable: false,
 }
 
 let fetchMock: ReturnType<typeof stubFetch>
@@ -127,6 +138,8 @@ describe('신청 목록', () => {
     ['빈 본문', () => new Response('', { status: 200 })],
     ['배열이 아닌 본문', () => jsonResponse(200, { message: '잘못된 응답' })],
     ['칸이 빠진 신청', () => jsonResponse(200, [{ ...recruiting, headcountToConfirm: undefined }])],
+    ['옵션 ID가 목록이 아닌 신청', () => jsonResponse(200, [{ ...recruiting, optionIds: '22' }])],
+    ['바꿀 수 있는지가 빠진 신청', () => jsonResponse(200, [{ ...recruiting, changeable: undefined }])],
   ])('성공 응답인데 %s이면 못 읽은 것으로 보여 주고 공용 알림을 띄운다', async (_, response) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     fetchMock.mockResolvedValueOnce(response())
@@ -163,4 +176,506 @@ it('불러오는 중에 다른 화면으로 가면 늦게 온 실패를 알리�
   })
 
   expect(toast.error).not.toHaveBeenCalled()
+})
+
+describe('신청 바꾸기', () => {
+  const BOOKINGS = 'GET /api/v1/bookings'
+  const LEVELS = 'GET /api/v1/tours/9/levels'
+  const QUOTE = 'POST /api/v1/bookings/21/quote'
+  const CHANGE = 'POST /api/v1/bookings/21/change'
+  const CANNOT_CHANGE = '출발했거나 취소된 여행은 바꿀 수 없습니다.'
+  const NOT_FOUND = '신청을 찾을 수 없습니다.'
+  const NOT_THIS_TOUR = '이 상품에 없는 옵션입니다.'
+  const SERVER_ERROR = '서버에 문제가 생겼습니다.'
+
+  const levels: TourLevelsResponse = {
+    service: '커플 스파',
+    souvenir: '커플 앨범',
+    vehicle: '전용 차량',
+    levels: [
+      { level: 'GRAND', name: '그랜드', price: 1_500_000, hotelGrade: 4, meal: '한식', includesChampagne: false },
+      {
+        level: 'PREMIUM',
+        name: '프리미엄',
+        price: 2_000_000,
+        hotelGrade: 5,
+        meal: '코스 요리',
+        includesChampagne: true,
+      },
+    ],
+  }
+
+  const options: TourOptionsResponse = {
+    hotels: [{ optionId: 13, name: '5등급 호텔', priceDiff: 200_000 }],
+    transports: [{ optionId: 22, name: '리무진', priceDiff: 50_000 }],
+    meals: [{ optionId: 31, name: '도시락', priceDiff: -30_000 }],
+    extras: [
+      { optionId: 41, name: '샴페인', priceDiff: 40_000 },
+      { optionId: 42, name: '커피', priceDiff: 5_000 },
+    ],
+  }
+
+  const categories: [keyof TourOptionsResponse, OptionCategory][] = [
+    ['hotels', 'HOTEL'],
+    ['transports', 'TRANSPORT'],
+    ['meals', 'MEAL'],
+    ['extras', 'EXTRA'],
+  ]
+
+  interface Choice {
+    level: TourLevel
+    optionIds: number[]
+  }
+
+  // 서버처럼 바꿀 내용으로 가격을 계산한다(등급 가격 + 옵션 요금 차이) × 신청 인원
+  function quoteFor({ level, optionIds }: Choice): PriceQuote {
+    const chosen = categories.flatMap(([key, category]) =>
+      options[key].filter((item) => optionIds.includes(item.optionId)).map((item) => ({ ...item, category })),
+    )
+    const perPerson =
+      levels.levels.find((item) => item.level === level)!.price + chosen.reduce((sum, item) => sum + item.priceDiff, 0)
+    const totalPrice = perPerson * recruiting.headcount
+    return {
+      summary: {
+        tourId: recruiting.tourId,
+        title: recruiting.title,
+        departureDate: recruiting.departureDate,
+        duration: recruiting.duration,
+        level,
+        levelName: tourLevelLabel(level),
+        headcount: recruiting.headcount,
+        options: chosen,
+      },
+      totalPrice,
+      discount: 0,
+      finalPrice: totalPrice,
+    }
+  }
+
+  function changedFor(choice: Choice): MyBookingResponse {
+    return {
+      ...recruiting,
+      level: choice.level,
+      levelName: tourLevelLabel(choice.level),
+      optionIds: [...choice.optionIds].sort((a, b) => a - b),
+      finalPrice: quoteFor(choice).finalPrice,
+    }
+  }
+
+  type Reply = Response | ((body: unknown) => Response | Promise<Response>)
+
+  // 한 번만 쓰는 답(먼저 쓴다)과 늘 쓰는 답
+  let once: Map<string, Reply[]>
+  let always: Map<string, Reply>
+  let unexpected: string[]
+
+  function requestKey(input: RequestInfo | URL, init: RequestInit | undefined): string {
+    return `${init?.method ?? 'GET'} ${String(input)}`
+  }
+
+  function replyOnce(key: string, ...replies: Reply[]) {
+    once.set(key, [...(once.get(key) ?? []), ...replies])
+  }
+
+  function bodiesOf(key: string): unknown[] {
+    return fetchMock.mock.calls
+      .filter(([input, init]) => requestKey(input, init) === key)
+      .map(([, init]) => JSON.parse(String(init?.body)))
+  }
+
+  function countOf(key: string): number {
+    return fetchMock.mock.calls.filter(([input, init]) => requestKey(input, init) === key).length
+  }
+
+  function failWith(status: number, message: string): Response {
+    return jsonResponse(status, { message })
+  }
+
+  // 답을 미뤄 두었다가 resolve로 보낸다
+  function deferred() {
+    let resolve: (response: Response) => void = () => {}
+    const reply = () => new Promise<Response>((done) => (resolve = done))
+    return { reply, resolve: (response: Response) => resolve(response) }
+  }
+
+  beforeEach(() => {
+    once = new Map()
+    unexpected = []
+    always = new Map<string, Reply>([
+      [BOOKINGS, () => jsonResponse(200, [recruiting, confirmed])],
+      [LEVELS, () => jsonResponse(200, levels)],
+      ['GET /api/v1/tours/9/options?level=GRAND', () => jsonResponse(200, options)],
+      ['GET /api/v1/tours/9/options?level=PREMIUM', () => jsonResponse(200, options)],
+      [QUOTE, (body) => jsonResponse(200, quoteFor(body as Choice))],
+      [CHANGE, (body) => jsonResponse(200, changedFor(body as Choice))],
+    ])
+    fetchMock.mockImplementation(async (input, init) => {
+      const key = requestKey(input, init)
+      const reply = once.get(key)?.shift() ?? always.get(key)
+      if (!reply) {
+        unexpected.push(key)
+        return failWith(500, `예상하지 않은 요청: ${key}`)
+      }
+      if (reply instanceof Response) return reply
+      return reply(init?.body ? JSON.parse(String(init.body)) : undefined)
+    })
+    vi.spyOn(toast, 'success').mockImplementation(() => 'toast')
+  })
+
+  afterEach(() => {
+    expect(unexpected).toEqual([])
+  })
+
+  // 첫 줄(모집 중인 허니문 신청)의 바꾸기 단추를 누른다. 창을 열 때의 요청이 바로 실패하면 창이 곧 닫혀, 창을 찾지 않는다
+  async function clickChange(user: UserEvent) {
+    const router = renderAt('/bookings')
+    const [first] = await screen.findAllByRole('listitem')
+    await user.click(within(first).getByRole('button', { name: '바꾸기' }))
+    return router
+  }
+
+  // 창을 열고 지금 내용(그랜드·리무진)의 가격이 나올 때까지 기다린다
+  async function openChange(user: UserEvent) {
+    const router = await clickChange(user)
+    const dialog = await screen.findByRole('dialog', { name: '신청 바꾸기' })
+    expect(await within(dialog).findByText('최종 가격 3,100,000원')).toBeInTheDocument()
+    return { dialog, router }
+  }
+
+  function saveButton(dialog: HTMLElement): HTMLElement {
+    return within(dialog).getByRole('button', { name: '바꾸기 저장' })
+  }
+
+  async function waitClosed() {
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  }
+
+  it('바꿀 수 있는 신청의 줄에만 바꾸기 단추가 보인다', async () => {
+    renderAt('/bookings')
+
+    const [first, second] = await screen.findAllByRole('listitem')
+    expect(within(first).getByRole('button', { name: '바꾸기' })).toBeInTheDocument()
+    expect(within(second).queryByRole('button', { name: '바꾸기' })).not.toBeInTheDocument()
+  })
+
+  it('창을 열면 상품·출발일·인원을 보이고, 지금 등급과 옵션을 골라 두고, 가격 계산을 한 번 불러 가격을 보인다', async () => {
+    const { dialog } = await openChange(userEvent.setup())
+
+    expect(
+      within(dialog).getByText('허니문 낭만 투어 12/20 출발 5일 · 2026년 12월 20일 출발 · 2명'),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('상품과 인원은 바꿀 수 없습니다.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('radio', { name: /^그랜드/ })).toBeChecked()
+    expect(await within(dialog).findByRole('radio', { name: /^리무진/ })).toBeChecked()
+    expect(within(dialog).getByRole('checkbox', { name: /^커피/ })).not.toBeChecked()
+    // 가격 요약은 할인 "확인" 단추 없이 보인다
+    expect(within(dialog).getByText('가격 요약')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: '확인' })).not.toBeInTheDocument()
+    expect(bodiesOf(QUOTE)).toEqual([{ level: 'GRAND', optionIds: [22] }])
+    expect(countOf(CHANGE)).toBe(0)
+  })
+
+  it('등급을 바꾸면 가격 계산을 불러 바뀐 가격을 보인다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+
+    await user.click(within(dialog).getByRole('radio', { name: /^프리미엄/ }))
+
+    expect(await within(dialog).findByText('최종 가격 4,100,000원')).toBeInTheDocument()
+    expect(within(dialog).getByRole('radio', { name: /^프리미엄/ })).toBeChecked()
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ level: 'PREMIUM', optionIds: [22] })
+    expect(await within(dialog).findByText('프리미엄 등급은 샴페인이 기본으로 포함됩니다.')).toBeInTheDocument()
+  })
+
+  it('옵션을 바꾸면 가격 계산을 불러 바뀐 가격을 보인다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+
+    await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+
+    expect(await within(dialog).findByText('최종 가격 3,110,000원')).toBeInTheDocument()
+    expect(bodiesOf(QUOTE).at(-1)).toEqual({ level: 'GRAND', optionIds: [22, 42] })
+  })
+
+  it('저장하면 바꿀 내용을 보내고, 창을 닫고, 목록의 그 줄을 응답으로 바꾸고 알린다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+    await user.click(within(dialog).getByRole('radio', { name: /^프리미엄/ }))
+    await within(dialog).findByText('최종 가격 4,100,000원')
+
+    await user.click(saveButton(dialog))
+
+    await waitClosed()
+    expect(bodiesOf(CHANGE)).toEqual([{ level: 'PREMIUM', optionIds: [22] }])
+    const [first, second] = screen.getAllByRole('listitem')
+    expect(within(first).getByText('2026년 12월 20일 출발 · 프리미엄 · 2명')).toBeInTheDocument()
+    expect(within(first).getByText('4,100,000원')).toBeInTheDocument()
+    expect(within(second).getByText('1,350,000원')).toBeInTheDocument()
+    expect(toast.success).toHaveBeenCalledWith('신청 내용을 바꿨습니다.')
+    // 목록은 다시 부르지 않는다
+    expect(countOf(BOOKINGS)).toBe(1)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('그만두기를 누르면 저장하지 않고 창을 닫는다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+    await user.click(within(dialog).getByRole('radio', { name: /^프리미엄/ }))
+    await within(dialog).findByText('최종 가격 4,100,000원')
+
+    await user.click(within(dialog).getByRole('button', { name: '그만두기' }))
+
+    await waitClosed()
+    expect(countOf(CHANGE)).toBe(0)
+    expect(within(screen.getAllByRole('listitem')[0]).getByText('3,000,000원')).toBeInTheDocument()
+  })
+
+  it('다시 열면 지금 신청 내용에서 시작한다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+    await user.click(within(dialog).getByRole('radio', { name: /^프리미엄/ }))
+    await within(dialog).findByText('최종 가격 4,100,000원')
+    await user.click(within(dialog).getByRole('button', { name: '그만두기' }))
+    await waitClosed()
+
+    await user.click(within(screen.getAllByRole('listitem')[0]).getByRole('button', { name: '바꾸기' }))
+    const reopened = await screen.findByRole('dialog', { name: '신청 바꾸기' })
+
+    expect(await within(reopened).findByText('최종 가격 3,100,000원')).toBeInTheDocument()
+    expect(within(reopened).getByRole('radio', { name: /^그랜드/ })).toBeChecked()
+  })
+
+  describe('400(고를 수 없는 등급·옵션)', () => {
+    it('옵션을 바꾼 가격 계산이면 창 안에 문구를 보이고 마지막으로 가격이 나온 옵션으로 되돌린다', async () => {
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(QUOTE, failWith(400, NOT_THIS_TOUR))
+
+      await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+
+      expect(await within(dialog).findByText(NOT_THIS_TOUR)).toBeInTheDocument()
+      expect(within(dialog).getByRole('checkbox', { name: /^커피/ })).not.toBeChecked()
+      expect(within(dialog).getByText('최종 가격 3,100,000원')).toBeInTheDocument()
+      expect(saveButton(dialog)).toBeEnabled()
+      expect(toast.error).not.toHaveBeenCalled()
+    })
+
+    it('등급을 바꾼 가격 계산이면 마지막으로 가격이 나온 등급과 옵션으로 되돌린다', async () => {
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+      await within(dialog).findByText('최종 가격 3,110,000원')
+      replyOnce(QUOTE, failWith(400, '허니문는 그랜드와 프리미엄만 고를 수 있습니다.'))
+
+      await user.click(within(dialog).getByRole('radio', { name: /^프리미엄/ }))
+
+      expect(await within(dialog).findByText('허니문는 그랜드와 프리미엄만 고를 수 있습니다.')).toBeInTheDocument()
+      expect(within(dialog).getByRole('radio', { name: /^그랜드/ })).toBeChecked()
+      expect(await within(dialog).findByRole('checkbox', { name: /^커피/ })).toBeChecked()
+      expect(within(dialog).getByText('최종 가격 3,110,000원')).toBeInTheDocument()
+    })
+
+    it('다시 바꾸면 문구를 지운다', async () => {
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(QUOTE, failWith(400, NOT_THIS_TOUR))
+      await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+      await within(dialog).findByText(NOT_THIS_TOUR)
+
+      await user.click(within(dialog).getByRole('checkbox', { name: /^샴페인/ }))
+
+      expect(await within(dialog).findByText('최종 가격 3,180,000원')).toBeInTheDocument()
+      expect(within(dialog).queryByText(NOT_THIS_TOUR)).not.toBeInTheDocument()
+    })
+
+    it('창을 열 때의 가격 계산이면 창을 닫지 않고 문구를 보인다', async () => {
+      replyOnce(QUOTE, failWith(400, NOT_THIS_TOUR))
+      await clickChange(userEvent.setup())
+      const dialog = await screen.findByRole('dialog', { name: '신청 바꾸기' })
+
+      expect(await within(dialog).findByText(NOT_THIS_TOUR)).toBeInTheDocument()
+      expect(within(dialog).getByRole('radio', { name: /^그랜드/ })).toBeChecked()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('저장이면 창 안에 문구를 보이고 창을 닫지 않는다', async () => {
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(CHANGE, failWith(400, NOT_THIS_TOUR))
+
+      await user.click(saveButton(dialog))
+
+      expect(await within(dialog).findByText(NOT_THIS_TOUR)).toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(saveButton(dialog)).toBeEnabled()
+      expect(countOf(BOOKINGS)).toBe(1)
+      expect(toast.success).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('409(출발했거나 취소된 여행)·404(없는 신청)', () => {
+    it.each([
+      [409, CANNOT_CHANGE],
+      [404, NOT_FOUND],
+    ])('가격 계산이 %s면 문구를 알리고 창을 닫고 목록을 다시 부른다', async (status, message) => {
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(QUOTE, failWith(status, message))
+
+      await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+
+      await waitClosed()
+      expect(toast.error).toHaveBeenCalledWith(message)
+      await waitFor(() => expect(countOf(BOOKINGS)).toBe(2))
+      expect(await screen.findAllByRole('listitem')).toHaveLength(2)
+    })
+
+    it('창을 열 때의 가격 계산이 409여도 창을 닫고 목록을 다시 부른다', async () => {
+      replyOnce(QUOTE, failWith(409, CANNOT_CHANGE))
+      await clickChange(userEvent.setup())
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(CANNOT_CHANGE))
+      await waitClosed()
+      await waitFor(() => expect(countOf(BOOKINGS)).toBe(2))
+    })
+
+    it.each([
+      [409, CANNOT_CHANGE],
+      [404, NOT_FOUND],
+    ])('저장이 %s면 문구를 알리고 창을 닫고 목록을 다시 부른다', async (status, message) => {
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(CHANGE, failWith(status, message))
+
+      await user.click(saveButton(dialog))
+
+      await waitClosed()
+      expect(toast.error).toHaveBeenCalledWith(message)
+      await waitFor(() => expect(countOf(BOOKINGS)).toBe(2))
+      expect(toast.success).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('그 밖의 실패', () => {
+    it.each([
+      ['투어 등급 불러오기가 실패하면', LEVELS, () => failWith(500, SERVER_ERROR)],
+      ['투어 등급 응답이 등급 목록이 아니면', LEVELS, () => jsonResponse(200, { message: '잘못된 응답' })],
+      ['처음 가격 계산이 실패하면', QUOTE, () => failWith(500, SERVER_ERROR)],
+    ])('창을 열 때 %s 공용 알림을 띄우고 창을 닫는다', async (_, key, reply) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      replyOnce(key, reply())
+      await clickChange(userEvent.setup())
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+      await waitClosed()
+      expect(countOf(LEVELS)).toBe(1)
+      // 신청은 그대로라 목록을 다시 부르지 않는다
+      expect(countOf(BOOKINGS)).toBe(1)
+    })
+
+    it.each([
+      ['서버 오류', () => failWith(500, SERVER_ERROR)],
+      ['가격이 아닌 응답', () => jsonResponse(200, { totalPrice: 1 })],
+    ])('바꾼 내용의 가격 계산이 %s면 공용 알림을 띄우고 마지막으로 가격이 나온 내용으로 되돌린다', async (_, reply) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(QUOTE, reply())
+
+      await user.click(within(dialog).getByRole('radio', { name: /^프리미엄/ }))
+
+      await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1))
+      expect(await within(dialog).findByText('최종 가격 3,100,000원')).toBeInTheDocument()
+      expect(within(dialog).getByRole('radio', { name: /^그랜드/ })).toBeChecked()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it.each([
+      ['서버 오류', () => failWith(500, SERVER_ERROR)],
+      ['연결 끊김', () => Promise.reject(new TypeError('Failed to fetch'))],
+      ['신청이 아닌 응답', () => jsonResponse(200, { bookingId: 21 })],
+    ])('저장이 %s면 바뀌었을 수 있어 공용 알림을 띄우고 창을 닫고 목록을 다시 부른다', async (_, reply) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const user = userEvent.setup()
+      const { dialog } = await openChange(user)
+      replyOnce(CHANGE, reply)
+
+      await user.click(saveButton(dialog))
+
+      await waitClosed()
+      await waitFor(() => expect(countOf(BOOKINGS)).toBe(2))
+      expect(toast.error).toHaveBeenCalled()
+      expect(toast.success).not.toHaveBeenCalled()
+    })
+  })
+
+  it('가격을 계산하거나 저장하는 동안 "바꾸기 저장"과 고르기를 막는다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+    const quote = deferred()
+    replyOnce(QUOTE, quote.reply)
+
+    await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+
+    expect(saveButton(dialog)).toBeDisabled()
+    expect(within(dialog).getByRole('radio', { name: /^프리미엄/ })).toBeDisabled()
+    expect(within(dialog).getByRole('checkbox', { name: /^샴페인/ })).toBeDisabled()
+    // 계산 중에는 그만둘 수 있다
+    expect(within(dialog).getByRole('button', { name: '그만두기' })).toBeEnabled()
+    await act(async () => quote.resolve(jsonResponse(200, quoteFor({ level: 'GRAND', optionIds: [22, 42] }))))
+    expect(await within(dialog).findByText('최종 가격 3,110,000원')).toBeInTheDocument()
+    expect(saveButton(dialog)).toBeEnabled()
+
+    const save = deferred()
+    replyOnce(CHANGE, save.reply)
+    await user.click(saveButton(dialog))
+
+    expect(saveButton(dialog)).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: '그만두기' })).toBeDisabled()
+    expect(within(dialog).getByRole('radio', { name: /^프리미엄/ })).toBeDisabled()
+    // Esc로도 닫히지 않는다
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await act(async () => save.resolve(jsonResponse(200, changedFor({ level: 'GRAND', optionIds: [22, 42] }))))
+    await waitClosed()
+    expect(countOf(CHANGE)).toBe(1)
+  })
+
+  it('가격을 계산하는 중에 창을 닫으면 늦게 온 응답을 버린다', async () => {
+    const user = userEvent.setup()
+    const { dialog } = await openChange(user)
+    const quote = deferred()
+    replyOnce(QUOTE, quote.reply)
+    await user.click(await within(dialog).findByRole('checkbox', { name: /^커피/ }))
+
+    await user.click(within(dialog).getByRole('button', { name: '그만두기' }))
+    await waitClosed()
+    await act(async () => {
+      quote.resolve(failWith(409, CANNOT_CHANGE))
+      await sleep(20)
+    })
+
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(countOf(BOOKINGS)).toBe(1)
+  })
+
+  it('저장하는 중에 다른 화면으로 가면 늦게 온 실패를 알리지 않는다', async () => {
+    const user = userEvent.setup()
+    const { dialog, router } = await openChange(user)
+    const save = deferred()
+    replyOnce(CHANGE, save.reply)
+    await user.click(saveButton(dialog))
+
+    // 화면을 떠나는 것은 막지 않는다(뒤로 가기 등)
+    await act(async () => {
+      await router.navigate('/')
+    })
+    expect(await screen.findByRole('heading', { name: '고객 메뉴' })).toBeInTheDocument()
+    await act(async () => {
+      save.resolve(failWith(500, SERVER_ERROR))
+      await sleep(20)
+    })
+
+    expect(toast.error).not.toHaveBeenCalled()
+  })
 })

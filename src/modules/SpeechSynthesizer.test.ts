@@ -5,6 +5,7 @@ import { SpeechSynthesizer, speakTimeoutMs } from '@/modules/SpeechSynthesizer'
 class FakeUtterance {
   static instances: FakeUtterance[] = []
   lang = ''
+  onstart: (() => void) | null = null
   onend: (() => void) | null = null
   onerror: (() => void) | null = null
   text: string
@@ -70,6 +71,20 @@ describe('SpeechSynthesizer', () => {
     vi.advanceTimersByTime(1)
     expect(await settled(speaking)).toBe(true)
     expect(speechSynthesis.cancel.mock.calls.length).toBe(cancelled + 1)
+  })
+
+  it('읽기 시작 신호가 오면 그때부터 다시 센다(목소리를 불러오느라 늦게 시작한 시간은 빼고)', async () => {
+    vi.useFakeTimers()
+    const synthesizer = new SpeechSynthesizer()
+    const text = '어떤 여행을 찾으세요?'
+    const speaking = synthesizer.speak(text)
+
+    vi.advanceTimersByTime(speakTimeoutMs(text) - 1000)
+    latest().onstart?.()
+    vi.advanceTimersByTime(speakTimeoutMs(text) - 1)
+    expect(await settled(speaking)).toBe(false)
+    vi.advanceTimersByTime(1)
+    expect(await settled(speaking)).toBe(true)
   })
 
   it('읽다가 오류가 나도 끝난다', async () => {

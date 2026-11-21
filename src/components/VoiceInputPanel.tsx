@@ -255,15 +255,24 @@ export function VoiceInputPanel({
       }
       // 고객이 확인한 요약은 앞 답의 고른 내용이다. 그와 같을 때만 신청하고, 다르면 바뀐 내용으로 칸을 채워 다시 확인받는다
       // (be가 고른 값을 빼면 APPLY를 TALK로 바꾸고 답을 고정 문장으로 바꾸는 것과 같은 까닭이다)
-      if (!sameSelection(previous, selection)) return talkOn(CONFIRM_AGAIN_MESSAGE, selection, previous, seq)
+      if (!sameSelection(previous, selection)) {
+        return talkOn(CONFIRM_AGAIN_MESSAGE, selection, previous, seq, { replyOnlyWhenPriced: true })
+      }
       if (await say(reply, seq)) await applyFromVoice(selection, seq)
       return
     }
     await talkOn(reply, selection, previous, seq)
   }
 
-  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 화면의 칸을 채운 뒤 말을 읽고 다시 듣는다
-  async function talkOn(reply: string, selection: VoiceSelection | null, previous: VoiceSelection | null, seq: number) {
+  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 화면의 칸을 채운 뒤 말을 읽고 다시 듣는다. 칸을 채운 가격 계산이
+  // 거부되면 말 뒤에 거부 문구를 이어 읽는다. replyOnlyWhenPriced면(가격이 나왔다는 말) 거부됐을 때 거부 문구만 읽는다
+  async function talkOn(
+    reply: string,
+    selection: VoiceSelection | null,
+    previous: VoiceSelection | null,
+    seq: number,
+    { replyOnlyWhenPriced = false } = {},
+  ) {
     let rejection: string | null = null
     if (selection && !sameSelection(previous, selection)) {
       setStep('working')
@@ -273,9 +282,11 @@ export function VoiceInputPanel({
       // 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
       if (outcome.status === 'rejected') rejection = outcome.error.message
     }
-    if (!(await say(reply, seq))) return
-    if (rejection === null) listen(seq)
-    else await continueAfter(rejection, seq)
+    const lines = rejection === null ? [reply] : replyOnlyWhenPriced ? [rejection] : [reply, rejection]
+    for (const line of lines) {
+      if (!(await say(line, seq))) return
+    }
+    listen(seq)
   }
 
   // 거부 문구를 읽고 대화를 이어 간다

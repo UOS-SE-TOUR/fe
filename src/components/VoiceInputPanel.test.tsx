@@ -465,6 +465,18 @@ describe('신청', () => {
     expect(synthesizer.spoken.at(-1)).toBe(APPLIED)
   })
 
+  it('APPLY의 바뀐 내용으로 가격 계산이 거부되면 다시 확인받는 말 없이 거부 문구만 읽고 대화를 이어 간다', async () => {
+    const user = renderPage()
+    await start(user)
+    await confirmGolf()
+    replyOnce(QUOTE, failWith(400, SEAT_SHORTAGE))
+    await talk('네, 근데 열 명이요', chat('열 명으로 신청하겠습니다.', golfDraft({ headcount: 10 }), 'APPLY'))
+
+    expect(countOf(APPLY)).toBe(0)
+    expect(events.slice(-4)).toEqual([CHAT, QUOTE, `speak: ${SEAT_SHORTAGE}`, 'listen'])
+    expect(synthesizer.spoken).not.toContain(CONFIRM_AGAIN)
+  })
+
   it('APPLY에서 가격 계산이 거부되면 신청하지 않고 그 문구를 읽은 뒤 대화를 이어 간다', async () => {
     const user = renderPage()
     await start(user)

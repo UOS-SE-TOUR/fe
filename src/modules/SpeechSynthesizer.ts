@@ -1,5 +1,5 @@
 // Chrome은 읽기가 끝났다는 신호(end)를 가끔 주지 않는다. 글자 수에 맞춘 이 시간이 지나면 끝난 것으로 본다.
-// 한국어 기본 속도는 1초에 대략 6~7자라 넉넉히 잡고, 처음 읽을 때 목소리를 불러오느라 늦게 시작하는 몫도 둔다
+// 한국어 기본 속도는 1초에 대략 6~7자라 넉넉히 잡는다(읽기 시작 신호가 오면 그때부터 다시 센다)
 const SPEAK_MIN_MS = 3000
 const SPEAK_MS_PER_CHAR = 200
 
@@ -24,6 +24,7 @@ export class SpeechSynthesizer {
     if (this.current || synthesis.speaking || synthesis.pending) this.cancel()
     return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text)
+      let timer: ReturnType<typeof setTimeout> | undefined
       const reading = {
         utterance,
         finish: () => {
@@ -33,17 +34,23 @@ export class SpeechSynthesizer {
           resolve()
         },
       }
+      // 끝 신호 없이 시간이 지나면, 아직 읽고 있어도 멈춰 뒤이어 듣는 마이크에 시스템의 목소리가 들어가지 않게 한다
+      const wait = () => {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          if (this.current !== reading) return
+          window.speechSynthesis.cancel()
+          reading.finish()
+        }, speakTimeoutMs(text))
+      }
       utterance.lang = 'ko-KR'
+      // 읽기 시작하면 다시 센다(처음 읽을 때 목소리를 불러오느라 늦게 시작한 시간은 빼고)
+      utterance.onstart = wait
       // 오류(권한 없음·멈춤 등)여도 글은 화면에 보이니 끝난 것으로 본다
       utterance.onend = reading.finish
       utterance.onerror = reading.finish
       this.current = reading
-      // 아직 읽고 있으면 멈춰, 뒤이어 듣는 마이크에 시스템의 목소리가 들어가지 않게 한다
-      const timer = setTimeout(() => {
-        if (this.current !== reading) return
-        window.speechSynthesis.cancel()
-        reading.finish()
-      }, speakTimeoutMs(text))
+      wait()
       try {
         window.speechSynthesis.speak(utterance)
       } catch {

@@ -641,7 +641,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   useBlockLeaving(applyBusy, '신청이 끝날 때까지 이 화면에 있어 주세요.')
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">여행 상품 선택</h1>
         {/* 신청하는 동안 떠나면 결과를 못 보고 다시 신청할 수 있어, 화면 안의 "다른 상품 고르기"처럼 막는다 */}

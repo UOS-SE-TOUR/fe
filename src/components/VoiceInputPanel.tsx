@@ -26,7 +26,7 @@ const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 아�
 const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.'
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
-const INTRO_MESSAGE = '음성으로 신청하기를 누르고 시스템의 물음에 답하면, 여행을 고르고 신청까지 할 수 있습니다.'
+const INTRO_MESSAGE = '묻는 말에 답하면 여행을 고르고 신청까지 해 드립니다.'
 
 function greetingFor(name: string | null): string {
   return name ? `안녕하세요, ${name} 고객님. 어떤 여행을 찾으세요?` : '안녕하세요, 고객님. 어떤 여행을 찾으세요?'
@@ -302,19 +302,22 @@ export function VoiceInputPanel({
   }
 
   const talking = step !== 'idle'
+  // 대화도 알림도 없는 처음 상태면 카드를 한 줄로 줄인다(넓은 화면에서 설명 옆에 시작 단추)
+  const compact = supported && !disabled && !notice && !talking && messages.length === 0
 
   return (
     <section aria-label="음성으로 고르기">
-      <Card className="ring-primary/30">
-        <CardHeader>
+      <Card className={cn('ring-primary/30', compact && 'gap-3 py-4 sm:flex-row sm:items-center sm:justify-between')}>
+        <CardHeader className={cn(compact && 'sm:min-w-0 sm:flex-1')}>
           <CardTitle className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <Mic className="size-4" />
             </span>
             음성으로 고르기
           </CardTitle>
+          {compact && <p className="text-sm text-muted-foreground">{INTRO_MESSAGE}</p>}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className={cn('space-y-4', compact && 'sm:w-auto sm:shrink-0')}>
           {!supported && (
             <Alert>
               <AlertDescription>{UNSUPPORTED_MESSAGE}</AlertDescription>
@@ -327,7 +330,7 @@ export function VoiceInputPanel({
                   <AlertDescription>{DISABLED_MESSAGE}</AlertDescription>
                 </Alert>
               )}
-              {messages.length === 0 && <p className="text-sm text-muted-foreground">{INTRO_MESSAGE}</p>}
+              {messages.length === 0 && !compact && <p className="text-sm text-muted-foreground">{INTRO_MESSAGE}</p>}
               {messages.length > 0 && (
                 <ol ref={logRef} aria-label="대화" className="max-h-80 space-y-2 overflow-y-auto">
                   {messages.map((line, index) => (
@@ -354,6 +357,7 @@ export function VoiceInputPanel({
                 {(step === 'idle' || step === 'paused') && (
                   <Button
                     variant={step === 'paused' ? 'outline' : 'default'}
+                    className={compact ? 'w-full sm:min-w-28' : undefined}
                     onClick={startVoiceInput}
                     disabled={disabled}
                   >

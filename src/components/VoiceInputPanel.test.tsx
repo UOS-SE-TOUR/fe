@@ -30,7 +30,7 @@ const QUOTE = 'POST /api/v1/bookings/quote'
 const APPLY = 'POST /api/v1/bookings'
 
 const GREETING = '안녕하세요, 김고객 고객님. 어떤 여행을 찾으세요?'
-const INTRO = '음성으로 신청하기를 누르고 시스템의 물음에 답하면, 여행을 고르고 신청까지 할 수 있습니다.'
+const INTRO = '묻는 말에 답하면 여행을 고르고 신청까지 해 드립니다.'
 const LISTENING = '듣고 있습니다. 말씀해 주세요.'
 const DISABLED = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
 const SEAT_SHORTAGE = '남은 자리보다 인원이 많습니다.'

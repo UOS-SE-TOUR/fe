@@ -19,9 +19,8 @@ export class SpeechSynthesizer {
 
   speak(text: string): Promise<void> {
     if (!this.isSupported()) return Promise.resolve()
-    const synthesis = window.speechSynthesis
-    // 읽던 것이 있을 때만 멈춘다(멈추자마자 읽게 한 문장을 버리는 브라우저가 있어, 앞 문장이 끝났으면 바로 읽는다)
-    if (this.current || synthesis.speaking || synthesis.pending) this.cancel()
+    // 읽던 것이 있을 때만 멈춘다(멈추자마자 읽게 한 문장을 버리는 브라우저가 있다)
+    if (this.current) this.cancel()
     return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text)
       let timer: ReturnType<typeof setTimeout> | undefined
@@ -34,7 +33,7 @@ export class SpeechSynthesizer {
           resolve()
         },
       }
-      // 끝 신호 없이 시간이 지나면, 아직 읽고 있어도 멈춰 뒤이어 듣는 마이크에 시스템의 목소리가 들어가지 않게 한다
+      // 시간이 지나면 읽기를 멈춘다(뒤이어 듣는 마이크에 시스템의 목소리가 들어가지 않게)
       const wait = () => {
         clearTimeout(timer)
         timer = setTimeout(() => {
@@ -44,7 +43,7 @@ export class SpeechSynthesizer {
         }, speakTimeoutMs(text))
       }
       utterance.lang = 'ko-KR'
-      // 읽기 시작하면 다시 센다(처음 읽을 때 목소리를 불러오느라 늦게 시작한 시간은 빼고)
+      // 목소리를 불러오느라 늦게 시작한 시간은 빼고 센다
       utterance.onstart = wait
       // 오류(권한 없음·멈춤 등)여도 글은 화면에 보이니 끝난 것으로 본다
       utterance.onend = reading.finish

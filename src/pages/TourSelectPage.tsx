@@ -235,8 +235,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const detailRef = useRef<Detail | null>(null)
   // 가격 계산 중에 고친 입력이 있다. 그 계산이 끝나는 자리에서 그때의 입력으로 다시 계산한다
   const requote = useRef(false)
-  // 테마·목록·기다리는 일의 최신 값. 응답을 기다린 뒤에는 이것으로 읽는다(음성이 applySelection 바로 뒤에 applyTour를
-  // 부르면, 다시 그리기 전이라 그린 때의 값은 낡았다)
+  // 테마·목록·기다리는 일의 최신 값. 응답을 기다린 뒤에는 이것으로 읽는다(음성은 다시 그리기 전에 applyTour를 부른다)
   const themeRef = useRef<Theme | null>(null)
   const toursRef = useRef<ToursState | null>(null)
   const pendingRef = useRef<Pending>(null)
@@ -485,7 +484,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   function changeOptions(optionIds: number[]) {
     const current = detailRef.current
-    if (!current?.submitted || pending || current.quoting || current.unknownApply) return
+    if (!current?.submitted || pendingRef.current || current.quoting || current.unknownApply) return
     // 가격이 나와 있으면 마지막으로 가격이 나온 옵션, 다시 받는 중이면 남겨 둔 옵션이다
     const { tourId, submitted, optionIds: previousIds } = current
     updateDetail({ optionIds, optionMessage: null })
@@ -504,7 +503,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 신청하기와 결과 확인(설계 3.1 applyTour). 결과 확인은 들고 있던 신청을 그대로 다시 보낸다.
   // 음성에서 부르면(fromVoice) 단골 할인 확인은 대화의 요약 확인으로 갈음해, 신청하기 전에 켠다
   async function applyTour({ fromVoice = false } = {}): Promise<ApplyTourResult> {
-    // 신청을 보내지 못하는 때. 화면의 단추는 이때 막혀 있지만, 음성에는 알린다(failed는 이 화면이 알렸다는 약속)
+    // 신청을 보내지 못하는 때. 화면의 단추는 이때 막혀 있고, 음성에서 부르면 알린다
     const blocked = (): ApplyTourResult => {
       if (fromVoice) toast.error(applying.current ? APPLYING_MESSAGE : VOICE_APPLY_BLOCKED_MESSAGE)
       return { status: 'failed' }

@@ -105,7 +105,7 @@ export function VoiceInputPanel({
   const [notice, setNotice] = useState<string | null>(null)
   // 대화를 시작하거나 끝내면 올린다. 그 전에 시작한 듣기·읽기·서버 응답·화면 반영의 뒤처리는 버린다
   const session = useRef(0)
-  // 대화와 고른 내용의 최신 값. 응답을 기다린 뒤에도 다시 그리기 전의 값을 읽지 않게 여기서 읽는다
+  // 대화와 고른 내용의 최신 값(응답을 기다린 뒤에는 여기서 읽는다)
   const messagesRef = useRef<VoiceMessage[]>([])
   const draftRef = useRef<VoiceDraft>(EMPTY_VOICE_DRAFT)
   // 마지막으로 듣기 시작한 인식기. 대화를 끝내거나 화면을 떠나면 듣기를 그만둔다(마이크를 놓는다)
@@ -208,7 +208,6 @@ export function VoiceInputPanel({
     setNotice(reason === 'no-speech' ? NO_SPEECH_MESSAGE : RECOGNITION_FAILED_MESSAGE)
   }
 
-  // 알아들은 말을 대화 전체·고른 내용과 함께 서버에 보내고 답을 받는다
   async function sendUtterance(text: string, seq: number) {
     addLine({ speaker: 'CUSTOMER', text })
     setStep('waiting')
@@ -254,9 +253,7 @@ export function VoiceInputPanel({
         stopAfterFailure()
         return
       }
-      // 고객이 확인한 요약은 앞 답의 고른 내용이다. 그와 같을 때만 신청하고, 다르거나 앞 답에서 덜 정해졌으면
-      // 이 내용으로 칸을 채워 다시 확인받는다
-      // (be가 고른 값을 빼면 APPLY를 TALK로 바꾸고 답을 고정 문장으로 바꾸는 것과 같은 까닭이다)
+      // 고객이 확인한 요약(앞 답의 고른 내용)과 같을 때만 신청하고, 아니면 칸을 채워 다시 확인받는다
       if (!sameSelection(previous, selection)) {
         return talkOn(CONFIRM_AGAIN_MESSAGE, selection, previous, seq, { replyOnlyWhenPriced: true })
       }
@@ -266,8 +263,8 @@ export function VoiceInputPanel({
     await talkOn(reply, selection, previous, seq)
   }
 
-  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 화면의 칸을 채운 뒤 말을 읽고 다시 듣는다. 칸을 채운 가격 계산이
-  // 거부되면 말 뒤에 거부 문구를 이어 읽는다. replyOnlyWhenPriced면(가격이 나왔다는 말) 거부됐을 때 거부 문구만 읽는다
+  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 칸을 채운 뒤 말을 읽고 다시 듣는다. 거부되면 말 뒤에 거부 문구를 읽고,
+  // replyOnlyWhenPriced(가격이 나왔다는 말)면 거부 문구만 읽는다
   async function talkOn(
     reply: string,
     selection: VoiceSelection | null,
@@ -291,7 +288,6 @@ export function VoiceInputPanel({
     listen(seq)
   }
 
-  // 거부 문구를 읽고 대화를 이어 간다
   async function continueAfter(message: string, seq: number) {
     if (await say(message, seq)) listen(seq)
   }
@@ -315,8 +311,7 @@ export function VoiceInputPanel({
     else stopAfterFailure()
   }
 
-  // 실패로 대화를 끝낸다. 까닭은 공용 알림이나 화면이 보이고(화면을 다시 고른 때처럼 알림이 없을 수도 있다),
-  // 패널에는 대화가 끝났다는 것을 보인다
+  // 실패로 대화를 끝내고 패널에 알린다(화면을 다시 고른 때처럼 공용 알림이 없는 실패도 있다)
   function stopAfterFailure() {
     stopVoiceInput()
     setNotice(STOPPED_MESSAGE)

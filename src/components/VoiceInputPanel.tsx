@@ -1,151 +1,112 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mic } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { themes, tourLevels, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
+import { tourStatusLabel, type TourStatus } from '@/lib/labels'
 import {
-  canApply,
-  getTours,
-  HEADCOUNT_MESSAGE,
-  parseHeadcount,
-  SEAT_SHORTAGE_MESSAGE,
-  tourSummaryLine,
-  type ToursState,
-  type TourSummary,
+  EMPTY_VOICE_DRAFT,
+  isVoiceChatResponse,
+  type VoiceChatRequest,
+  type VoiceChatResponse,
+  type VoiceDraft,
+  type VoiceMessage,
 } from '@/lib/tours'
-import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
+import { cn } from '@/lib/utils'
+import { ApiClient, hasStatus, showError } from '@/modules/ApiClient'
+import { AuthStore } from '@/modules/AuthStore'
 import { SpeechRecognizer, type RecognitionFailure, type Recognizer } from '@/modules/SpeechRecognizer'
+import { SpeechSynthesizer, type Synthesizer } from '@/modules/SpeechSynthesizer'
 import type { VoiceInputProps, VoiceSelection } from '@/pages/TourSelectPage'
-
-// voice/parse의 본문(be VoiceParseRequest·TourSelection). 뽑지 못한 항목은 null이다
-interface VoiceParseRequest {
-  text: string
-}
-
-export interface TourSelection {
-  theme: Theme | null
-  // YYYY-MM-DD
-  departureDate: string | null
-  level: TourLevel | null
-  headcount: number | null
-  // 테마와 출발일이 같은 상품. 마감 상품도 섞여 온다
-  candidates: TourSummary[]
-}
 
 const UNSUPPORTED_MESSAGE = '이 브라우저에서는 음성 입력을 쓸 수 없습니다. 크롬에서 열거나, 아래에서 직접 골라 주세요.'
 const MIC_DENIED_MESSAGE = '마이크 권한이 없어 음성 입력을 쓸 수 없습니다. 아래에서 직접 골라 주세요.'
-// 그 밖의 인식 오류(네트워크·마이크 없음·정책 차단 등). 잠깐의 실패인지 가릴 수 없어 다시 말하라고도, 쓸 수 없다고도 하지 않는다
-// (말하기 단추는 그대로 있다)
+// 그 밖의 인식 오류(네트워크·마이크 없음·정책 차단 등). 잠깐의 실패인지 가릴 수 없어 대화는 두고 다시 말할 수 있게 한다
 const RECOGNITION_FAILED_MESSAGE = '음성을 인식하지 못했습니다. 아래에서 직접 골라 주세요.'
 const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니다. 아래에서 직접 골라 주세요.'
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
-const MISSING_MESSAGE = '알아듣지 못한 칸이 있습니다. 빈 칸을 채우거나 다시 말해 주세요.'
-const NO_CANDIDATE_MESSAGE =
-  '그 테마와 출발일에 고를 수 있는 상품이 없습니다. 테마나 출발일을 고치거나 다시 말해 주세요.'
-const CHOOSE_MESSAGE = '출발일이 같은 상품이 여럿입니다. 하나를 골라 주세요.'
-// 고른 상품이 거부 뒤 더 고를 수 없게 되어, 남은 후보가 하나여도 대신 고르지 않았을 때
-const PICK_MESSAGE = '후보 상품을 골라 주세요.'
-const SPEAK_AGAIN_MESSAGE = '내용을 고치거나 다시 말해 주세요.'
-const PRICED_MESSAGE = '말한 내용으로 가격을 계산했습니다. 아래에서 확인해 주세요.'
 const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
+const INTRO_MESSAGE = '음성으로 신청하기를 누르고 시스템의 물음에 답하면, 여행을 고르고 신청까지 할 수 있습니다.'
 
-// 받은 내용을 고객이 고치는 칸. 뽑지 못한 칸은 빈 값이다
-interface Draft {
-  // 이 내용을 뽑은 말
-  heard: string
-  theme: Theme | ''
-  departureDate: string
-  level: TourLevel | ''
-  headcount: string
-  candidates: ToursState
-  tourId: number | null
-  // 확인했더니 가격 계산이 거부한 문구. 칸을 고치면 지운다
-  rejection: string | null
+function greetingFor(name: string | null): string {
+  return name ? `안녕하세요, ${name} 고객님. 어떤 여행을 찾으세요?` : '안녕하세요, 고객님. 어떤 여행을 찾으세요?'
 }
 
-// listening은 듣는 중, parsing은 알아들은 말을 서버가 푸는 중, applying은 확인한 내용으로 가격을 계산하는 중이다
-type Step = 'idle' | 'listening' | 'parsing' | 'applying'
-
-interface Notice {
-  tone: 'error' | 'info'
-  message: string
+function appliedMessage(status: TourStatus): string {
+  return `신청했습니다. 지금 상품 상태는 ‘${tourStatusLabel(status)}’입니다.`
 }
 
-// 받아 둔 테마의 상품 목록. 받는 중이면 list가 null이고, 그동안 출발일을 고쳐도 같은 요청의 답을 기다린다
-interface ThemeTours {
-  theme: Theme
-  tours: Promise<TourSummary[]>
-  list: TourSummary[] | null
+// idle은 대화가 없을 때(시작 전이거나 끝남), speaking은 시스템의 말을 읽는 중, listening은 고객의 말을 듣는 중,
+// waiting은 서버의 답을 기다리는 중, working은 상품 선택 화면이 칸을 채우거나 신청하는 중이다.
+// paused는 인식에 실패해 "다시 말하기"를 기다리는 중으로, 대화는 그대로 있다
+type Step = 'idle' | 'speaking' | 'listening' | 'waiting' | 'working' | 'paused'
+
+const STEP_MESSAGES: Record<'speaking' | 'listening' | 'waiting' | 'working', string> = {
+  speaking: '말하는 중입니다.',
+  listening: '듣고 있습니다. 말씀해 주세요.',
+  waiting: '답을 기다리는 중입니다.',
+  working: '아래 화면에 반영하는 중입니다.',
 }
 
-// 후보를 새로 받아야 하는 거부. 그 상품의 상태(409 마감·출발)나 남은 자리(400 남은 자리 부족)가 바뀌었다고 서버가 알린 것이다.
-// 화면이 직접 만든 거부(상품에 없는 등급 등)와 그 밖의 400은 고를 수 있는 후보를 바꾸지 않는다
-function changesCandidates(error: ApiError): boolean {
-  return error.status === 409 || (error.status === 400 && error.message === SEAT_SHORTAGE_MESSAGE)
+// 상품·투어 등급·인원이 다 정해졌으면 상품 선택 화면에 넘길 값을 돌려준다
+function selectionOf(draft: VoiceDraft): VoiceSelection | null {
+  const { theme, tourId, level, headcount, optionIds } = draft
+  if (theme === null || tourId === null || level === null || headcount === null) return null
+  return { theme, tourId, level, headcount, optionIds }
 }
 
-function choosableOf(candidates: ToursState): TourSummary[] {
-  return candidates.status === 'loaded' ? candidates.list.filter(canApply) : []
+function optionKey(selection: VoiceSelection): string {
+  return [...selection.optionIds].sort((a, b) => a - b).join(',')
 }
 
-// 고를 수 있는 후보가 하나면 그 상품을 쓴다. 둘 이상이면 고객이 고른다.
-// keep은 고객이 이미 고른 상품이다. 아직 고를 수 있으면 두고, 더 고를 수 없으면 다른 상품을 대신 고르지 않는다
-function pickTour(list: TourSummary[], keep: number | null = null): number | null {
-  const choosable = list.filter(canApply)
-  if (keep !== null) return choosable.some((tour) => tour.tourId === keep) ? keep : null
-  return choosable.length === 1 ? choosable[0].tourId : null
-}
-
-function isMissing(draft: Draft): boolean {
-  return !draft.theme || !draft.departureDate || !draft.level || !draft.headcount.trim()
-}
-
-// 채운 인원이 상품 선택 화면에서 칠 때와 같은 규칙(숫자만 쓴 1 이상의 정수)에 맞지 않는다
-function headcountInvalid(draft: Draft): boolean {
-  return draft.headcount.trim() !== '' && parseHeadcount(draft.headcount) === null
-}
-
-// 확인할 수 있는 내용이면 상품 선택 화면에 넘길 값을 돌려준다
-function selectionOf(draft: Draft): VoiceSelection | null {
-  const { theme, departureDate, level, tourId } = draft
-  const headcount = parseHeadcount(draft.headcount)
-  if (!theme || !departureDate || !level || headcount === null || tourId === null) return null
-  if (!choosableOf(draft.candidates).some((tour) => tour.tourId === tourId)) return null
-  return { theme, tourId, level, headcount }
+function sameSelection(previous: VoiceSelection | null, next: VoiceSelection): boolean {
+  return (
+    previous !== null &&
+    previous.theme === next.theme &&
+    previous.tourId === next.tourId &&
+    previous.level === next.level &&
+    previous.headcount === next.headcount &&
+    optionKey(previous) === optionKey(next)
+  )
 }
 
 interface VoiceInputPanelProps extends VoiceInputProps {
-  // 테스트는 가짜를 넣는다(테스트 환경에는 브라우저 음성인식이 없다)
+  // 테스트는 가짜를 넣는다(테스트 환경에는 브라우저 음성인식·읽어 주기가 없다)
   createRecognizer?: () => Recognizer
+  createSynthesizer?: () => Synthesizer
 }
 
 function newRecognizer(): Recognizer {
   return new SpeechRecognizer()
 }
 
-// disabled면 상품 선택 화면이 신청 결과를 확인하기 전이다. 말하기와 확인을 막는다(설계 3.1 VoiceInputPanel)
-export function VoiceInputPanel({ applySelection, disabled, createRecognizer = newRecognizer }: VoiceInputPanelProps) {
+function newSynthesizer(): Synthesizer {
+  return new SpeechSynthesizer()
+}
+
+// 시스템과 고객이 말을 주고받아 상품을 고르고 신청까지 한다(설계 3.1 VoiceInputPanel·5.5).
+// disabled면 상품 선택 화면이 신청 결과를 확인하기 전이다. 대화를 끝내고 시작을 막는다
+export function VoiceInputPanel({
+  applySelection,
+  applyTour,
+  disabled,
+  createRecognizer = newRecognizer,
+  createSynthesizer = newSynthesizer,
+}: VoiceInputPanelProps) {
   const [supported] = useState(() => createRecognizer().isSupported())
+  const [synthesizer] = useState(createSynthesizer)
   const [step, setStep] = useState<Step>('idle')
-  // 서버가 푸는 중인 말
-  const [parsingText, setParsingText] = useState('')
-  // 다시 말하는 동안에도 두었다가, 그만두거나 알아듣지 못하면 다시 보인다(고치던 칸을 잃지 않게)
-  const [draft, setDraft] = useState<Draft | null>(null)
-  const [notice, setNotice] = useState<Notice | null>(null)
-  // 듣기를 시작하거나 그만두면 올린다. 그 전에 들은 말과 그 응답은 버린다
+  // 지금(끝났으면 마지막) 대화. 새 대화를 시작할 때 비운다
+  const [messages, setMessages] = useState<VoiceMessage[]>([])
+  const [notice, setNotice] = useState<string | null>(null)
+  // 대화를 시작하거나 끝내면 올린다. 그 전에 시작한 듣기·읽기·서버 응답·화면 반영의 뒤처리는 버린다
   const session = useRef(0)
-  // 후보 상품을 다시 찾을 때마다 올린다. 마지막에 찾은 것만 쓴다
-  const candidatesRequest = useRef(0)
-  // 마지막으로 받은(받는 중인) 테마의 상품 목록. 출발일만 고칠 때는 다시 받지 않는다(날짜 칸은 칠 때마다 바뀐다)
-  const themeTours = useRef<ThemeTours | null>(null)
-  // 마지막으로 듣기 시작한 인식기. 화면을 떠나면 듣기를 그만둔다(마이크를 놓는다)
+  // 대화와 고른 내용의 최신 값. 응답을 기다린 뒤에도 다시 그리기 전의 값을 읽지 않게 여기서 읽는다
+  const messagesRef = useRef<VoiceMessage[]>([])
+  const draftRef = useRef<VoiceDraft>(EMPTY_VOICE_DRAFT)
+  // 마지막으로 듣기 시작한 인식기. 대화를 끝내거나 화면을 떠나면 듣기를 그만둔다(마이크를 놓는다)
   const recognizerRef = useRef<Recognizer | null>(null)
+  const logRef = useRef<HTMLOListElement | null>(null)
 
   useEffect(() => {
     const current = session
@@ -153,10 +114,17 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
     return () => {
       current.current += 1
       recognizer.current?.abort()
+      synthesizer.cancel()
     }
-  }, [])
+  }, [synthesizer])
 
-  // 막히면 듣기·말 풀기를 그만두고 지난 알림을 지운다(풀린 뒤 낡은 알림이 다시 보이지 않게)
+  // 대화가 길어지면 마지막 줄이 보이게 내린다
+  useEffect(() => {
+    const log = logRef.current
+    if (log) log.scrollTop = log.scrollHeight
+  }, [messages])
+
+  // 막히면 대화를 끝내고 지난 알림을 지운다(풀린 뒤 낡은 알림이 다시 보이지 않게)
   const [wasDisabled, setWasDisabled] = useState(disabled)
   if (disabled !== wasDisabled) {
     setWasDisabled(disabled)
@@ -165,158 +133,175 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
       setNotice(null)
     }
   }
-  // 그린 직후 같은 차례에 정리해, 그사이 도착한 음성 해석 응답이 막힌 패널을 바꾸지 못하게 한다
+  // 그린 직후 같은 차례에 정리해, 그사이 도착한 응답이 막힌 패널에서 대화를 잇지 못하게 한다
   useLayoutEffect(() => {
     if (!disabled) return
     session.current += 1
     recognizerRef.current?.abort()
-  }, [disabled])
+    recognizerRef.current = null
+    synthesizer.cancel()
+  }, [disabled, synthesizer])
 
-  function updateDraft(patch: Partial<Draft>) {
-    setDraft((current) => (current ? { ...current, ...patch } : current))
+  function addLine(line: VoiceMessage) {
+    messagesRef.current = [...messagesRef.current, line]
+    setMessages(messagesRef.current)
   }
 
-  // 듣기를 시작하고 말할 내용을 안내한다(설계 5.5 startVoiceInput → recognize → showVoiceGuide)
+  // 시스템의 말을 대화에 더하고 다 읽을 때까지 기다린다. 그사이 대화가 끝났으면 false
+  async function say(text: string, seq: number): Promise<boolean> {
+    addLine({ speaker: 'SYSTEM', text })
+    setStep('speaking')
+    await synthesizer.speak(text)
+    return seq === session.current
+  }
+
+  // 인사를 보이고 읽은 뒤 듣기 시작한다. 인식에 실패해 멈춘 대화에서 부르면("다시 말하기") 인사 없이 다시 듣는다
   function startVoiceInput() {
-    const seq = ++session.current
     setNotice(null)
+    if (step === 'paused') {
+      listen(session.current)
+      return
+    }
+    const seq = ++session.current
     recognizerRef.current?.abort()
-    const recognizer = createRecognizer()
-    recognizer.onresult = (text) => {
-      if (seq === session.current) void parse(text, seq)
-    }
-    recognizer.onerror = (reason) => {
-      if (seq === session.current) recognitionFailed(reason)
-    }
-    recognizerRef.current = recognizer
-    // 안내는 다시 그릴 때 보이므로 듣기가 먼저 시작된다. recognize가 곧바로 실패를 알리면 그 알림이 안내를 덮는다
-    showVoiceGuide()
-    recognizer.recognize()
-  }
-
-  function showVoiceGuide() {
-    setStep('listening')
-  }
-
-  // 듣기나 말 풀기를 그만둔다(권한 창을 닫지 않았거나 인식·서버가 끝나지 않아도 다시 말하거나 직접 고를 수 있게)
-  function stopVoiceInput() {
-    session.current += 1
-    recognizerRef.current?.abort()
-    setStep('idle')
-  }
-
-  function recognitionFailed(reason: RecognitionFailure) {
-    setStep('idle')
-    const message =
-      reason === 'no-speech'
-        ? NO_SPEECH_MESSAGE
-        : reason === 'not-allowed'
-          ? MIC_DENIED_MESSAGE
-          : RECOGNITION_FAILED_MESSAGE
-    setNotice({ tone: 'error', message })
-  }
-
-  async function parse(text: string, seq: number) {
-    setParsingText(text)
-    setStep('parsing')
-    try {
-      const selection = await ApiClient.post<TourSelection>('/api/v1/voice/parse', { text } satisfies VoiceParseRequest)
-      if (seq === session.current) showSelection(text, selection)
-    } catch (error) {
-      if (seq !== session.current) return
-      setStep('idle')
-      // 503이면 서버 문구는 보이지 않는다(설계 3장 VoiceInputPanel)
-      if (hasStatus(error, 503)) setNotice({ tone: 'error', message: VOICE_UNAVAILABLE_MESSAGE })
-      else if (hasStatus(error, 400)) setNotice({ tone: 'error', message: error.message })
-      else showError(error)
-    }
-  }
-
-  // 받은 내용을 칸에 채운다. 뽑지 못한 칸은 비워 둔다. 앞의 칸에서 찾던 후보와 받아 둔 목록은 버린다
-  function showSelection(heard: string, selection: TourSelection) {
-    candidatesRequest.current += 1
-    themeTours.current = null
-    setStep('idle')
-    setDraft({
-      heard,
-      theme: selection.theme ?? '',
-      departureDate: selection.departureDate ?? '',
-      level: selection.level ?? '',
-      headcount: String(selection.headcount ?? ''),
-      candidates: { status: 'loaded', list: selection.candidates },
-      tourId: pickTour(selection.candidates),
-      rejection: null,
+    messagesRef.current = []
+    setMessages([])
+    draftRef.current = EMPTY_VOICE_DRAFT
+    void say(greetingFor(AuthStore.name), seq).then((current) => {
+      if (current) listen(seq)
     })
   }
 
-  // 테마나 출발일을 고치면 받은 후보가 맞지 않는다. 그 테마의 상품 목록에서 출발일이 같은 상품으로 후보를 다시 정한다
-  function changeTarget(theme: Theme | '', departureDate: string) {
-    updateDraft({ theme, departureDate, rejection: null })
-    findCandidates(theme, departureDate)
+  function listen(seq: number) {
+    recognizerRef.current?.abort()
+    const recognizer = createRecognizer()
+    // 한 번 들은 말만 보낸다(그 뒤에 온 결과·실패는 버린다)
+    const own = () => seq === session.current && recognizerRef.current === recognizer
+    recognizer.onresult = (text) => {
+      if (!own()) return
+      recognizerRef.current = null
+      void sendUtterance(text, seq)
+    }
+    recognizer.onerror = (reason) => {
+      if (!own()) return
+      recognizerRef.current = null
+      recognitionFailed(reason)
+    }
+    recognizerRef.current = recognizer
+    // 듣는 중을 먼저 보인다. recognize가 곧바로 실패를 알리면 그 알림이 덮는다
+    setStep('listening')
+    recognizer.recognize()
   }
 
-  // fresh면 받아 둔 목록을 버리고 새로 받는다(불러오지 못했거나, 가격 계산의 거부로 상태·남은 자리가 바뀌었을 때).
-  // keep(고객이 고른 상품)은 받는 동안에도 두어, 받지 못해 다시 찾을 때도 넘길 수 있게 한다
-  function findCandidates(
-    theme: Theme | '',
-    departureDate: string,
-    { fresh = false, keep = null }: { fresh?: boolean; keep?: number | null } = {},
-  ) {
-    const request = ++candidatesRequest.current
-    const show = (tours: TourSummary[]) => {
-      const list = tours.filter((tour) => tour.departureDate === departureDate)
-      updateDraft({ candidates: { status: 'loaded', list }, tourId: pickTour(list, keep) })
-    }
-    if (theme === '' || departureDate === '') {
-      show([])
+  // 마이크 권한이 거부됐으면 다시 말해도 같은 실패라 대화를 끝낸다. 그 밖의 실패는 대화를 두고 다시 말하게 한다
+  function recognitionFailed(reason: RecognitionFailure) {
+    if (reason === 'not-allowed') {
+      stopVoiceInput()
+      setNotice(MIC_DENIED_MESSAGE)
       return
     }
-    const saved = !fresh && themeTours.current?.theme === theme ? themeTours.current : null
-    if (saved?.list) {
-      show(saved.list)
-      return
-    }
-    updateDraft({ candidates: { status: 'loading' }, tourId: keep })
-    const entry: ThemeTours = saved ?? { theme, tours: getTours(theme), list: null }
-    themeTours.current = entry
-    entry.tours.then(
-      (tours) => {
-        entry.list = tours
-        if (request === candidatesRequest.current) show(tours)
-      },
-      (error: unknown) => {
-        if (themeTours.current === entry) themeTours.current = null
-        if (request !== candidatesRequest.current) return
-        showError(error)
-        updateDraft({ candidates: { status: 'failed' } })
-      },
-    )
+    setStep('paused')
+    setNotice(reason === 'no-speech' ? NO_SPEECH_MESSAGE : RECOGNITION_FAILED_MESSAGE)
   }
 
-  // 고객이 확인한 내용으로 상품 선택 화면이 가격을 계산한다(설계 5.5 confirmSelection → applySelection)
-  async function confirmSelection() {
-    const selection = draft && step === 'idle' ? selectionOf(draft) : null
-    if (!draft || !selection) return
-    const seq = session.current
-    // 앞서 알린 것(말소리 없음, 지난 확인의 거부 등)은 이 확인의 결과와 섞이지 않게 지운다
-    setNotice(null)
-    updateDraft({ rejection: null })
-    setStep('applying')
-    const outcome = await applySelection(selection)
+  // 알아들은 말을 대화 전체·고른 내용과 함께 서버에 보내고 답을 받는다
+  async function sendUtterance(text: string, seq: number) {
+    addLine({ speaker: 'CUSTOMER', text })
+    setStep('waiting')
+    const request: VoiceChatRequest = { messages: messagesRef.current, draft: draftRef.current }
+    let body: unknown
+    try {
+      body = await ApiClient.post<unknown>('/api/v1/voice/chat', request)
+    } catch (error) {
+      if (seq !== session.current) return
+      stopVoiceInput()
+      // 503이면 서버 문구는 보이지 않는다(설계 3장 VoiceInputPanel)
+      if (hasStatus(error, 503)) setNotice(VOICE_UNAVAILABLE_MESSAGE)
+      else if (hasStatus(error, 400)) setNotice(error.message)
+      else showError(error)
+      return
+    }
     if (seq !== session.current) return
-    setStep('idle')
-    if (outcome.status === 'priced') {
-      setDraft(null)
-      setNotice({ tone: 'info', message: PRICED_MESSAGE })
-    } else if (outcome.status === 'rejected') {
-      // 409여도 상품 목록으로 돌아가지 않고 다시 말하게 한다(상품 선택 화면도 그대로 둔다)
-      updateDraft({ rejection: outcome.error.message })
-      if (changesCandidates(outcome.error)) {
-        findCandidates(selection.theme, draft.departureDate, { fresh: true, keep: selection.tourId })
-      }
+    if (!isVoiceChatResponse(body)) {
+      stopVoiceInput()
+      showError(new Error(`voice/chat 응답 모양이 다르다: ${JSON.stringify(body)}`))
+      return
     }
-    // failed는 상품 선택 화면이 이미 알렸다. 칸을 그대로 두어 다시 확인할 수 있다
+    await answer(body, seq)
   }
+
+  // TALK면 고른 내용이 처음 다 정해졌거나 바뀌었을 때 화면의 칸을 채운 뒤 답을 읽고 다시 듣는다.
+  // APPLY면 답을 읽고 신청하며, STOP이면 답을 읽고 대화를 끝낸다
+  async function answer({ reply, draft, next }: VoiceChatResponse, seq: number) {
+    const previous = selectionOf(draftRef.current)
+    const selection = selectionOf(draft)
+    draftRef.current = draft
+    if (next === 'APPLY') {
+      // 서버는 상품·투어 등급·인원이 다 정해졌을 때만 APPLY를 준다
+      if (!selection) {
+        stopVoiceInput()
+        showError(new Error(`voice/chat이 고르지 않은 칸이 있는 채로 APPLY를 줬다: ${JSON.stringify(draft)}`))
+        return
+      }
+      if (await say(reply, seq)) await applyFromVoice(selection, seq)
+      return
+    }
+    if (next === 'STOP') {
+      if (await say(reply, seq)) stopVoiceInput()
+      return
+    }
+    let rejection: string | null = null
+    if (selection && !sameSelection(previous, selection)) {
+      setStep('working')
+      const outcome = await applySelection(selection)
+      if (seq !== session.current) return
+      // 그 밖의 실패는 상품 선택 화면이 이미 알렸다
+      if (outcome.status === 'failed') {
+        stopVoiceInput()
+        return
+      }
+      // 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
+      if (outcome.status === 'rejected') rejection = outcome.error.message
+    }
+    if (!(await say(reply, seq))) return
+    if (rejection === null) listen(seq)
+    else await continueAfter(rejection, seq)
+  }
+
+  // 거부 문구를 읽고 대화를 이어 간다
+  async function continueAfter(message: string, seq: number) {
+    if (await say(message, seq)) listen(seq)
+  }
+
+  // 대화의 고른 내용으로 화면을 다시 맞춰 가격을 계산한 뒤 신청한다
+  async function applyFromVoice(selection: VoiceSelection, seq: number) {
+    setStep('working')
+    const priced = await applySelection(selection)
+    if (seq !== session.current) return
+    if (priced.status === 'rejected') return continueAfter(priced.error.message, seq)
+    if (priced.status === 'failed') return stopVoiceInput()
+    const result = await applyTour()
+    if (seq !== session.current) return
+    if (result.status === 'applied') {
+      if (await say(appliedMessage(result.tourStatus), seq)) stopVoiceInput()
+      return
+    }
+    if (result.status === 'rejected') return continueAfter(result.error.message, seq)
+    // 결과를 모르면 화면이 "결과 확인"을 보이고 이 패널을 막는다. 그 밖의 실패는 화면이 이미 알렸다
+    stopVoiceInput()
+  }
+
+  // 대화를 끝낸다. 듣기·읽기를 멈추고(마이크를 놓고) 그 뒤에 도착한 서버 응답은 버린다. 이미 보낸 신청은 되돌리지 않는다
+  function stopVoiceInput() {
+    session.current += 1
+    recognizerRef.current?.abort()
+    recognizerRef.current = null
+    synthesizer.cancel()
+    setStep('idle')
+    setNotice(null)
+  }
+
+  const talking = step !== 'idle'
 
   return (
     <section aria-label="음성으로 고르기">
@@ -342,204 +327,49 @@ export function VoiceInputPanel({ applySelection, disabled, createRecognizer = n
                   <AlertDescription>{DISABLED_MESSAGE}</AlertDescription>
                 </Alert>
               )}
+              {messages.length === 0 && <p className="text-sm text-muted-foreground">{INTRO_MESSAGE}</p>}
+              {messages.length > 0 && (
+                <ol ref={logRef} aria-label="대화" className="max-h-80 space-y-2 overflow-y-auto">
+                  {messages.map((line, index) => (
+                    <li
+                      key={index}
+                      className={cn(
+                        'w-fit max-w-[85%] rounded-lg px-3 py-2 text-sm',
+                        line.speaker === 'SYSTEM' ? 'bg-muted' : 'ml-auto bg-primary text-primary-foreground',
+                      )}
+                    >
+                      <p className="text-xs opacity-70">{line.speaker === 'SYSTEM' ? '시스템' : '고객'}</p>
+                      <p>{line.text}</p>
+                    </li>
+                  ))}
+                </ol>
+              )}
               {notice && (
-                <Alert variant={notice.tone === 'error' ? 'destructive' : 'default'}>
-                  <AlertDescription>{notice.message}</AlertDescription>
+                <Alert variant="destructive">
+                  <AlertDescription>{notice}</AlertDescription>
                 </Alert>
               )}
-              {step === 'idle' && !draft && (
-                <p className="text-sm text-muted-foreground">
-                  말하기를 누르고 테마, 출발일, 투어 등급, 인원을 말하면 칸을 채워 드립니다.
-                </p>
-              )}
-              {step === 'listening' && (
-                <div className="space-y-1">
-                  <p>듣고 있습니다. 테마, 출발일, 투어 등급, 인원을 말해 주세요.</p>
-                  <p className="text-sm text-muted-foreground">
-                    예: “12월 20일에 출발하는 골프 투어, 그랜드 등급으로 2명”
-                  </p>
-                </div>
-              )}
-              {step === 'parsing' && (
-                <div className="space-y-1">
-                  <p className="text-sm">알아들은 말: “{parsingText}”</p>
-                  <p className="text-sm text-muted-foreground">말한 내용을 읽는 중입니다.</p>
-                </div>
-              )}
-              {draft && (step === 'idle' || step === 'applying') && (
-                <DraftForm
-                  draft={draft}
-                  applying={step === 'applying'}
-                  disabled={disabled}
-                  onChangeTarget={changeTarget}
-                  onChange={(patch) => updateDraft({ ...patch, rejection: null })}
-                  onRetryCandidates={() =>
-                    findCandidates(draft.theme, draft.departureDate, { fresh: true, keep: draft.tourId })
-                  }
-                  onConfirm={() => void confirmSelection()}
-                />
-              )}
-              {step === 'listening' || step === 'parsing' ? (
-                <Button variant="outline" onClick={stopVoiceInput}>
-                  {step === 'listening' ? '그만 듣기' : '그만두기'}
-                </Button>
-              ) : (
-                <Button
-                  variant={draft ? 'outline' : 'default'}
-                  onClick={startVoiceInput}
-                  disabled={step === 'applying' || disabled}
-                >
-                  {draft ? '다시 말하기' : '말하기'}
-                </Button>
-              )}
+              {talking && step !== 'paused' && <p className="text-sm text-muted-foreground">{STEP_MESSAGES[step]}</p>}
+              <div className="flex flex-wrap gap-2">
+                {(step === 'idle' || step === 'paused') && (
+                  <Button
+                    variant={step === 'paused' ? 'outline' : 'default'}
+                    onClick={startVoiceInput}
+                    disabled={disabled}
+                  >
+                    {step === 'paused' ? '다시 말하기' : '음성으로 신청하기'}
+                  </Button>
+                )}
+                {talking && (
+                  <Button variant="outline" onClick={stopVoiceInput}>
+                    그만두기
+                  </Button>
+                )}
+              </div>
             </>
           )}
         </CardContent>
       </Card>
     </section>
-  )
-}
-
-interface DraftFormProps {
-  draft: Draft
-  applying: boolean
-  disabled: boolean
-  onChangeTarget(theme: Theme | '', departureDate: string): void
-  onChange(patch: Pick<Partial<Draft>, 'level' | 'headcount' | 'tourId'>): void
-  onRetryCandidates(): void
-  onConfirm(): void
-}
-
-function DraftForm({ draft, applying, disabled, ...props }: DraftFormProps) {
-  const { candidates } = draft
-  const locked = applying || disabled
-  const choosable = choosableOf(candidates)
-  const missing = isMissing(draft)
-  const noCandidate = !!draft.theme && !!draft.departureDate && candidates.status === 'loaded' && choosable.length === 0
-  const messages = [
-    ...(draft.rejection ? [draft.rejection, SPEAK_AGAIN_MESSAGE] : []),
-    ...(missing ? [MISSING_MESSAGE] : []),
-    ...(headcountInvalid(draft) ? [HEADCOUNT_MESSAGE] : []),
-    ...(noCandidate ? [NO_CANDIDATE_MESSAGE] : []),
-  ]
-
-  return (
-    <form className="space-y-4" onSubmit={(event) => event.preventDefault()} noValidate>
-      <p className="text-sm">알아들은 말: “{draft.heard}”</p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="voice-theme">테마</Label>
-          <NativeSelect
-            id="voice-theme"
-            className="w-full"
-            value={draft.theme}
-            disabled={locked}
-            onChange={(event) => props.onChangeTarget(event.target.value as Theme | '', draft.departureDate)}
-          >
-            <NativeSelectOption value="">테마 선택</NativeSelectOption>
-            {themes.map((item) => (
-              <NativeSelectOption key={item.value} value={item.value}>
-                {item.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="voice-date">출발일</Label>
-          <Input
-            id="voice-date"
-            type="date"
-            value={draft.departureDate}
-            disabled={locked}
-            onChange={(event) => props.onChangeTarget(draft.theme, event.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="voice-level">투어 등급</Label>
-          <NativeSelect
-            id="voice-level"
-            className="w-full"
-            value={draft.level}
-            disabled={locked}
-            onChange={(event) => props.onChange({ level: event.target.value as TourLevel | '' })}
-          >
-            <NativeSelectOption value="">투어 등급 선택</NativeSelectOption>
-            {tourLevels.map((item) => (
-              <NativeSelectOption key={item.value} value={item.value}>
-                {item.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="voice-headcount">인원</Label>
-          <Input
-            id="voice-headcount"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            value={draft.headcount}
-            disabled={locked}
-            onChange={(event) => props.onChange({ headcount: event.target.value })}
-          />
-        </div>
-      </div>
-
-      {candidates.status === 'loading' && <p className="text-sm text-muted-foreground">후보 상품을 찾는 중입니다.</p>}
-      {candidates.status === 'failed' && (
-        <div className="flex items-center gap-4">
-          <p className="text-sm text-muted-foreground">후보 상품을 불러오지 못했습니다.</p>
-          <Button type="button" variant="outline" onClick={props.onRetryCandidates} disabled={locked}>
-            다시 찾기
-          </Button>
-        </div>
-      )}
-      {candidates.status === 'loaded' && candidates.list.length > 0 && (
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">후보 상품</legend>
-          <RadioGroup
-            value={draft.tourId === null ? '' : String(draft.tourId)}
-            onValueChange={(value) => props.onChange({ tourId: Number(value) })}
-            disabled={locked}
-          >
-            {candidates.list.map((tour) => (
-              <div key={tour.tourId} className="flex items-start gap-2">
-                <RadioGroupItem
-                  id={`voice-tour-${tour.tourId}`}
-                  value={String(tour.tourId)}
-                  disabled={!canApply(tour)}
-                  className="mt-0.5"
-                />
-                <Label htmlFor={`voice-tour-${tour.tourId}`} className="flex flex-col items-start gap-1">
-                  <span className="flex items-center gap-2">
-                    {tour.title}
-                    <Badge variant={canApply(tour) ? 'secondary' : 'outline'}>{tourStatusLabel(tour.status)}</Badge>
-                  </span>
-                  <span className="text-muted-foreground">{tourSummaryLine(tour)}</span>
-                </Label>
-              </div>
-            ))}
-          </RadioGroup>
-          {choosable.length > 0 && draft.tourId === null && (
-            <p className="text-sm text-muted-foreground">{choosable.length > 1 ? CHOOSE_MESSAGE : PICK_MESSAGE}</p>
-          )}
-        </fieldset>
-      )}
-
-      {messages.length > 0 && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {messages.map((message) => (
-              <p key={message}>{message}</p>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Button type="button" onClick={props.onConfirm} disabled={locked || !selectionOf(draft)}>
-        {applying ? '가격을 계산하는 중' : '확인'}
-      </Button>
-    </form>
   )
 }

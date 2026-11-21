@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { formatDate, formatWon } from '@/lib/format'
-import { themeLabel, themes, tourStatusLabel, type Theme, type TourLevel } from '@/lib/labels'
+import { themeLabel, themes, tourStatusLabel, type Theme, type TourLevel, type TourStatus } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
 import { themeLookOf, themeLooks } from '@/lib/themeLook'
 import { useBlockLeaving } from '@/lib/useBlockLeaving'
@@ -34,18 +34,28 @@ import {
 import { cn } from '@/lib/utils'
 import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
 
-// 음성(VoiceInputPanel)이 채운 내용
+// 음성(VoiceInputPanel)의 대화에서 고른 내용
 export interface VoiceSelection {
   theme: Theme
   tourId: number
   level: TourLevel
   headcount: number
+  optionIds: number[]
 }
 
 // applySelection 직후의 가격 계산 결과. rejected(400·409, 또는 화면에서 고를 때처럼 상품에 없는 등급·정수가 아닌 인원)는
-// VoiceInputPanel이 문구를 보여 주고 다시 말하게 한다. failed는 그 밖의 실패로, 이 화면이 이미 알렸다
+// VoiceInputPanel이 문구를 읽고 대화를 이어 간다. failed는 그 밖의 실패로, 이 화면이 이미 알렸다
 export type ApplySelectionResult = { status: 'priced' } | { status: 'rejected'; error: ApiError } | { status: 'failed' }
 export type ApplySelection = (selection: VoiceSelection) => Promise<ApplySelectionResult>
+
+// 음성에서 부른 신청의 결과. unknown은 결과를 모르는 신청으로, 이 화면이 "결과 확인"을 보인다.
+// rejected(400·409)는 VoiceInputPanel이 문구를 읽고 대화를 이어 간다. failed는 그 밖의 실패로, 이 화면이 이미 알렸다
+export type ApplyTourResult =
+  | { status: 'applied'; tourStatus: TourStatus }
+  | { status: 'unknown' }
+  | { status: 'rejected'; error: ApiError }
+  | { status: 'failed' }
+export type ApplyTour = () => Promise<ApplyTourResult>
 
 const CANNOT_APPLY_MESSAGE = '더는 신청할 수 없는 상품입니다. 다른 상품을 골라 주세요.'
 const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
@@ -192,9 +202,11 @@ function TourList({ tours, theme, onSelect }: { tours: TourSummary[]; theme: The
   )
 }
 
-// 음성 입력 부품이 받는 것. disabled면 신청 결과를 확인하기 전이라 쓸 수 없다
+// 음성 입력 부품이 받는 것. applyTour는 마지막으로 가격이 나온 내용으로 신청한다.
+// disabled면 신청 결과를 확인하기 전이라 쓸 수 없다
 export interface VoiceInputProps {
   applySelection: ApplySelection
+  applyTour: ApplyTour
   disabled: boolean
 }
 
@@ -222,6 +234,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   const detailRef = useRef<Detail | null>(null)
   // 가격 계산 중에 고친 입력이 있다. 그 계산이 끝나는 자리에서 그때의 입력으로 다시 계산한다
   const requote = useRef(false)
+  // 테마·목록·기다리는 일의 최신 값. 응답을 기다린 뒤에는 이것으로 읽는다(음성이 applySelection 바로 뒤에 applyTour를
+  // 부르면, 다시 그리기 전이라 그린 때의 값은 낡았다)
+  const themeRef = useRef<Theme | null>(null)
+  const toursRef = useRef<ToursState | null>(null)
+  const pendingRef = useRef<Pending>(null)
   const tourList = tours?.status === 'loaded' ? tours.list : undefined
 
   useEffect(() => {
@@ -256,6 +273,26 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     if (detailRef.current) writeDetail({ ...detailRef.current, ...patch })
   }
 
+  function writeTheme(next: Theme) {
+    themeRef.current = next
+    setTheme(next)
+  }
+
+  function writeTours(next: ToursState) {
+    toursRef.current = next
+    setTours(next)
+  }
+
+  function writePending(next: Pending) {
+    pendingRef.current = next
+    setPending(next)
+  }
+
+  function loadedTours(): TourSummary[] | undefined {
+    const current = toursRef.current
+    return current?.status === 'loaded' ? current.list : undefined
+  }
+
   // 실패하면 받아 둔 목록은 그대로 두고(다시 받는 중 남은 자리 표시용), 불러오는 중이었으면 실패로 보인다.
   // quiet면 실패를 알리지 않는다(이미 다른 실패를 보이고 있을 때)
   async function loadTours(forTheme: Theme, seq: number, { quiet = false } = {}): Promise<TourSummary[] | null> {
@@ -263,12 +300,12 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     const latest = () => isCurrent(seq) && request === toursRequest.current
     try {
       const list = await getTours(forTheme)
-      if (latest()) setTours({ status: 'loaded', list })
+      if (latest()) writeTours({ status: 'loaded', list })
       return list
     } catch (error) {
       if (latest()) {
         if (!quiet) showError(error)
-        setTours((current) => (current?.status === 'loaded' ? current : { status: 'failed' }))
+        if (toursRef.current?.status !== 'loaded') writeTours({ status: 'failed' })
       }
       return null
     }
@@ -277,14 +314,14 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 테마를 고르거나, 목록으로 돌아가거나, 음성으로 채운 내용을 받을 때. 목록은 받은 것이 없으면 새로 불러온다
   function resetTo(next: { theme: Theme; detail: Detail | null; message?: string | null; list?: TourSummary[] }) {
     const seq = newContext()
-    setTheme(next.theme)
+    writeTheme(next.theme)
     writeDetail(next.detail)
     setListMessage(next.message ?? null)
-    setPending(null)
+    writePending(null)
     if (next.list) {
-      setTours({ status: 'loaded', list: next.list })
+      writeTours({ status: 'loaded', list: next.list })
     } else {
-      setTours({ status: 'loading' })
+      writeTours({ status: 'loading' })
       void loadTours(next.theme, seq)
     }
     return seq
@@ -292,7 +329,8 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
 
   // 상품 목록으로 돌아가 목록을 새로 보여 준다(처음 받은 목록이면 방금 마감된 상품을 또 고를 수 있다)
   function showTourList(message: string | null, list?: TourSummary[]) {
-    if (theme) resetTo({ theme, detail: null, message, list })
+    const current = themeRef.current
+    if (current) resetTo({ theme: current, detail: null, message, list })
   }
 
   function selectTheme(next: Theme) {
@@ -303,7 +341,7 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     const seq = newContext()
     setListMessage(null)
     writeDetail(newDetail(tourId))
-    setPending('levels')
+    writePending('levels')
     try {
       const levels = await getLevels(tourId)
       if (isCurrent(seq)) updateDetail({ levels })
@@ -311,9 +349,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       if (!isCurrent(seq)) return
       showError(error)
       // 없어진 상품(404)이면 목록을 다시 불러오고, 그 밖의 실패면 받아 둔 목록으로 돌아간다
-      showTourList(null, hasStatus(error, 404) ? undefined : tourList)
+      showTourList(null, hasStatus(error, 404) ? undefined : loadedTours())
     } finally {
-      if (isCurrent(seq)) setPending(null)
+      if (isCurrent(seq)) writePending(null)
     }
   }
 
@@ -325,15 +363,16 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 400을 받아 투어 등급과 인원을 다시 받는다. 고른 옵션은 그대로 두고, 줄어든 남은 자리를 보이려고 목록을 다시 불러온다
   async function askLevelAgain(message: string, tourId: number, seq: number) {
     updateDetail({ levelMessage: message, priced: false, optionPanelOpen: false, optionMessage: null })
-    if (!theme) return
-    setPending('seats')
+    const current = themeRef.current
+    if (!current) return
+    writePending('seats')
     try {
-      const list = await loadTours(theme, seq)
+      const list = await loadTours(current, seq)
       if (!isCurrent(seq) || !list) return
       const tour = list.find((item) => item.tourId === tourId)
       if (!tour || !canApply(tour)) showTourList(CANNOT_APPLY_MESSAGE, list)
     } finally {
-      if (isCurrent(seq)) setPending((current) => (current === 'seats' ? null : current))
+      if (isCurrent(seq) && pendingRef.current === 'seats') writePending(null)
     }
   }
 
@@ -461,15 +500,18 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     })
   }
 
-  // 신청하기와 결과 확인(설계 3.1 applyTour). 결과 확인은 들고 있던 신청을 그대로 다시 보낸다
-  async function applyTour() {
+  // 신청하기와 결과 확인(설계 3.1 applyTour). 결과 확인은 들고 있던 신청을 그대로 다시 보낸다.
+  // 음성에서 부르면(fromVoice) 단골 할인 확인은 대화의 요약 확인으로 갈음해, 신청하기 전에 켠다
+  async function applyTour({ fromVoice = false } = {}): Promise<ApplyTourResult> {
     const current = detailRef.current
-    if (!current || current.applyResult || current.quoting || pending || applying.current) return
+    if (!current || current.applyResult || current.quoting || pendingRef.current || applying.current) {
+      return { status: 'failed' }
+    }
     let apply: ApplyRequest
     if (current.unknownApply) {
       apply = current.unknownApply
     } else {
-      if (!current.quote || !current.priced) return
+      if (!current.quote || !current.priced) return { status: 'failed' }
       const { summary } = current.quote
       apply = {
         idempotencyKey: newIdempotencyKey(),
@@ -481,9 +523,10 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         },
       }
     }
+    if (fromVoice) updateDetail({ discountConfirmed: true })
     applying.current = true
     const seq = context.current
-    setPending('apply')
+    writePending('apply')
     const outcome = await ApiClient.post<ApplyTourResponse>('/api/v1/bookings', apply.request, {
       unsafeToRetry: true,
       idempotencyKey: apply.idempotencyKey,
@@ -493,25 +536,32 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     )
     // 신청 요청은 끝났다. 아래에서 목록을 다시 불러오는 동안 음성 입력을 막지 않는다
     applying.current = false
-    if (!isCurrent(seq)) return
+    if (!isCurrent(seq)) return { status: 'failed' }
+    const shownTheme = themeRef.current
     try {
       if (outcome.ok) {
         updateDetail({ applyResult: outcome.result, unknownApply: null, optionPanelOpen: false })
         // 신청 인원을 더한 남은 자리를 보인다
-        if (theme) void loadTours(theme, seq)
-        return
+        if (shownTheme) void loadTours(shownTheme, seq)
+        return { status: 'applied', tourStatus: outcome.result.status }
       }
       const { error } = outcome
       if (error instanceof ApiError && error.resultUnknown) {
         // 신청이 됐을 수 있어 신청하기를 다시 열지 않는다. 줄었을 남은 자리는 알림 없이 다시 불러온다
         updateDetail({ unknownApply: { ...apply, message: error.message }, optionPanelOpen: false })
-        if (theme) void loadTours(theme, seq, { quiet: true })
-      } else if (hasStatus(error, 400)) {
+        if (shownTheme) void loadTours(shownTheme, seq, { quiet: true })
+        return { status: 'unknown' }
+      }
+      if (hasStatus(error, 400)) {
         updateDetail({ unknownApply: null })
         await askLevelAgain(error.message, apply.request.tourId, seq)
-      } else if (hasStatus(error, 409)) {
+        return { status: 'rejected', error }
+      }
+      if (hasStatus(error, 409)) {
         showTourList(error.message)
-      } else if (hasStatus(error, 404)) {
+        return { status: 'rejected', error }
+      }
+      if (hasStatus(error, 404)) {
         // 상품이 없어 신청은 되지 않았다
         showError(error)
         showTourList(null)
@@ -519,18 +569,19 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         // 결과 확인이 거부됐으면(403 등) 앞 신청의 결과는 아직 모르니 신청 키를 둔다
         showError(error)
       }
+      return { status: 'failed' }
     } finally {
-      if (isCurrent(seq)) setPending(null)
+      if (isCurrent(seq)) writePending(null)
     }
   }
 
-  // 음성으로 채운 내용을 받아 칸을 채우고 가격을 계산한다. 이 가격 계산의 400·409는 부른 쪽에 넘긴다
+  // 음성의 대화에서 고른 내용을 받아 칸을 채우고 옵션까지 넣어 가격을 계산한다. 이 가격 계산의 400·409는 부른 쪽에 넘긴다
   const applySelection: ApplySelection = async (selection) => {
     if (applying.current) {
       toast.error(APPLYING_MESSAGE)
       return { status: 'failed' }
     }
-    // 음성 입력이 막히기 전에 누른 확인도 받지 않는다
+    // 음성 입력이 막히기 전에 보낸 내용도 받지 않는다
     if (detailRef.current?.unknownApply) {
       toast.error(CHECK_RESULT_FIRST_MESSAGE)
       return { status: 'failed' }
@@ -543,9 +594,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         headcountInput: String(selection.headcount),
       },
       // 같은 테마면 받아 둔 목록을 그대로 쓴다
-      list: selection.theme === theme ? tourList : undefined,
+      list: selection.theme === themeRef.current ? loadedTours() : undefined,
     })
-    setPending('levels')
+    writePending('levels')
     try {
       let levels: TourLevelsResponse
       try {
@@ -567,9 +618,9 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       // 이 가격 계산이 끝날 때까지 입력을 막아 둔다(pending 'levels')
       const priced = check.selection
       try {
-        const result = await quote(selection.tourId, priced, [])
+        const result = await quote(selection.tourId, priced, selection.optionIds)
         if (!isCurrent(seq)) return { status: 'failed' }
-        priceArrived(result, priced, [])
+        priceArrived(result, priced, selection.optionIds)
         return { status: 'priced' }
       } catch (error) {
         if (!isCurrent(seq)) return { status: 'failed' }
@@ -580,9 +631,11 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         return { status: 'failed' }
       }
     } finally {
-      if (isCurrent(seq)) setPending(null)
+      if (isCurrent(seq)) writePending(null)
     }
   }
+
+  const applyTourFromVoice: ApplyTour = () => applyTour({ fromVoice: true })
 
   const applyBusy = pending === 'apply'
   useBlockLeaving(applyBusy, '신청이 끝날 때까지 이 화면에 있어 주세요.')
@@ -595,7 +648,13 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         <MenuLink to={pagePaths.CustomerMainPage} label="고객 메뉴" disabled={applyBusy} />
       </header>
 
-      {VoiceInput && <VoiceInput applySelection={applySelection} disabled={Boolean(detail?.unknownApply)} />}
+      {VoiceInput && (
+        <VoiceInput
+          applySelection={applySelection}
+          applyTour={applyTourFromVoice}
+          disabled={Boolean(detail?.unknownApply)}
+        />
+      )}
 
       <section aria-label="테마" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {themes.map((item) => {

@@ -18,8 +18,10 @@ export class SpeechSynthesizer {
   }
 
   speak(text: string): Promise<void> {
-    this.cancel()
     if (!this.isSupported()) return Promise.resolve()
+    const synthesis = window.speechSynthesis
+    // 읽던 것이 있을 때만 멈춘다(멈추자마자 읽게 한 문장을 버리는 브라우저가 있어, 앞 문장이 끝났으면 바로 읽는다)
+    if (this.current || synthesis.speaking || synthesis.pending) this.cancel()
     return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text)
       const reading = {

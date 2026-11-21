@@ -100,8 +100,20 @@ describe('SpeechSynthesizer', () => {
     const first = synthesizer.speak('첫 문장')
     const second = synthesizer.speak('둘째 문장')
 
+    expect(speechSynthesis.cancel).toHaveBeenCalledTimes(1)
     expect(await settled(first)).toBe(true)
     expect(await settled(second)).toBe(false)
+  })
+
+  it('앞 문장을 다 읽었으면 멈추지 않고 바로 읽는다', async () => {
+    const synthesizer = new SpeechSynthesizer()
+    const first = synthesizer.speak('첫 문장')
+    latest().onend?.()
+    expect(await settled(first)).toBe(true)
+
+    void synthesizer.speak('둘째 문장')
+    expect(speechSynthesis.cancel).not.toHaveBeenCalled()
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(2)
   })
 
   it('읽어 주기를 쓸 수 없으면 읽지 않고 바로 끝난다', async () => {

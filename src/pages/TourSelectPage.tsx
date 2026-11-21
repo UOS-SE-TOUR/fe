@@ -61,6 +61,7 @@ const CANNOT_APPLY_MESSAGE = '더는 신청할 수 없는 상품입니다. 다�
 const LEVEL_MESSAGE = '투어 등급을 골라 주세요.'
 const APPLYING_MESSAGE = '신청을 처리하는 중입니다. 신청이 끝난 뒤 다시 시도해 주세요.'
 const CHECK_RESULT_FIRST_MESSAGE = '신청 결과를 확인한 뒤 다시 시도해 주세요.'
+const VOICE_APPLY_BLOCKED_MESSAGE = '지금은 음성으로 신청할 수 없습니다. 아래에서 확인한 뒤 신청해 주세요.'
 // 인원을 치다가 이만큼 멈추면 가격을 계산한다(글자마다 서버를 부르지 않게)
 export const HEADCOUNT_DELAY_MS = 500
 
@@ -503,15 +504,18 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
   // 신청하기와 결과 확인(설계 3.1 applyTour). 결과 확인은 들고 있던 신청을 그대로 다시 보낸다.
   // 음성에서 부르면(fromVoice) 단골 할인 확인은 대화의 요약 확인으로 갈음해, 신청하기 전에 켠다
   async function applyTour({ fromVoice = false } = {}): Promise<ApplyTourResult> {
-    const current = detailRef.current
-    if (!current || current.applyResult || current.quoting || pendingRef.current || applying.current) {
+    // 신청을 보내지 못하는 때. 화면의 단추는 이때 막혀 있지만, 음성에는 알린다(failed는 이 화면이 알렸다는 약속)
+    const blocked = (): ApplyTourResult => {
+      if (fromVoice) toast.error(applying.current ? APPLYING_MESSAGE : VOICE_APPLY_BLOCKED_MESSAGE)
       return { status: 'failed' }
     }
+    const current = detailRef.current
+    if (!current || current.applyResult || current.quoting || pendingRef.current || applying.current) return blocked()
     let apply: ApplyRequest
     if (current.unknownApply) {
       apply = current.unknownApply
     } else {
-      if (!current.quote || !current.priced) return { status: 'failed' }
+      if (!current.quote || !current.priced) return blocked()
       const { summary } = current.quote
       apply = {
         idempotencyKey: newIdempotencyKey(),

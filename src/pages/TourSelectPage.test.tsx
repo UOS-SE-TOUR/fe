@@ -1443,6 +1443,26 @@ describe('applyTour(음성에서 부른 신청)', () => {
     expect(screen.getByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
   })
 
+  it('신청할 수 없는 때(아직 가격이 없음 등) 부르면 알리고 실패로 돌려준다', async () => {
+    function BareVoiceInput({ applyTour }: VoiceInputProps) {
+      const [outcome, setOutcome] = useState('')
+      return (
+        <div>
+          <button onClick={() => void applyTour().then((next) => setOutcome(applyTourText(next)))}>
+            음성으로 신청
+          </button>
+          <output aria-label="음성 신청 결과">{outcome}</output>
+        </div>
+      )
+    }
+    const user = renderPage(BareVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('지금은 음성으로 신청할 수 없습니다. 아래에서 확인한 뒤 신청해 주세요.')
+    expect(countOf(APPLY)).toBe(0)
+  })
+
   it('상품이 없어졌으면(404) 알리고 상품 목록을 다시 불러온 뒤 실패로 돌려준다', async () => {
     replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
     const user = renderPage(ApplyingVoiceInput)

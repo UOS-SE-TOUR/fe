@@ -49,6 +49,18 @@ const golf27: TourSummary = {
   status: 'RECRUITING',
 }
 
+// 12/12 효도 상품. 효도 힐링 투어는 그랜드·프리미엄만 고를 수 있다
+const parents12: TourSummary = {
+  tourId: 7,
+  title: '효도 힐링 투어 12/12 출발 4일',
+  departureDate: '2026-12-12',
+  duration: 4,
+  remainingSeats: 10,
+  status: 'RECRUITING',
+}
+const PARENTS_TOURS = 'GET /api/v1/tours?theme=PARENTS'
+const PARENTS_LEVELS = 'GET /api/v1/tours/7/levels'
+
 const levels: TourLevelsResponse = {
   service: '라운딩 2회',
   souvenir: '골프공 세트',
@@ -204,6 +216,8 @@ beforeEach(() => {
   always = new Map<string, Reply>([
     [GOLF_TOURS, () => jsonResponse(200, [golf27])],
     ['GET /api/v1/tours/4/levels', () => jsonResponse(200, levels)],
+    [PARENTS_TOURS, () => jsonResponse(200, [parents12])],
+    [PARENTS_LEVELS, () => jsonResponse(200, { ...levels, levels: levels.levels.slice(1) })],
     [QUOTE, (body) => jsonResponse(200, quoteFor(body as QuoteRequest))],
     [APPLY, () => jsonResponse(201, { bookingId: 7, status: 'CONFIRMED' })],
   ])
@@ -360,6 +374,53 @@ describe('대화', () => {
     expect(events.slice(-4)).toEqual([CHAT, QUOTE, 'speak: 정리하면 이렇습니다. 맞으세요?', 'listen'])
     expect(screen.getByText('가격 요약')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '골프 챌린지 투어' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('덜 정해진 내용도 답을 읽기 전에 화면에 바로 보인다(테마는 상품 목록, 상품은 상세와 정해진 칸)', async () => {
+    const user = renderPage()
+    await start(user)
+    synthesizer.hold = true
+
+    replyOnce(CHAT, jsonResponse(200, chat('효도 힐링 투어를 권해 드립니다.', { theme: 'PARENTS' })))
+    recognizer.say('부모님 결혼기념일이에요')
+    expect(await panel().findByText('말하는 중입니다.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '효도 힐링 투어' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('button', { name: /12\/12 출발 4일/ })).toBeInTheDocument()
+    act(() => synthesizer.cancel())
+    await waitFor(() => expect(recognizer.started).toBe(2))
+
+    replyOnce(CHAT, jsonResponse(200, chat('몇 분이 가세요?', { theme: 'PARENTS', tourId: 7, level: 'GRAND' })))
+    recognizer.say('12월 12일 그랜드로요')
+    expect(await panel().findByText('말하는 중입니다.')).toBeInTheDocument()
+    const detail = within(screen.getByRole('region', { name: '고른 상품' }))
+    expect(detail.getByRole('radio', { name: /^그랜드/ })).toBeChecked()
+    expect(detail.getByLabelText('인원')).toHaveValue(null)
+    act(() => synthesizer.cancel())
+    await waitFor(() => expect(recognizer.started).toBe(3))
+    expect(countOf(QUOTE)).toBe(0)
+
+    // 고른 내용이 그대로면 화면을 다시 부르지 않는다
+    synthesizer.hold = false
+    await talk('호텔은 어때요?', chat('5성급 호텔입니다.', { theme: 'PARENTS', tourId: 7, level: 'GRAND' }))
+    expect(countOf(PARENTS_LEVELS)).toBe(1)
+    expect(countOf(PARENTS_TOURS)).toBe(1)
+
+    // 셋이 다 정해지면 지금처럼 가격을 계산한다
+    await talk('두 명이요', chat('맞으세요?', { theme: 'PARENTS', tourId: 7, level: 'GRAND', headcount: 2 }))
+    expect(bodiesOf(QUOTE)).toEqual([{ tourId: 7, level: 'GRAND', headcount: 2, optionIds: [] }])
+    expect(screen.getByText('가격 요약')).toBeInTheDocument()
+  })
+
+  it('덜 정해진 내용을 화면에 보이지 못해도(투어 등급 실패) 화면이 알리고 대화는 이어 간다', async () => {
+    const user = renderPage()
+    await start(user)
+    replyOnce(PARENTS_LEVELS, failWith(500, SERVER_ERROR))
+    await talk('12월 12일 효도 투어요', chat('몇 분이 가세요?', { theme: 'PARENTS', tourId: 7 }))
+
+    expect(toast.error).toHaveBeenCalledWith(SERVER_ERROR)
+    expect(synthesizer.spoken.at(-1)).toBe('몇 분이 가세요?')
+    expect(recognizer.started).toBe(2)
+    expect(panel().queryByText(STOPPED)).not.toBeInTheDocument()
   })
 
   it('고른 내용이 그대로면 다시 채우지 않고, 옵션이 바뀌면 다시 채운다', async () => {
@@ -754,6 +815,7 @@ describe('신청 결과를 모를 때', () => {
   it('막혀 있으면 시작할 수 없다', () => {
     render(
       <VoiceInputPanel
+        previewSelection={vi.fn()}
         applySelection={vi.fn()}
         applyTour={vi.fn()}
         disabled

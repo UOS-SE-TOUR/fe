@@ -30,6 +30,7 @@ import {
   type TourLevelsResponse,
   type ToursState,
   type TourSummary,
+  type VoiceDraft,
 } from '@/lib/tours'
 import { cn } from '@/lib/utils'
 import { ApiClient, ApiError, hasStatus, showError } from '@/modules/ApiClient'
@@ -47,6 +48,8 @@ export interface VoiceSelection {
 // VoiceInputPanel이 문구를 읽고 대화를 이어 간다. failed는 그 밖의 실패로, 이 화면이 이미 알렸다
 export type ApplySelectionResult = { status: 'priced' } | { status: 'rejected'; error: ApiError } | { status: 'failed' }
 export type ApplySelection = (selection: VoiceSelection) => Promise<ApplySelectionResult>
+// 대화에서 아직 덜 정해진 내용(테마만, 또는 상품과 투어 등급·인원 일부)을 화면에 바로 보인다
+export type PreviewSelection = (draft: VoiceDraft) => Promise<void>
 
 // 음성에서 부른 신청의 결과. unknown은 결과를 모르는 신청으로, 이 화면이 "결과 확인"을 보인다.
 // rejected(400·409)는 VoiceInputPanel이 문구를 읽고 대화를 이어 간다. failed는 그 밖의 실패로, 이 화면이 이미 알렸다
@@ -206,6 +209,7 @@ function TourList({ tours, theme, onSelect }: { tours: TourSummary[]; theme: The
 // 음성 입력 부품이 받는 것. applyTour는 마지막으로 가격이 나온 내용으로 신청한다.
 // disabled면 신청 결과를 확인하기 전이라 쓸 수 없다
 export interface VoiceInputProps {
+  previewSelection: PreviewSelection
   applySelection: ApplySelection
   applyTour: ApplyTour
   disabled: boolean
@@ -581,6 +585,54 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
     }
   }
 
+  // 음성이 고른 상품의 상세를 열고 투어 등급을 불러온다. 같은 테마면 받아 둔 목록을 그대로 쓴다.
+  // 불러오지 못하면 화면에서 고를 때처럼 알리고 null(없어진 상품이면 목록을 다시 불러온다)
+  async function openVoiceTour(
+    theme: Theme,
+    tourId: number,
+    inputs: Pick<Detail, 'levelInput' | 'headcountInput'>,
+  ): Promise<{ seq: number; levels: TourLevelsResponse } | null> {
+    const seq = resetTo({
+      theme,
+      detail: { ...newDetail(tourId), ...inputs },
+      list: theme === themeRef.current ? loadedTours() : undefined,
+    })
+    writePending('levels')
+    try {
+      const levels = await getLevels(tourId)
+      if (!isCurrent(seq)) return null
+      updateDetail({ levels })
+      return { seq, levels }
+    } catch (error) {
+      if (!isCurrent(seq)) return null
+      showError(error)
+      if (hasStatus(error, 404)) resetTo({ theme, detail: null })
+      else writeDetail(null)
+      return null
+    } finally {
+      if (isCurrent(seq)) writePending(null)
+    }
+  }
+
+  // 음성 대화에서 아직 덜 정해진 내용을 화면에 바로 보인다. 테마만 정해졌으면 그 테마의 상품 목록을, 상품이 정해졌으면
+  // 상품 상세를 열고 정해진 투어 등급·인원만 칸에 넣는다(가격은 셋이 다 정해졌을 때 applySelection이 계산한다)
+  const previewSelection: PreviewSelection = async ({ theme, tourId, level, headcount }) => {
+    if (!theme || applying.current || detailRef.current?.unknownApply) return
+    const current = detailRef.current
+    if (tourId === null) {
+      if (themeRef.current !== theme || current) {
+        resetTo({ theme, detail: null, list: theme === themeRef.current ? loadedTours() : undefined })
+      }
+      return
+    }
+    const inputs = { levelInput: level, headcountInput: headcount === null ? '' : String(headcount) }
+    if (current?.tourId === tourId && !current.applyResult) {
+      updateDetail(inputs)
+      return
+    }
+    await openVoiceTour(theme, tourId, inputs)
+  }
+
   // 음성의 대화에서 고른 내용을 받아 칸을 채우고 옵션까지 넣어 가격을 계산한다. 이 가격 계산의 400·409는 부른 쪽에 넘긴다
   const applySelection: ApplySelection = async (selection) => {
     if (applying.current) {
@@ -592,36 +644,19 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
       toast.error(CHECK_RESULT_FIRST_MESSAGE)
       return { status: 'failed' }
     }
-    const seq = resetTo({
-      theme: selection.theme,
-      detail: {
-        ...newDetail(selection.tourId),
-        levelInput: selection.level,
-        headcountInput: String(selection.headcount),
-      },
-      // 같은 테마면 받아 둔 목록을 그대로 쓴다
-      list: selection.theme === themeRef.current ? loadedTours() : undefined,
+    const opened = await openVoiceTour(selection.theme, selection.tourId, {
+      levelInput: selection.level,
+      headcountInput: String(selection.headcount),
     })
+    if (!opened) return { status: 'failed' }
+    const { seq, levels } = opened
+    const check = checkSelection(levels, selection.level, String(selection.headcount))
+    if (!('selection' in check)) {
+      return { status: 'rejected', error: new ApiError(check.message ?? LEVEL_MESSAGE, 400) }
+    }
+    // 이 가격 계산이 끝날 때까지 입력을 막아 둔다
     writePending('levels')
     try {
-      let levels: TourLevelsResponse
-      try {
-        levels = await getLevels(selection.tourId)
-      } catch (error) {
-        if (!isCurrent(seq)) return { status: 'failed' }
-        showError(error)
-        // 없어진 상품(404)이면 목록을 다시 불러온다(화면에서 고를 때와 같다)
-        if (hasStatus(error, 404)) resetTo({ theme: selection.theme, detail: null })
-        else writeDetail(null)
-        return { status: 'failed' }
-      }
-      if (!isCurrent(seq)) return { status: 'failed' }
-      updateDetail({ levels })
-      const check = checkSelection(levels, selection.level, String(selection.headcount))
-      if (!('selection' in check)) {
-        return { status: 'rejected', error: new ApiError(check.message ?? LEVEL_MESSAGE, 400) }
-      }
-      // 이 가격 계산이 끝날 때까지 입력을 막아 둔다(pending 'levels')
       const priced = check.selection
       try {
         const result = await quote(selection.tourId, priced, selection.optionIds)
@@ -654,83 +689,96 @@ export function TourSelectPage({ voiceInput: VoiceInput }: TourSelectPageProps =
         <MenuLink to={pagePaths.CustomerMainPage} label="고객 메뉴" disabled={applyBusy} />
       </header>
 
-      {VoiceInput && (
-        <VoiceInput
-          applySelection={applySelection}
-          applyTour={applyTourFromVoice}
-          disabled={Boolean(detail?.unknownApply)}
-        />
-      )}
+      {/* 넓은 화면에서는 음성 대화를 오른쪽 칸에 붙여 두어, 말하는 동안 왼쪽 화면이 바뀌는 것을 함께 본다 */}
+      <div
+        className={cn('flex flex-col gap-6', VoiceInput && 'lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start')}
+      >
+        {VoiceInput && (
+          <div className="lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1">
+            <VoiceInput
+              previewSelection={previewSelection}
+              applySelection={applySelection}
+              applyTour={applyTourFromVoice}
+              disabled={Boolean(detail?.unknownApply)}
+            />
+          </div>
+        )}
 
-      <section aria-label="테마" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {themes.map((item) => {
-          const look = themeLooks[item.value]
-          const chosen = theme === item.value
-          return (
-            <Button
-              key={item.value}
-              variant={chosen ? 'default' : 'outline'}
-              aria-pressed={chosen}
-              disabled={applyBusy}
-              onClick={() => selectTheme(item.value)}
-              className={cn('h-auto flex-col gap-2 py-4 break-keep whitespace-normal', !chosen && 'bg-card shadow-xs')}
-            >
-              <span
-                className={cn(
-                  'flex size-10 items-center justify-center rounded-full',
-                  chosen ? 'bg-primary-foreground/20' : look.tint,
-                )}
-              >
-                <look.icon className="size-5" />
-              </span>
-              {item.label}
-            </Button>
-          )
-        })}
-      </section>
+        <div className="flex min-w-0 flex-col gap-6 lg:col-start-1 lg:row-start-1">
+          <section aria-label="테마" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {themes.map((item) => {
+              const look = themeLooks[item.value]
+              const chosen = theme === item.value
+              return (
+                <Button
+                  key={item.value}
+                  variant={chosen ? 'default' : 'outline'}
+                  aria-pressed={chosen}
+                  disabled={applyBusy}
+                  onClick={() => selectTheme(item.value)}
+                  className={cn(
+                    'h-auto flex-col gap-2 py-4 break-keep whitespace-normal',
+                    !chosen && 'bg-card shadow-xs',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex size-10 items-center justify-center rounded-full',
+                      chosen ? 'bg-primary-foreground/20' : look.tint,
+                    )}
+                  >
+                    <look.icon className="size-5" />
+                  </span>
+                  {item.label}
+                </Button>
+              )
+            })}
+          </section>
 
-      {!detail && (
-        <section aria-label="상품 목록" className="space-y-3">
-          {listMessage && (
-            <Alert variant="destructive">
-              <AlertDescription>{listMessage}</AlertDescription>
-            </Alert>
+          {!detail && (
+            <section aria-label="상품 목록" className="space-y-3">
+              {listMessage && (
+                <Alert variant="destructive">
+                  <AlertDescription>{listMessage}</AlertDescription>
+                </Alert>
+              )}
+              {!theme && <p className="text-sm text-muted-foreground">테마를 고르면 상품 목록이 나옵니다.</p>}
+              {tours?.status === 'loading' && (
+                <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중입니다.</p>
+              )}
+              {tours?.status === 'failed' && (
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-muted-foreground">상품 목록을 불러오지 못했습니다.</p>
+                  <Button variant="outline" onClick={() => showTourList(listMessage)}>
+                    다시 불러오기
+                  </Button>
+                </div>
+              )}
+              {tourList && theme && (
+                <TourList tours={tourList} theme={theme} onSelect={(tourId) => void selectTour(tourId)} />
+              )}
+            </section>
           )}
-          {!theme && <p className="text-sm text-muted-foreground">테마를 고르면 상품 목록이 나옵니다.</p>}
-          {tours?.status === 'loading' && (
-            <p className="text-sm text-muted-foreground">상품 목록을 불러오는 중입니다.</p>
-          )}
-          {tours?.status === 'failed' && (
-            <div className="flex items-center gap-4">
-              <p className="text-sm text-muted-foreground">상품 목록을 불러오지 못했습니다.</p>
-              <Button variant="outline" onClick={() => showTourList(listMessage)}>
-                다시 불러오기
-              </Button>
-            </div>
-          )}
-          {tourList && theme && (
-            <TourList tours={tourList} theme={theme} onSelect={(tourId) => void selectTour(tourId)} />
-          )}
-        </section>
-      )}
 
-      {detail && (
-        <TourDetail
-          detail={detail}
-          tour={tourList?.find((item) => item.tourId === detail.tourId)}
-          theme={theme}
-          pending={pending}
-          onBack={() => showTourList(null)}
-          onChangeLevel={changeLevel}
-          onChangeHeadcount={changeHeadcount}
-          onQuoteNow={quoteNow}
-          onConfirmPrice={confirmPrice}
-          onOpenOptions={requestCustomize}
-          onChangeOptions={changeOptions}
-          onFinishOptions={finishCustomize}
-          onApply={() => void applyTour()}
-        />
-      )}
+          {detail && (
+            <TourDetail
+              detail={detail}
+              tour={tourList?.find((item) => item.tourId === detail.tourId)}
+              theme={theme}
+              pending={pending}
+              onBack={() => showTourList(null)}
+              onChangeLevel={changeLevel}
+              onChangeHeadcount={changeHeadcount}
+              onQuoteNow={quoteNow}
+              onConfirmPrice={confirmPrice}
+              onOpenOptions={requestCustomize}
+              onChangeOptions={changeOptions}
+              onFinishOptions={finishCustomize}
+              onApply={() => void applyTour()}
+            />
+          )}
+        </div>
+      </div>
     </main>
   )
 }

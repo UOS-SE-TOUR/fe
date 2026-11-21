@@ -13,6 +13,7 @@ import type {
   TourLevelsResponse,
   TourOptionsResponse,
   TourSummary,
+  VoiceDraft,
 } from '@/lib/tours'
 import { CONNECTION_FAILED_MESSAGE, GATEWAY_TIMEOUT_MESSAGE, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
 import {
@@ -1352,6 +1353,76 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(bodiesOf(QUOTE)).toEqual([{ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [13, 41] }])
     expect(await openOptions(user)).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /^샴페인/ })).toBeChecked()
+  })
+})
+
+describe('previewSelection(음성 대화에서 덜 정해진 내용)', () => {
+  const empty: VoiceDraft = { theme: null, tourId: null, level: null, headcount: null, optionIds: [] }
+
+  // VoiceInputPanel 대신 덜 정해진 내용을 화면에 보인다
+  function PreviewVoiceInput({ previewSelection, applyTour }: VoiceInputProps) {
+    return (
+      <div>
+        <button onClick={() => void previewSelection({ ...empty, theme: 'GOLF' })}>음성 미리 보기(테마)</button>
+        <button onClick={() => void previewSelection({ ...empty, theme: 'GOLF', tourId: 1, level: 'GRAND' })}>
+          음성 미리 보기(상품·등급)
+        </button>
+        <button onClick={() => void previewSelection({ ...empty, theme: 'GOLF', tourId: 1, headcount: 3 })}>
+          음성 미리 보기(상품·인원)
+        </button>
+        <button onClick={() => void applyTour()}>음성으로 신청</button>
+      </div>
+    )
+  }
+
+  it('테마만 정해졌으면 그 테마의 상품 목록을 보이고, 같은 테마면 목록을 다시 부르지 않는다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+
+    expect(screen.getByRole('button', { name: '골프 챌린지 투어' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+    expect(countOf(TOURS)).toBe(1)
+  })
+
+  it('상품이 정해졌으면 상세를 열고 정해진 칸만 채우며, 가격은 계산하지 않는다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(상품·등급)' }))
+
+    expect(await screen.findByRole('radio', { name: /^그랜드/ })).toBeChecked()
+    expect(screen.getByLabelText('인원')).toHaveValue(null)
+    expect(screen.getByRole('button', { name: '골프 챌린지 투어' })).toHaveAttribute('aria-pressed', 'true')
+
+    // 같은 상품이면 상세를 다시 열지 않고 칸만 바꾼다
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(상품·인원)' }))
+    expect(screen.getByLabelText('인원')).toHaveValue(3)
+    expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument()
+    await act(() => new Promise((resolve) => setTimeout(resolve, HEADCOUNT_DELAY_MS + 50)))
+    expect(countOf('GET /api/v1/tours/1/levels')).toBe(1)
+    expect(countOf(QUOTE)).toBe(0)
+  })
+
+  it('상품이 열린 채 테마만 오면 그 테마의 상품 목록으로 돌아간다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(상품·등급)' }))
+    await screen.findByRole('radio', { name: /^그랜드/ })
+
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '고른 상품' })).not.toBeInTheDocument()
+  })
+
+  it('신청 결과를 모르는 동안은 화면을 바꾸지 않는다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    await screen.findByRole('button', { name: '결과 확인' })
+
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+    expect(screen.getByRole('button', { name: '결과 확인' })).toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(2)
   })
 })
 

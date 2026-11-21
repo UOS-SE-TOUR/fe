@@ -74,6 +74,16 @@ function sameSelection(previous: VoiceSelection | null, next: VoiceSelection): b
   )
 }
 
+// 화면에 보이는 고른 내용(테마·상품·투어 등급·인원)이 같다. 옵션은 가격과 함께 보이므로 덜 정해진 동안에는 보지 않는다
+function sameChoice(previous: VoiceDraft, next: VoiceDraft): boolean {
+  return (
+    previous.theme === next.theme &&
+    previous.tourId === next.tourId &&
+    previous.level === next.level &&
+    previous.headcount === next.headcount
+  )
+}
+
 interface VoiceInputPanelProps extends VoiceInputProps {
   // 테스트는 가짜를 넣는다(테스트 환경에는 브라우저 음성인식·읽어 주기가 없다)
   createRecognizer?: () => Recognizer
@@ -91,6 +101,7 @@ function newSynthesizer(): Synthesizer {
 // 시스템과 고객이 말을 주고받아 상품을 고르고 신청까지 한다(설계 3.1 VoiceInputPanel·5.5).
 // disabled면 상품 선택 화면이 신청 결과를 확인하기 전이다. 대화를 끝내고 시작을 막는다
 export function VoiceInputPanel({
+  previewSelection,
   applySelection,
   applyTour,
   disabled,
@@ -239,7 +250,8 @@ export function VoiceInputPanel({
   // TALK면 고른 내용이 처음 다 정해졌거나 바뀌었을 때 화면의 칸을 채운 뒤 답을 읽고 다시 듣는다.
   // APPLY면 답을 읽고 신청하며, STOP이면 답을 읽고 대화를 끝낸다
   async function answer({ reply, draft, next }: VoiceChatResponse, seq: number) {
-    const previous = selectionOf(draftRef.current)
+    const previousDraft = draftRef.current
+    const previous = selectionOf(previousDraft)
     const selection = selectionOf(draft)
     draftRef.current = draft
     if (next === 'STOP') {
@@ -255,31 +267,37 @@ export function VoiceInputPanel({
       }
       // 고객이 확인한 요약(앞 답의 고른 내용)과 같을 때만 신청하고, 아니면 칸을 채워 다시 확인받는다
       if (!sameSelection(previous, selection)) {
-        return talkOn(CONFIRM_AGAIN_MESSAGE, selection, previous, seq, { replyOnlyWhenPriced: true })
+        return talkOn(CONFIRM_AGAIN_MESSAGE, draft, previousDraft, seq, { replyOnlyWhenPriced: true })
       }
       if (await say(reply, seq)) await applyFromVoice(selection, seq)
       return
     }
-    await talkOn(reply, selection, previous, seq)
+    await talkOn(reply, draft, previousDraft, seq)
   }
 
-  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 칸을 채운 뒤 말을 읽고 다시 듣는다. 거부되면 말 뒤에 거부 문구를 읽고,
-  // replyOnlyWhenPriced(가격이 나왔다는 말)면 거부 문구만 읽는다
+  // 고른 내용이 처음 다 정해졌거나 바뀌었으면 칸을 채워 가격을 계산하고, 덜 정해졌으면 정해진 만큼 화면에 바로 보인 뒤
+  // 말을 읽고 다시 듣는다. 가격 계산이 거부되면 말 뒤에 거부 문구를 읽고, replyOnlyWhenPriced(가격이 나왔다는 말)면
+  // 거부 문구만 읽는다
   async function talkOn(
     reply: string,
-    selection: VoiceSelection | null,
-    previous: VoiceSelection | null,
+    draft: VoiceDraft,
+    previousDraft: VoiceDraft,
     seq: number,
     { replyOnlyWhenPriced = false } = {},
   ) {
+    const selection = selectionOf(draft)
     let rejection: string | null = null
-    if (selection && !sameSelection(previous, selection)) {
+    if (selection && !sameSelection(selectionOf(previousDraft), selection)) {
       setStep('working')
       const outcome = await applySelection(selection)
       if (seq !== session.current) return
       if (outcome.status === 'failed') return stopAfterFailure()
       // 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
       if (outcome.status === 'rejected') rejection = outcome.error.message
+    } else if (!selection && !sameChoice(previousDraft, draft)) {
+      setStep('working')
+      await previewSelection(draft)
+      if (seq !== session.current) return
     }
     const lines = rejection === null ? [reply] : replyOnlyWhenPriced ? [rejection] : [reply, rejection]
     for (const line of lines) {
@@ -328,13 +346,15 @@ export function VoiceInputPanel({
   }
 
   const talking = step !== 'idle'
-  // 대화도 알림도 없는 처음 상태면 카드를 한 줄로 줄인다(넓은 화면에서 설명 옆에 시작 단추)
+  // 대화도 알림도 없는 처음 상태면 카드를 줄인다(패널이 넓게 놓이면 설명 옆에 시작 단추, 오른쪽 칸처럼 좁으면 설명 아래)
   const compact = supported && !disabled && !notice && !talking && messages.length === 0
 
   return (
-    <section aria-label="음성으로 고르기">
-      <Card className={cn('ring-primary/30', compact && 'gap-3 py-4 sm:flex-row sm:items-center sm:justify-between')}>
-        <CardHeader className={cn(compact && 'sm:min-w-0 sm:flex-1')}>
+    <section aria-label="음성으로 고르기" className="@container">
+      <Card
+        className={cn('ring-primary/30', compact && 'gap-3 py-4 @md:flex-row @md:items-center @md:justify-between')}
+      >
+        <CardHeader className={cn(compact && '@md:min-w-0 @md:flex-1')}>
           <CardTitle className="flex items-center gap-2.5">
             <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <Mic className="size-4" />
@@ -343,7 +363,7 @@ export function VoiceInputPanel({
           </CardTitle>
           {compact && <p className="text-sm text-muted-foreground">{INTRO_MESSAGE}</p>}
         </CardHeader>
-        <CardContent className={cn('space-y-4', compact && 'sm:w-auto sm:shrink-0')}>
+        <CardContent className={cn('space-y-4', compact && '@md:w-auto @md:shrink-0')}>
           {!supported && (
             <Alert>
               <AlertDescription>{UNSUPPORTED_MESSAGE}</AlertDescription>
@@ -358,7 +378,7 @@ export function VoiceInputPanel({
               )}
               {messages.length === 0 && !compact && <p className="text-sm text-muted-foreground">{INTRO_MESSAGE}</p>}
               {messages.length > 0 && (
-                <ol ref={logRef} aria-label="대화" className="max-h-80 space-y-2 overflow-y-auto">
+                <ol ref={logRef} aria-label="대화" className="max-h-60 space-y-2 overflow-y-auto lg:max-h-[55vh]">
                   {messages.map((line, index) => (
                     <li
                       key={index}
@@ -383,7 +403,7 @@ export function VoiceInputPanel({
                 {(step === 'idle' || step === 'paused') && (
                   <Button
                     variant={step === 'paused' ? 'outline' : 'default'}
-                    className={compact ? 'w-full sm:min-w-28' : undefined}
+                    className={compact ? 'w-full @md:min-w-28' : undefined}
                     onClick={startVoiceInput}
                     disabled={disabled}
                   >

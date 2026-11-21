@@ -119,6 +119,8 @@ export function VoiceInputPanel({
   // 대화와 고른 내용의 최신 값(응답을 기다린 뒤에는 여기서 읽는다)
   const messagesRef = useRef<VoiceMessage[]>([])
   const draftRef = useRef<VoiceDraft>(EMPTY_VOICE_DRAFT)
+  // 이 대화에서 마지막으로 가격이 나와 화면에 보인 고른 내용. 신청은 이것과 같은 내용일 때만 한다
+  const pricedRef = useRef<VoiceSelection | null>(null)
   // 마지막으로 듣기 시작한 인식기. 대화를 끝내거나 화면을 떠나면 듣기를 그만둔다(마이크를 놓는다)
   const recognizerRef = useRef<Recognizer | null>(null)
   const logRef = useRef<HTMLOListElement | null>(null)
@@ -182,6 +184,7 @@ export function VoiceInputPanel({
     messagesRef.current = []
     setMessages([])
     draftRef.current = EMPTY_VOICE_DRAFT
+    pricedRef.current = null
     void say(greetingFor(AuthStore.name), seq).then((current) => {
       if (current) listen(seq)
     })
@@ -251,7 +254,6 @@ export function VoiceInputPanel({
   // APPLY면 답을 읽고 신청하며, STOP이면 답을 읽고 대화를 끝낸다
   async function answer({ reply, draft, next }: VoiceChatResponse, seq: number) {
     const previousDraft = draftRef.current
-    const previous = selectionOf(previousDraft)
     const selection = selectionOf(draft)
     draftRef.current = draft
     if (next === 'STOP') {
@@ -265,9 +267,9 @@ export function VoiceInputPanel({
         stopAfterFailure()
         return
       }
-      // 고객이 확인한 요약(앞 답의 고른 내용)과 같을 때만 신청하고, 아니면 칸을 채워 다시 확인받는다
-      if (!sameSelection(previous, selection)) {
-        return talkOn(CONFIRM_AGAIN_MESSAGE, draft, previousDraft, seq, { replyOnlyWhenPriced: true })
+      // 마지막으로 가격이 나와 고객이 본 내용과 같을 때만 신청하고, 아니면 다시 계산해 확인받는다
+      if (!sameSelection(pricedRef.current, selection)) {
+        return talkOn(CONFIRM_AGAIN_MESSAGE, draft, previousDraft, seq, { confirmAgain: true })
       }
       if (await say(reply, seq)) await applyFromVoice(selection, seq)
       return
@@ -276,30 +278,31 @@ export function VoiceInputPanel({
   }
 
   // 고른 내용이 처음 다 정해졌거나 바뀌었으면 칸을 채워 가격을 계산하고, 덜 정해졌으면 정해진 만큼 화면에 바로 보인 뒤
-  // 말을 읽고 다시 듣는다. 가격 계산이 거부되면 말 뒤에 거부 문구를 읽고, replyOnlyWhenPriced(가격이 나왔다는 말)면
-  // 거부 문구만 읽는다
+  // 말을 읽고 다시 듣는다. 가격 계산이 거부되면 말 뒤에 거부 문구를 읽는다. confirmAgain(가격이 나왔다는 말로 다시
+  // 확인받기)이면 늘 다시 계산하고, 거부되면 거부 문구만 읽는다
   async function talkOn(
     reply: string,
     draft: VoiceDraft,
     previousDraft: VoiceDraft,
     seq: number,
-    { replyOnlyWhenPriced = false } = {},
+    { confirmAgain = false } = {},
   ) {
     const selection = selectionOf(draft)
     let rejection: string | null = null
-    if (selection && !sameSelection(selectionOf(previousDraft), selection)) {
+    if (selection && (confirmAgain || !sameSelection(selectionOf(previousDraft), selection))) {
       setStep('working')
       const outcome = await applySelection(selection)
       if (seq !== session.current) return
       if (outcome.status === 'failed') return stopAfterFailure()
+      if (outcome.status === 'priced') pricedRef.current = selection
       // 거부 문구도 대화에 들어가 다음 요청에서 서버가 본다
-      if (outcome.status === 'rejected') rejection = outcome.error.message
+      else rejection = outcome.error.message
     } else if (!selection && !sameChoice(previousDraft, draft)) {
       setStep('working')
       await previewSelection(draft)
       if (seq !== session.current) return
     }
-    const lines = rejection === null ? [reply] : replyOnlyWhenPriced ? [rejection] : [reply, rejection]
+    const lines = rejection === null ? [reply] : confirmAgain ? [rejection] : [reply, rejection]
     for (const line of lines) {
       if (!(await say(line, seq))) return
     }

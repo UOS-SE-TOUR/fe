@@ -525,6 +525,21 @@ describe('신청', () => {
     expect(synthesizer.spoken.at(-1)).toBe(APPLIED)
   })
 
+  it('앞 답의 가격 계산이 거부됐으면 같은 내용으로 APPLY가 와도 신청하지 않고, 다시 계산해 확인받는다', async () => {
+    const user = renderPage()
+    await start(user)
+    replyOnce(QUOTE, failWith(400, SEAT_SHORTAGE))
+    await talk('그랜드로 둘이요', chat('맞으세요?', golfDraft()))
+    await talk('그래도 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
+
+    expect(countOf(APPLY)).toBe(0)
+    expect(events.slice(-4)).toEqual([CHAT, QUOTE, `speak: ${CONFIRM_AGAIN}`, 'listen'])
+    expect(synthesizer.spoken).not.toContain('신청하겠습니다.')
+
+    await talk('네, 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
+    expect(bodiesOf(APPLY)).toEqual([{ tourId: 4, level: 'GRAND', headcount: 2, optionIds: [] }])
+  })
+
   it('처음 다 정해진 내용으로 바로 APPLY가 와도 신청하지 않고, 칸을 채운 뒤 확인받는다', async () => {
     const user = renderPage()
     await start(user)

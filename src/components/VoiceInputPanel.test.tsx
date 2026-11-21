@@ -38,8 +38,7 @@ const CLOSED = '마감된 상품입니다.'
 const SERVER_ERROR = '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'
 const APPLIED = '신청했습니다. 지금 상품 상태는 ‘확정’입니다.'
 const STOPPED = '음성 대화를 끝냈습니다. 아래에서 직접 고르거나 다시 시작해 주세요.'
-const CONFIRM_AGAIN =
-  '고른 내용이 바뀌어 가격을 다시 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
+const CONFIRM_AGAIN = '고른 내용으로 가격을 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
 
 const golf27: TourSummary = {
   tourId: 4,
@@ -465,6 +464,16 @@ describe('신청', () => {
     expect(synthesizer.spoken.at(-1)).toBe(APPLIED)
   })
 
+  it('처음 다 정해진 내용으로 바로 APPLY가 와도 신청하지 않고, 칸을 채운 뒤 확인받는다', async () => {
+    const user = renderPage()
+    await start(user)
+    await talk('12월 27일 골프 그랜드 둘이요, 바로 신청해 주세요', chat('신청하겠습니다.', golfDraft(), 'APPLY'))
+
+    expect(countOf(APPLY)).toBe(0)
+    expect(events.slice(-4)).toEqual([CHAT, QUOTE, `speak: ${CONFIRM_AGAIN}`, 'listen'])
+    expect(screen.getByText('가격 요약')).toBeInTheDocument()
+  })
+
   it('APPLY의 바뀐 내용으로 가격 계산이 거부되면 다시 확인받는 말 없이 거부 문구만 읽고 대화를 이어 간다', async () => {
     const user = renderPage()
     await start(user)
@@ -644,6 +653,8 @@ describe('끝내기와 실패', () => {
     ['모르는 next', { reply: '네', draft: EMPTY_VOICE_DRAFT, next: 'WAIT' }],
     ['draft 없음', { reply: '네', next: 'TALK' }],
     ['옵션이 목록이 아님', { reply: '네', draft: { ...EMPTY_VOICE_DRAFT, optionIds: null }, next: 'TALK' }],
+    ['모르는 테마', { reply: '네', draft: golfDraft({ theme: 'golf' as VoiceDraft['theme'] }), next: 'TALK' }],
+    ['모르는 투어 등급', { reply: '네', draft: golfDraft({ level: 'DELUXE' as VoiceDraft['level'] }), next: 'TALK' }],
     ['고르지 않은 칸이 있는 APPLY', { reply: '신청하겠습니다.', draft: golfDraft({ level: null }), next: 'APPLY' }],
   ])('voice/chat 응답 모양이 다르면(%s) 공용 알림으로 알리고 대화를 끝낸다', async (_, body) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -28,8 +28,9 @@ const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 �
 const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
 const INTRO_MESSAGE = '묻는 말에 답하면 여행을 고르고 신청까지 해 드립니다.'
 const STOPPED_MESSAGE = '음성 대화를 끝냈습니다. 아래에서 직접 고르거나 다시 시작해 주세요.'
+// 확인받지 않은 내용으로 APPLY가 왔을 때, 신청하지 않고 칸을 채운 뒤 읽는 말(가격이 나왔을 때만 읽는다)
 const CONFIRM_AGAIN_MESSAGE =
-  '고른 내용이 바뀌어 가격을 다시 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
+  '고른 내용으로 가격을 계산했습니다. 화면의 가격을 확인하시고, 이대로 신청할지 말씀해 주세요.'
 
 function greetingFor(name: string | null): string {
   return name ? `안녕하세요, ${name} 고객님. 어떤 여행을 찾으세요?` : '안녕하세요, 고객님. 어떤 여행을 찾으세요?'
@@ -253,7 +254,8 @@ export function VoiceInputPanel({
         stopAfterFailure()
         return
       }
-      // 고객이 확인한 요약은 앞 답의 고른 내용이다. 그와 같을 때만 신청하고, 다르면 바뀐 내용으로 칸을 채워 다시 확인받는다
+      // 고객이 확인한 요약은 앞 답의 고른 내용이다. 그와 같을 때만 신청하고, 다르거나 앞 답에서 덜 정해졌으면
+      // 이 내용으로 칸을 채워 다시 확인받는다
       // (be가 고른 값을 빼면 APPLY를 TALK로 바꾸고 답을 고정 문장으로 바꾸는 것과 같은 까닭이다)
       if (!sameSelection(previous, selection)) {
         return talkOn(CONFIRM_AGAIN_MESSAGE, selection, previous, seq, { replyOnlyWhenPriced: true })

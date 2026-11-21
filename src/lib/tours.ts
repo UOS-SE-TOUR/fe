@@ -1,5 +1,5 @@
 import { formatDate } from '@/lib/format'
-import type { Theme, TourLevel, TourStatus } from '@/lib/labels'
+import { themes, tourLevels, type Theme, type TourLevel, type TourStatus } from '@/lib/labels'
 import { ApiClient } from '@/modules/ApiClient'
 
 // 상품 조회·가격 계산·신청 API의 본문 모양. 이름은 be record·Swagger 스키마와 같다
@@ -170,13 +170,18 @@ function isNullable(value: unknown, type: 'string' | 'number'): boolean {
   return value === null || typeof value === type
 }
 
+// 화면이 아는 값(be의 Theme·TourLevel과 같은 값)이거나 null
+function isNullableOf(value: unknown, list: readonly { value: string }[]): boolean {
+  return value === null || list.some((item) => item.value === value)
+}
+
 function isVoiceDraft(value: unknown): value is VoiceDraft {
   if (typeof value !== 'object' || value === null) return false
   const draft = value as Record<string, unknown>
   return (
-    isNullable(draft.theme, 'string') &&
+    isNullableOf(draft.theme, themes) &&
     isNullable(draft.tourId, 'number') &&
-    isNullable(draft.level, 'string') &&
+    isNullableOf(draft.level, tourLevels) &&
     isNullable(draft.headcount, 'number') &&
     Array.isArray(draft.optionIds) &&
     draft.optionIds.every((id) => typeof id === 'number')

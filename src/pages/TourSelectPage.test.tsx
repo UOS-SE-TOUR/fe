@@ -13,9 +13,16 @@ import type {
   TourLevelsResponse,
   TourOptionsResponse,
   TourSummary,
+  VoiceDraft,
 } from '@/lib/tours'
 import { CONNECTION_FAILED_MESSAGE, GATEWAY_TIMEOUT_MESSAGE, UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
-import { HEADCOUNT_DELAY_MS, TourSelectPage, type VoiceInputProps, type VoiceSelection } from '@/pages/TourSelectPage'
+import {
+  HEADCOUNT_DELAY_MS,
+  TourSelectPage,
+  type ApplyTourResult,
+  type VoiceInputProps,
+  type VoiceSelection,
+} from '@/pages/TourSelectPage'
 import { jsonResponse, stubFetch } from '@/test/http'
 import { leaveBlocked, waitUntilLeaveAllowed } from '@/test/leave'
 
@@ -1103,15 +1110,28 @@ describe('신청 결과를 모를 때', () => {
   })
 })
 
-describe('applySelection(음성으로 채운 내용)', () => {
-  const selection: VoiceSelection = { theme: 'GOLF', tourId: 1, level: 'GRAND', headcount: 2 }
+function applyTourText(outcome: ApplyTourResult): string {
+  if (outcome.status === 'applied') return `applied: ${outcome.tourStatus}`
+  if (outcome.status === 'rejected') return `rejected: ${outcome.error.message}`
+  return outcome.status
+}
 
-  // VoiceInputPanel(#7) 대신 applySelection을 부르고 결과를 보여 준다
-  function FakeVoiceInput({ applySelection, disabled }: VoiceInputProps) {
+describe('applySelection(음성으로 채운 내용)', () => {
+  const selection: VoiceSelection = { theme: 'GOLF', tourId: 1, level: 'GRAND', headcount: 2, optionIds: [] }
+
+  // VoiceInputPanel 대신 applySelection·applyTour를 부르고 결과를 보여 준다
+  function FakeVoiceInput({ applySelection, applyTour, disabled }: VoiceInputProps) {
     const [result, setResult] = useState('')
+    const [applied, setApplied] = useState('')
     async function apply(next: VoiceSelection) {
       const outcome = await applySelection(next)
       setResult(outcome.status === 'rejected' ? `rejected: ${outcome.error.message}` : outcome.status)
+    }
+    // 대화가 APPLY로 끝났을 때처럼 가격이 나오면 같은 흐름에서 바로 신청한다(누른 때 받은 applyTour를 그대로 부른다)
+    async function applyAndBook(next: VoiceSelection) {
+      const outcome = await applySelection(next)
+      setResult(outcome.status)
+      if (outcome.status === 'priced') setApplied(applyTourText(await applyTour()))
     }
     return (
       <div>
@@ -1119,7 +1139,13 @@ describe('applySelection(음성으로 채운 내용)', () => {
         <button onClick={() => void apply({ ...selection, tourId: 3 })}>음성 결과 쓰기(다른 상품)</button>
         <button onClick={() => void apply({ ...selection, level: 'CLASSIC' })}>음성 결과 쓰기(클래식)</button>
         <button onClick={() => void apply({ ...selection, headcount: 0 })}>음성 결과 쓰기(0명)</button>
+        <button onClick={() => void apply({ ...selection, optionIds: [13, 41] })}>음성 결과 쓰기(옵션)</button>
+        <button onClick={() => void applyAndBook(selection)}>음성으로 고르고 신청</button>
+        <button onClick={() => void applyTour().then((outcome) => setApplied(applyTourText(outcome)))}>
+          음성으로 신청
+        </button>
         <output aria-label="음성 결과">{result}</output>
+        <output aria-label="음성 신청 결과">{applied}</output>
         <output aria-label="음성 입력 막힘">{String(disabled)}</output>
       </div>
     )
@@ -1317,6 +1343,220 @@ describe('applySelection(음성으로 채운 내용)', () => {
     expect(screen.getByRole('status', { name: '음성 입력 막힘' })).toHaveTextContent('false')
     await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(다른 상품)' }))
     expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('priced')
+  })
+
+  it('고른 옵션까지 넣어 가격을 계산하고, 옵션 패널에도 그 옵션이 골라져 있다', async () => {
+    const user = renderPage(FakeVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기(옵션)' }))
+
+    expect(await screen.findByRole('status', { name: '음성 결과' })).toHaveTextContent('priced')
+    expect(bodiesOf(QUOTE)).toEqual([{ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [13, 41] }])
+    expect(await openOptions(user)).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /^샴페인/ })).toBeChecked()
+  })
+})
+
+describe('previewSelection(음성 대화에서 덜 정해진 내용)', () => {
+  const empty: VoiceDraft = { theme: null, tourId: null, level: null, headcount: null, optionIds: [] }
+
+  // VoiceInputPanel 대신 덜 정해진 내용을 화면에 보인다
+  function PreviewVoiceInput({ previewSelection, applyTour }: VoiceInputProps) {
+    return (
+      <div>
+        <button onClick={() => void previewSelection({ ...empty, theme: 'GOLF' })}>음성 미리 보기(테마)</button>
+        <button onClick={() => void previewSelection({ ...empty, theme: 'GOLF', tourId: 1, level: 'GRAND' })}>
+          음성 미리 보기(상품·등급)
+        </button>
+        <button onClick={() => void previewSelection({ ...empty, theme: 'GOLF', tourId: 1, headcount: 3 })}>
+          음성 미리 보기(상품·인원)
+        </button>
+        <button onClick={() => void applyTour()}>음성으로 신청</button>
+      </div>
+    )
+  }
+
+  it('테마만 정해졌으면 그 테마의 상품 목록을 보이고, 같은 테마면 목록을 다시 부르지 않는다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+
+    expect(screen.getByRole('button', { name: '골프 챌린지 투어' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+    expect(countOf(TOURS)).toBe(1)
+  })
+
+  it('상품이 정해졌으면 상세를 열고 정해진 칸만 채우며, 가격은 계산하지 않는다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(상품·등급)' }))
+
+    expect(await screen.findByRole('radio', { name: /^그랜드/ })).toBeChecked()
+    expect(screen.getByLabelText('인원')).toHaveValue(null)
+    expect(screen.getByRole('button', { name: '골프 챌린지 투어' })).toHaveAttribute('aria-pressed', 'true')
+
+    // 같은 상품이면 상세를 다시 열지 않고 칸만 바꾼다
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(상품·인원)' }))
+    expect(screen.getByLabelText('인원')).toHaveValue(3)
+    expect(screen.queryByRole('radio', { checked: true })).not.toBeInTheDocument()
+    await act(() => new Promise((resolve) => setTimeout(resolve, HEADCOUNT_DELAY_MS + 50)))
+    expect(countOf('GET /api/v1/tours/1/levels')).toBe(1)
+    expect(countOf(QUOTE)).toBe(0)
+  })
+
+  it('상품이 열린 채 테마만 오면 그 테마의 상품 목록으로 돌아간다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(상품·등급)' }))
+    await screen.findByRole('radio', { name: /^그랜드/ })
+
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: '고른 상품' })).not.toBeInTheDocument()
+  })
+
+  it('신청 결과를 모르는 동안은 화면을 바꾸지 않는다', async () => {
+    const user = renderPage(PreviewVoiceInput)
+    await openTour(user)
+    await priceWith(user, /^그랜드/, '2')
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    await user.click(await screen.findByRole('button', { name: '신청하기' }))
+    await screen.findByRole('button', { name: '결과 확인' })
+
+    await user.click(screen.getByRole('button', { name: '음성 미리 보기(테마)' }))
+    expect(screen.getByRole('button', { name: '결과 확인' })).toBeInTheDocument()
+    expect(countOf(TOURS)).toBe(2)
+  })
+})
+
+describe('applyTour(음성에서 부른 신청)', () => {
+  const selection: VoiceSelection = { theme: 'GOLF', tourId: 1, level: 'GRAND', headcount: 2, optionIds: [41] }
+
+  // 대화가 APPLY로 끝났을 때처럼, 누른 때 받은 applySelection·applyTour를 차례로 부른다(그사이 다시 그린 값을 받지 않는다)
+  function ApplyingVoiceInput({ applySelection, applyTour }: VoiceInputProps) {
+    const [result, setResult] = useState('')
+    async function applyNow() {
+      const priced = await applySelection(selection)
+      if (priced.status !== 'priced') {
+        setResult(`priced: ${priced.status}`)
+        return
+      }
+      setResult(applyTourText(await applyTour()))
+    }
+    return (
+      <div>
+        <button onClick={() => void applyNow()}>음성으로 신청</button>
+        <output aria-label="음성 신청 결과">{result}</output>
+      </div>
+    )
+  }
+
+  function result() {
+    return screen.findByRole('status', { name: '음성 신청 결과' })
+  }
+
+  it('마지막으로 가격이 나온 내용으로 신청하고 상품 상태를 돌려주며, 남은 자리를 다시 불러온다', async () => {
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent('applied: CONFIRMED')
+    expect(bodiesOf(APPLY)).toEqual([{ tourId: 1, level: 'GRAND', headcount: 2, optionIds: [41] }])
+    expect(idempotencyKeysOf(APPLY)[0]).toMatch(UUID)
+    expect(screen.getByText(/신청했습니다/)).toBeInTheDocument()
+    await waitFor(() => expect(countOf(TOURS)).toBe(2))
+  })
+
+  it('단골 할인 확인은 대화의 요약 확인으로 갈음해, 음성으로 신청한 뒤 할인 확인 카드가 남지 않는다', async () => {
+    always.set(QUOTE, (body) => jsonResponse(200, quoteFor(body as QuoteRequest, 100_000)))
+    function VoiceInput(props: VoiceInputProps) {
+      return (
+        <div>
+          <button onClick={() => void props.applySelection(selection)}>음성 결과 쓰기</button>
+          <ApplyingVoiceInput {...props} />
+        </div>
+      )
+    }
+    const user = renderPage(VoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성 결과 쓰기' }))
+    expect(await screen.findByText('단골 할인이 적용됩니다')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+    expect(await result()).toHaveTextContent('applied: CONFIRMED')
+    expect(screen.queryByText('단골 할인이 적용됩니다')).not.toBeInTheDocument()
+    expect(screen.getByText(/신청했습니다/)).toBeInTheDocument()
+  })
+
+  it('음성 신청이 거부되면 켰던 할인 확인을 되돌려, 화면에서 다시 낸 가격의 할인은 다시 확인받는다', async () => {
+    always.set(QUOTE, (body) => jsonResponse(200, quoteFor(body as QuoteRequest, 100_000)))
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+    expect(await result()).toHaveTextContent(`rejected: ${SEAT_SHORTAGE}`)
+    await waitFor(() => expect(countOf(TOURS)).toBe(2))
+
+    const headcount = screen.getByLabelText('인원')
+    await user.clear(headcount)
+    await user.type(headcount, '1{Enter}')
+    expect(await screen.findByText('단골 할인이 적용됩니다')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
+  })
+
+  it('409면 상품 목록으로 돌아가 문구를 보이고 거부로 돌려준다', async () => {
+    replyOnce(APPLY, failWith(409, CLOSED))
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent(`rejected: ${CLOSED}`)
+    expect(within(screen.getByRole('region', { name: '상품 목록' })).getByText(CLOSED)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
+  })
+
+  it('400이면 투어 등급·인원을 다시 받게 하고(남은 자리를 다시 불러온다) 거부로 돌려준다', async () => {
+    replyOnce(APPLY, failWith(400, SEAT_SHORTAGE))
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent(`rejected: ${SEAT_SHORTAGE}`)
+    expect(screen.getByText(SEAT_SHORTAGE)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '신청하기' })).not.toBeInTheDocument()
+    await waitFor(() => expect(countOf(TOURS)).toBe(2))
+  })
+
+  it('결과를 모르면 결과 확인을 보이고 unknown을 돌려준다', async () => {
+    replyOnce(APPLY, failWith(500, '서버 오류가 발생했습니다. 잠시 뒤 다시 시도해 주세요.'))
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent('unknown')
+    expect(screen.getByRole('button', { name: '결과 확인' })).toBeInTheDocument()
+    expect(screen.getByText(UNKNOWN_RESULT_MESSAGE)).toBeInTheDocument()
+  })
+
+  it('신청할 수 없는 때(아직 가격이 없음 등) 부르면 알리고 실패로 돌려준다', async () => {
+    function BareVoiceInput({ applyTour }: VoiceInputProps) {
+      const [outcome, setOutcome] = useState('')
+      return (
+        <div>
+          <button onClick={() => void applyTour().then((next) => setOutcome(applyTourText(next)))}>
+            음성으로 신청
+          </button>
+          <output aria-label="음성 신청 결과">{outcome}</output>
+        </div>
+      )
+    }
+    const user = renderPage(BareVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('지금은 음성으로 신청할 수 없습니다. 화면에서 확인한 뒤 신청해 주세요.')
+    expect(countOf(APPLY)).toBe(0)
+  })
+
+  it('상품이 없어졌으면(404) 알리고 상품 목록을 다시 불러온 뒤 실패로 돌려준다', async () => {
+    replyOnce(APPLY, failWith(404, '여행 상품을 찾을 수 없습니다.'))
+    const user = renderPage(ApplyingVoiceInput)
+    await user.click(screen.getByRole('button', { name: '음성으로 신청' }))
+
+    expect(await result()).toHaveTextContent('failed')
+    expect(toast.error).toHaveBeenCalledWith('여행 상품을 찾을 수 없습니다.')
+    expect(await screen.findByRole('button', { name: /12\/20 출발 5일/ })).toBeInTheDocument()
   })
 })
 

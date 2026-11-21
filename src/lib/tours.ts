@@ -1,5 +1,5 @@
 import { formatDate } from '@/lib/format'
-import type { Theme, TourLevel, TourStatus } from '@/lib/labels'
+import { themes, tourLevels, type Theme, type TourLevel, type TourStatus } from '@/lib/labels'
 import { ApiClient } from '@/modules/ApiClient'
 
 // 상품 조회·가격 계산·신청 API의 본문 모양. 이름은 be record·Swagger 스키마와 같다
@@ -156,6 +156,73 @@ export function isPriceQuote(value: unknown): value is PriceQuote {
     typeof summary.headcount === 'number' &&
     Array.isArray(summary.options) &&
     summary.options.every((option: unknown) => typeof (option as Partial<SelectedOption> | null)?.name === 'string')
+  )
+}
+
+// 음성 대화(be voice/chat). SYSTEM은 화면의 인사·서버의 답·화면이 더한 거부 문구, CUSTOMER는 고객이 한 말이다
+export type VoiceSpeaker = 'SYSTEM' | 'CUSTOMER'
+
+// TALK는 고객의 말을 더 듣고, APPLY는 고른 내용으로 신청하며, STOP은 대화를 끝낸다
+export type VoiceNext = 'TALK' | 'APPLY' | 'STOP'
+
+export interface VoiceMessage {
+  speaker: VoiceSpeaker
+  text: string
+}
+
+// 대화에서 지금까지 고른 내용. 고르지 않은 칸은 null, 옵션은 빈 목록이다
+export interface VoiceDraft {
+  theme: Theme | null
+  tourId: number | null
+  level: TourLevel | null
+  headcount: number | null
+  optionIds: number[]
+}
+
+export interface VoiceChatRequest {
+  // 지금까지의 대화 전체. 첫 줄은 인사, 마지막 줄은 고객이 방금 한 말이다
+  messages: VoiceMessage[]
+  draft: VoiceDraft
+}
+
+export interface VoiceChatResponse {
+  reply: string
+  draft: VoiceDraft
+  next: VoiceNext
+}
+
+export const EMPTY_VOICE_DRAFT: VoiceDraft = { theme: null, tourId: null, level: null, headcount: null, optionIds: [] }
+
+function isNullable(value: unknown, type: 'string' | 'number'): boolean {
+  return value === null || typeof value === type
+}
+
+// 화면이 아는 값(be의 Theme·TourLevel과 같은 값)이거나 null
+function isNullableOf(value: unknown, list: readonly { value: string }[]): boolean {
+  return value === null || list.some((item) => item.value === value)
+}
+
+function isVoiceDraft(value: unknown): value is VoiceDraft {
+  if (typeof value !== 'object' || value === null) return false
+  const draft = value as Record<string, unknown>
+  return (
+    isNullableOf(draft.theme, themes) &&
+    isNullable(draft.tourId, 'number') &&
+    isNullableOf(draft.level, tourLevels) &&
+    isNullable(draft.headcount, 'number') &&
+    Array.isArray(draft.optionIds) &&
+    draft.optionIds.every((id) => typeof id === 'number')
+  )
+}
+
+export function isVoiceChatResponse(value: unknown): value is VoiceChatResponse {
+  if (typeof value !== 'object' || value === null) return false
+  const response = value as Record<string, unknown>
+  return (
+    typeof response.reply === 'string' &&
+    response.reply.trim() !== '' &&
+    isVoiceDraft(response.draft) &&
+    (response.next === 'TALK' || response.next === 'APPLY' || response.next === 'STOP')
   )
 }
 

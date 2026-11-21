@@ -93,17 +93,22 @@ export interface PreviousTourResponse {
   level: TourLevel
   levelName: string
   headcount: number
-  // 신청할 때 정해진 최종 가격(원, 할인 뒤)
+  // 신청하거나 마지막으로 바꿀 때 정해진 최종 가격(원, 할인 뒤)
   finalPrice: number
 }
 
-// 내 신청 한 줄. 이전 여행 한 줄에 신청한 때·상품의 지금 상태·확정까지 남은 인원을 더했다
+// 내 신청 한 줄. 이전 여행 한 줄에 신청한 때·상품의 지금 상태·확정까지 남은 인원과, 바꾸기에 쓰는 두 칸을 더했다.
+// 신청을 바꾸면 바뀐 신청도 이 모양으로 온다
 export interface MyBookingResponse extends PreviousTourResponse {
+  // 지금 고른 옵션의 ID. 고르지 않은 종류는 그 등급의 기본 제공이다
+  optionIds: number[]
   // UTC ISO 8601. 초 아래 자리는 없거나 자릿수가 다를 수 있다
   appliedAt: string
   status: TourStatus
   // 모집 중일 때만 1 이상이고 다른 상태에서는 0. 허니문은 2명 단위
   headcountToConfirm: number
+  // 지금 투어 등급과 옵션을 바꿀 수 있다(출발 전이고 모집 중·확정·마감)
+  changeable: boolean
 }
 
 export function isPreviousTour(value: unknown): value is PreviousTourResponse {
@@ -126,9 +131,31 @@ export function isMyBooking(value: unknown): value is MyBookingResponse {
   if (!isPreviousTour(value)) return false
   const booking = value as Partial<MyBookingResponse>
   return (
+    Array.isArray(booking.optionIds) &&
+    booking.optionIds.every((optionId) => typeof optionId === 'number') &&
     typeof booking.appliedAt === 'string' &&
     typeof booking.status === 'string' &&
-    typeof booking.headcountToConfirm === 'number'
+    typeof booking.headcountToConfirm === 'number' &&
+    typeof booking.changeable === 'boolean'
+  )
+}
+
+// 가격 계산 응답인지. 가격 요약(PriceSummary)이 그리는 칸만 본다
+export function isPriceQuote(value: unknown): value is PriceQuote {
+  if (typeof value !== 'object' || value === null) return false
+  const { summary, totalPrice, discount, finalPrice } = value as Partial<PriceQuote>
+  if (typeof summary !== 'object' || summary === null) return false
+  return (
+    typeof totalPrice === 'number' &&
+    typeof discount === 'number' &&
+    typeof finalPrice === 'number' &&
+    typeof summary.title === 'string' &&
+    typeof summary.departureDate === 'string' &&
+    typeof summary.duration === 'number' &&
+    typeof summary.levelName === 'string' &&
+    typeof summary.headcount === 'number' &&
+    Array.isArray(summary.options) &&
+    summary.options.every((option: unknown) => typeof (option as Partial<SelectedOption> | null)?.name === 'string')
   )
 }
 

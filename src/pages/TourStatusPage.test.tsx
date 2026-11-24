@@ -114,7 +114,9 @@ describe('확정·취소 처리', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '확정 처리' })
     expect(dialog).toHaveTextContent('지금 상태: 모집 중 → 바뀔 상태: 확정')
-    expect(dialog).toHaveTextContent('신청 2명 몫만큼 창고 물품이 줄고, 신청자 모두에게 확정 문자가 갑니다.')
+    expect(dialog).toHaveTextContent(
+      '확정하는 때의 신청 인원(지금 2명) 몫만큼 창고 물품이 줄고, 그때의 신청자 모두에게 확정 문자가 갑니다.',
+    )
     await user.click(within(dialog).getByRole('button', { name: '확정 처리' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -140,7 +142,8 @@ describe('확정·취소 처리', () => {
 
     const dialog = await screen.findByRole('dialog', { name: '취소 처리' })
     expect(dialog).toHaveTextContent('지금 상태: 완료 → 바뀔 상태: 취소')
-    expect(dialog).toHaveTextContent('이 상품 때문에 줄였던 창고 물품을 되돌립니다.')
+    expect(dialog).toHaveTextContent('이 상품 때문에 줄였던 창고 물품을 입출고 기록대로 되돌립니다.')
+    expect(dialog).toHaveTextContent('기록이 생기기 전에 확정한 상품은 물품이 돌아오지 않습니다.')
     await user.click(within(dialog).getByRole('button', { name: '취소 처리' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -236,6 +239,42 @@ describe('확정·취소 처리', () => {
     expect(await screen.findByText('상품 목록을 불러오지 못했습니다.')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE)
+  })
+
+  it('화면을 연 채 자정을 넘겨 출발일이 된 상품의 확정 단추를 누르면 창을 열지 않고 알린 뒤 다시 읽는다', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2030-01-01T23:50:00+09:00'))
+      const tomorrow = { ...recruiting, departureDate: '2030-01-02' }
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(200, [tomorrow]))
+        .mockResolvedValueOnce(jsonResponse(200, [tomorrow]))
+      renderPage()
+      const user = userEvent.setup()
+      await screen.findByRole('table')
+
+      vi.setSystemTime(new Date('2030-01-02T00:05:00+09:00'))
+      await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+
+      expect(toast.error).toHaveBeenCalledWith('출발일이 오늘이거나 지난 상품은 확정할 수 없습니다.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+      expect(postPaths()).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('새로 고침 단추로 목록을 다시 읽는다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockResolvedValueOnce(jsonResponse(200, [{ ...recruiting, appliedCount: 3, status: 'CONFIRMED' }]))
+    renderPage()
+    await screen.findByRole('table')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: '새로 고침' }))
+
+    await waitFor(() => expect(rowTexts()).toEqual([[recruiting.title, '3/10명', '확정']]))
   })
 
   it('출발일이 오늘이거나 지난 모집 중 상품에는 확정 단추를 두지 않는다', async () => {

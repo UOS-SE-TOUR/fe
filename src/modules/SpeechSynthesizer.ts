@@ -32,6 +32,8 @@ export class SpeechSynthesizer {
     return new Promise((resolve) => {
       const utterance = new SpeechSynthesisUtterance(text)
       let timer: ReturnType<typeof setTimeout> | undefined
+      // 멈춘 직후라 브라우저에 넘기기를 미뤄 둔 예약
+      let startTimer: ReturnType<typeof setTimeout> | undefined
       const reading = {
         utterance,
         // 브라우저에 넘겼는지(멈춘 뒤 기다리는 중이면 아직 안 넘겼다)
@@ -40,6 +42,7 @@ export class SpeechSynthesizer {
           if (this.current !== reading) return
           this.current = null
           clearTimeout(timer)
+          clearTimeout(startTimer)
           resolve()
         },
       }
@@ -61,11 +64,12 @@ export class SpeechSynthesizer {
       utterance.onend = reading.finish
       utterance.onerror = reading.finish
       this.current = reading
-      wait()
       const start = () => {
         // 기다리는 사이 멈췄거나 다른 문장을 읽게 했으면 읽지 않는다
         if (this.current !== reading) return
         reading.handedOff = true
+        // 제한 시간은 브라우저에 넘길 때부터 센다
+        wait()
         try {
           window.speechSynthesis.speak(utterance)
         } catch {
@@ -73,7 +77,7 @@ export class SpeechSynthesizer {
         }
       }
       const delay = this.cancelledAt + SPEAK_AFTER_CANCEL_MS - performance.now()
-      if (delay > 0) setTimeout(start, delay)
+      if (delay > 0) startTimer = setTimeout(start, delay)
       else start()
     })
   }

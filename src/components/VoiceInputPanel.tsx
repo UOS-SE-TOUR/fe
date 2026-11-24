@@ -372,9 +372,10 @@ export function VoiceInputPanel({
   const skipping = talking && step !== 'paused'
 
   // 건너뛰면 시스템의 말만 멈추고, 다 읽은 것처럼 다음 차례로 넘어간다(보통은 듣기, 마지막 말이면 끝, 신청하라는 답이면 신청).
-  // 건너뛴 직후 또 누른 것(두 번 누르기)은 버린다. 그사이 이 단추가 시작 단추가 됐거나 다음 말을 읽기 시작했어도 그렇다
+  // 건너뛴 직후 또 누른 것(두 번 누르기)은 버린다. 그사이 이 단추가 시작 단추가 됐거나 다음 말을 읽기 시작했어도 그렇다.
+  // 듣기가 실패해 "다시 말하기"가 됐으면 버리지 않는다(다시 듣기는 대화를 끝내거나 말을 건너뛰지 않는다)
   function handleFirstButton() {
-    if (performance.now() - lastSkipAt.current < SKIP_REPEAT_GUARD_MS) return
+    if (step !== 'paused' && performance.now() - lastSkipAt.current < SKIP_REPEAT_GUARD_MS) return
     if (!skipping) {
       startVoiceInput()
       return

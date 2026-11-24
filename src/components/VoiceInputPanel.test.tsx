@@ -766,6 +766,10 @@ describe('끝내기와 실패', () => {
     recognizer.fail('other')
     expect(await panel().findByRole('button', { name: '다시 말하기' })).toBeInTheDocument()
     expect(buttonNames()).toEqual(['다시 말하기', '그만두기'])
+
+    // 건너뛴 직후라도 다시 말하기는 버리지 않는다
+    await user.click(panel().getByRole('button', { name: '다시 말하기' }))
+    await waitFor(() => expect(recognizer.started).toBe(2))
   })
 
   it('답 뒤에 이어 읽을 말이 있으면 답을 건너뛰어도 그 말은 읽는다', async () => {

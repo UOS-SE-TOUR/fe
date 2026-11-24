@@ -365,7 +365,7 @@ export function VoiceInputPanel({
   }
 
   const talking = step !== 'idle'
-  // 건너뛰면 다 읽은 것처럼 다음 차례로 넘어간다. 두 번 누르기의 둘째 클릭은 버린다(뒤이어 읽는 말까지 건너뛰지 않게)
+  // 두 번 누르기의 둘째 클릭은 버린다(뒤이어 읽는 말까지 건너뛰지 않게)
   function skipSpeech(event: MouseEvent<HTMLButtonElement>) {
     if (event.detail > 1 || step !== 'speaking') return
     synthesizer.cancel()
@@ -427,13 +427,16 @@ export function VoiceInputPanel({
                 {step === 'idle' && (
                   <Button
                     className={compact ? 'w-full @md:min-w-28' : undefined}
-                    onClick={startVoiceInput}
+                    onClick={(event) => {
+                      // 그만두기를 두 번 누른 둘째 클릭이 이 자리에 오면 버린다
+                      if (event.detail <= 1) startVoiceInput()
+                    }}
                     disabled={disabled}
                   >
                     음성으로 신청하기
                   </Button>
                 )}
-                {/* 대화 중에는 그만두기를 늘 첫 자리에 둔다. 둘째 자리는 말 건너뛰기나 다시 말하기라, 건너뛴 자리를 또 눌러도 대화가 끝나지 않는다 */}
+                {/* 그만두기는 대화 중 늘 첫 자리(건너뛴 자리를 또 눌러도 대화가 끝나지 않게) */}
                 {talking && (
                   <Button variant="outline" onClick={stopVoiceInput}>
                     그만두기
@@ -448,7 +451,7 @@ export function VoiceInputPanel({
                   <Button
                     variant="outline"
                     aria-disabled={step !== 'speaking'}
-                    className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
                     onClick={skipSpeech}
                   >
                     말 건너뛰기

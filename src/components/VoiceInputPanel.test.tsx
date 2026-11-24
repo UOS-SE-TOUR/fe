@@ -839,6 +839,16 @@ describe('끝내기와 실패', () => {
     await waitFor(() => expect(recognizer.started).toBe(2))
   })
 
+  it('시작 단추는 두 번 누르기의 둘째 클릭(그만두기를 두 번 누른 경우)으로는 대화를 시작하지 않는다', async () => {
+    renderPage()
+
+    fireEvent.click(startButton()!, { detail: 2 })
+    await act(() => sleep(0))
+
+    expect(synthesizer.spoken).toEqual([])
+    expect(startButton()).toBeEnabled()
+  })
+
   it('읽는 중에 그만두면 읽기를 멈추고 듣지 않으며, 다시 시작하면 대화를 새로 한다', async () => {
     synthesizer.hold = true
     const user = renderPage()

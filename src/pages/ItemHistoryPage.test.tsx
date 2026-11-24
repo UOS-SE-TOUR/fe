@@ -73,8 +73,8 @@ it('서버가 준 순서대로 물품·이유·상품·바뀐 수량·바뀐 뒤
   expect(await screen.findByRole('table')).toBeInTheDocument()
   expect(rowTexts()).toEqual([
     ['커플 머그컵 · 허니문 낭만 투어', '취소로 되돌림 · 허니문 낭만 투어 12/24 출발 5일', '+2개', '3개'],
-    ['커플 머그컵 · 허니문 낭만 투어', '확정으로 줄임 · 허니문 낭만 투어 12/24 출발 5일', '−2개', '1개'],
-    ['커플 머그컵 · 허니문 낭만 투어', '확정으로 줄임 · 허니문 낭만 투어 12/5 출발 5일', '−2개', '부족 1개'],
+    ['커플 머그컵 · 허니문 낭만 투어', '확정된 신청만큼 줄임 · 허니문 낭만 투어 12/24 출발 5일', '−2개', '1개'],
+    ['커플 머그컵 · 허니문 낭만 투어', '확정된 신청만큼 줄임 · 허니문 낭만 투어 12/5 출발 5일', '−2개', '부족 1개'],
     ['커플 머그컵 · 허니문 낭만 투어', '등록', '+1개', '1개'],
   ])
   expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/staff/items/history')
@@ -103,6 +103,14 @@ it('불러오지 못하면 문구를 알리고 다시 불러올 수 있다', asy
   expect(toast.error).toHaveBeenCalledWith('서버에 문제가 생겼습니다.')
   await userEvent.setup().click(screen.getByRole('button', { name: '다시 불러오기' }))
   expect(await screen.findByText('아직 기록이 없습니다.')).toBeInTheDocument()
+})
+
+it('때를 날짜로 읽지 못하면 받은 그대로 보이고 화면은 그대로 그린다', async () => {
+  fetchMock.mockResolvedValueOnce(jsonResponse(200, [{ ...history(1, 'ADD', 5, 10, null), createdAt: '날짜 아님' }]))
+  renderPage()
+
+  expect(await screen.findByRole('table')).toBeInTheDocument()
+  expect(within(screen.getAllByRole('row')[1]).getAllByRole('cell')[0]).toHaveTextContent('날짜 아님')
 })
 
 it('창고 링크로 창고 화면에 돌아간다', async () => {

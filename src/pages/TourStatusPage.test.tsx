@@ -4,6 +4,7 @@ import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
 import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { UNKNOWN_RESULT_MESSAGE } from '@/modules/ApiClient'
 import { AuthStore } from '@/modules/AuthStore'
 import { routes } from '@/router/routes'
 import { jsonResponse, stubFetch } from '@/test/http'
@@ -23,7 +24,7 @@ afterEach(() => {
 })
 
 function tour(tourId: number, title: string, appliedCount: number, status: string) {
-  return { tourId, theme: 'GOLF', title, departureDate: '2026-12-01', duration: 5, capacity: 10, appliedCount, status }
+  return { tourId, theme: 'GOLF', title, departureDate: '2099-12-01', duration: 5, capacity: 10, appliedCount, status }
 }
 
 const recruiting = tour(1, '허니문 낭만 투어 12/24 출발 5일', 2, 'RECRUITING')
@@ -177,10 +178,58 @@ describe('확정·취소 처리', () => {
     await user.click(within(dialog).getByRole('button', { name: '확정 처리' }))
 
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('신청이 있는 모집 중 상품만 확정할 수 있습니다.')
+    expect(within(dialog).getByRole('button', { name: '확정 처리' })).toBeDisabled()
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
     await user.click(within(dialog).getByRole('button', { name: '닫기' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(rowTexts()).toEqual([[recruiting.title, '3/10명', '확정']])
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('출발일이 오늘이거나 지난 모집 중 상품에는 확정 단추를 두지 않는다', async () => {
+    const departed = { ...recruiting, departureDate: '2000-01-01' }
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [departed]))
+    renderPage()
+
+    await screen.findByRole('table')
+    expect(within(rowOf(recruiting.title)).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('처리한 뒤 서버 오류면 처리됐는지 알 수 없다고 알리고 목록을 다시 읽는다', async () => {
+    const done = { ...recruiting, status: 'CONFIRMED' }
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockResolvedValueOnce(jsonResponse(500, { message: '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.' }))
+      .mockResolvedValueOnce(jsonResponse(200, [done]))
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('table')
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
+    )
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '확정']]))
+  })
+
+  it('처리한 뒤 다시 읽기가 실패해도 바꾼 표는 그대로 두고 알린다', async () => {
+    const done = { ...recruiting, status: 'CONFIRMED' }
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockResolvedValueOnce(jsonResponse(200, done))
+      .mockResolvedValueOnce(jsonResponse(502, { message: '서버에 연결할 수 없습니다.' }))
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('table')
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
+    )
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('서버에 연결할 수 없습니다.'))
+    expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '확정']])
+    expect(screen.queryByText('상품 목록을 불러오지 못했습니다.')).not.toBeInTheDocument()
   })
 })

@@ -28,7 +28,7 @@ type HistoryState = { status: 'loading' } | { status: 'failed' } | { status: 'lo
 const reasonLabels: Record<string, string> = {
   REGISTER: '등록',
   ADD: '수량 더하기',
-  TAKE_OUT: '확정으로 줄임',
+  TAKE_OUT: '확정된 신청만큼 줄임',
   PUT_BACK: '취소로 되돌림',
 }
 
@@ -54,6 +54,12 @@ function isItemHistory(value: unknown): value is ItemHistory {
     typeof quantityAfter === 'number' &&
     typeof createdAt === 'string'
   )
+}
+
+// 날짜로 읽지 못하면 받은 그대로 보인다(format이 던지면 화면 전체가 오류 화면이 된다)
+function formatTime(isoTime: string): string {
+  const time = new Date(isoTime)
+  return Number.isNaN(time.getTime()) ? isoTime : timeFormat.format(time)
 }
 
 function formatCount(count: number): string {
@@ -114,8 +120,8 @@ export function ItemHistoryPage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          창고 물품 수량이 바뀐 기록을 최근 것부터 200개까지 보여 줍니다. 상품이 확정되면 신청 인원만큼 줄고, 늦게
-          취소한 상품은 줄였던 만큼 돌아옵니다.
+          창고 물품 수량이 바뀐 기록을 최근 것부터 200개까지 보여 줍니다. 상품이 확정되면 그때까지의 신청 인원만큼,
+          확정된 상품에 더 신청하면 그 인원만큼 줄고, 늦게 취소한 상품은 줄였던 만큼 돌아옵니다.
         </p>
         {historyState.status === 'loading' && (
           <p className="text-sm text-muted-foreground">기록을 불러오는 중입니다.</p>
@@ -145,7 +151,7 @@ export function ItemHistoryPage() {
             <TableBody>
               {historyState.histories.map((history) => (
                 <TableRow key={history.id}>
-                  <TableCell>{timeFormat.format(new Date(history.createdAt))}</TableCell>
+                  <TableCell>{formatTime(history.createdAt)}</TableCell>
                   <TableCell className="whitespace-normal">
                     {history.itemName} · {themeLabel(history.theme)}
                   </TableCell>

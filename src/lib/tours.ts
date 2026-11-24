@@ -124,7 +124,9 @@ export interface IncludedOption {
 
 export type BookingDetails = MyBookingResponse & { totalPrice: number; discount: number; options: IncludedOption[] }
 
-// 상세 보기 칸이 다 있는 신청인지
+const optionCategories: readonly unknown[] = ['HOTEL', 'TRANSPORT', 'MEAL', 'EXTRA'] satisfies OptionCategory[]
+
+// 상세 보기 칸이 다 있는 신청인지. 모르는 옵션 종류가 있으면 그 옵션을 보일 줄이 없어 상세를 그리지 않는다
 export function hasBookingDetails(booking: MyBookingResponse): booking is BookingDetails {
   return (
     typeof booking.totalPrice === 'number' &&
@@ -134,7 +136,7 @@ export function hasBookingDetails(booking: MyBookingResponse): booking is Bookin
       (option) =>
         typeof option === 'object' &&
         option !== null &&
-        typeof option.category === 'string' &&
+        optionCategories.includes(option.category) &&
         typeof option.name === 'string' &&
         typeof option.chosen === 'boolean',
     )

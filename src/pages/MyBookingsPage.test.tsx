@@ -128,7 +128,10 @@ describe('신청 목록', () => {
     renderAt('/bookings')
 
     const [first, second] = await screen.findAllByRole('listitem')
+    const details = within(first).getByText('자세히 보기').closest('details')
+    expect(details).not.toHaveAttribute('open')
     await userEvent.setup().click(within(first).getByText('자세히 보기'))
+    expect(details).toHaveAttribute('open')
 
     const terms = within(first)
       .getAllByRole('term')
@@ -145,6 +148,32 @@ describe('신청 목록', () => {
       '1,350,000원 − 할인 135,000원 = 1,215,000원',
     ])
     expect(definitions[0]).toContain('2026년 11월 19일')
+    expect(within(second).queryByText('자세히 보기')).not.toBeInTheDocument()
+  })
+
+  it('신청한 때를 날짜로 읽지 못하면 그 줄만 빼고, 모르는 옵션 종류가 있으면 상세를 그리지 않는다', async () => {
+    const details = { totalPrice: 1_350_000, discount: 0 }
+    const badTime: MyBookingResponse = {
+      ...confirmed,
+      ...details,
+      appliedAt: '날짜 아님',
+      options: [{ category: 'HOTEL', name: '5등급 호텔', chosen: false }],
+    }
+    const unknownCategory = {
+      ...recruiting,
+      ...details,
+      options: [{ category: 'INSURANCE', name: '여행자 보험', chosen: true }],
+    }
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [badTime, unknownCategory]))
+    renderAt('/bookings')
+
+    const [first, second] = await screen.findAllByRole('listitem')
+    await userEvent.setup().click(within(first).getByText('자세히 보기'))
+    expect(
+      within(first)
+        .getAllByRole('term')
+        .map((term) => term.textContent),
+    ).toEqual(['호텔', '가격'])
     expect(within(second).queryByText('자세히 보기')).not.toBeInTheDocument()
   })
 

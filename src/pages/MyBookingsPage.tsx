@@ -88,12 +88,18 @@ const appliedTimeFormat = new Intl.DateTimeFormat('ko-KR', {
 
 // 신청 한 줄을 펼쳐 보는 상세 내용. 고르지 않아 등급이 기본으로 주는 옵션은 "(기본 제공)"을 붙인다
 function BookingDetailList({ booking }: { booking: BookingDetails }) {
+  // 날짜로 읽지 못하면 그 줄만 뺀다(format이 던지면 목록 화면 전체가 오류 화면이 된다)
+  const appliedAt = new Date(booking.appliedAt)
   return (
     <details className="text-sm">
       <summary className="cursor-pointer text-muted-foreground">자세히 보기</summary>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-        <dt className="text-muted-foreground">신청한 때</dt>
-        <dd>{appliedTimeFormat.format(new Date(booking.appliedAt))}</dd>
+        {!Number.isNaN(appliedAt.getTime()) && (
+          <>
+            <dt className="text-muted-foreground">신청한 때</dt>
+            <dd>{appliedTimeFormat.format(appliedAt)}</dd>
+          </>
+        )}
         {categoryLabels.map(([category, label]) => {
           const names = booking.options
             .filter((option) => option.category === category)

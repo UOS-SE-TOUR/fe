@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardList, Package } from 'lucide-react'
+import { ArrowRight, ClipboardList, ListChecks, Package } from 'lucide-react'
 import { Link } from 'react-router'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { pagePaths } from '@/lib/pages'
@@ -11,6 +11,12 @@ const menus = [
     title: '창고',
     description: '창고 물품을 등록하고, 수량을 더하거나 1인당 개수를 바꿉니다.',
     icon: Package,
+  },
+  {
+    to: pagePaths.TourStatusPage,
+    title: '상품 현황',
+    description: '상품 상태를 보고, 출발일이나 여행 종료일을 기다리지 않고 출발·완료 처리합니다.',
+    icon: ListChecks,
   },
 ]
 

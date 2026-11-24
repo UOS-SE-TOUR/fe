@@ -34,6 +34,7 @@ describe('StaffMainPage', () => {
   it.each([
     ['상품 기획', '/staff/tours/new'],
     ['창고', '/staff/items'],
+    ['상품 현황', '/staff/tours'],
   ])('%s 단추로 그 화면에 간다', async (title, path) => {
     const router = renderAt('/staff')
 

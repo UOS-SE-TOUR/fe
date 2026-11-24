@@ -16,6 +16,8 @@ export type PageName =
   | 'StaffMainPage'
   | 'TourPlanPage'
   | 'WarehousePage'
+  // 설계에 없는 화면. 출발일을 기다리지 않고 상품을 출발·완료 처리한다
+  | 'TourStatusPage'
 
 export const pagePaths: Record<PageName, string> = {
   LoginPage: '/login',
@@ -26,6 +28,7 @@ export const pagePaths: Record<PageName, string> = {
   StaffMainPage: '/staff',
   TourPlanPage: '/staff/tours/new',
   WarehousePage: '/staff/items',
+  TourStatusPage: '/staff/tours',
 }
 
 // 화면을 열 수 있는 사람. GUEST는 로그인하지 않은 사람이다(로그인한 회원은 로그인·회원가입 화면을 열지 않는다)
@@ -38,6 +41,7 @@ export const pageAccess: Record<PageName, 'GUEST' | MemberType> = {
   StaffMainPage: 'STAFF',
   TourPlanPage: 'STAFF',
   WarehousePage: 'STAFF',
+  TourStatusPage: 'STAFF',
 }
 
 // 회원 구분마다 로그인하면 처음 보는 화면

@@ -10,6 +10,7 @@ import {
   StaffMainPage,
   TourPlanPage,
   TourSelectPage,
+  TourStatusPage,
   WarehousePage,
 } from '@/router/memberPages'
 import { GoHome, PageGate } from '@/router/PageGate'
@@ -25,6 +26,7 @@ const pageElements: Record<PageName, ReactNode> = {
   StaffMainPage: <StaffMainPage />,
   TourPlanPage: <TourPlanPage />,
   WarehousePage: <WarehousePage />,
+  TourStatusPage: <TourStatusPage />,
 }
 
 export const routes: RouteObject[] = [

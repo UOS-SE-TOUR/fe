@@ -201,10 +201,12 @@ describe('확정·취소 처리', () => {
     await waitFor(() => expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '확정']]))
   })
 
-  it('응답 없이 연결이 끊기면 처리됐는지 알 수 없다고 한 번만 알리고 다시 읽지 않는다', async () => {
+  it('응답 없이 연결이 끊겨도 처리됐는지 알 수 없다고 알리고, 옛 표를 내린 뒤 다시 읽는다', async () => {
+    const done = { ...recruiting, status: 'CONFIRMED' }
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(jsonResponse(200, [done]))
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
@@ -214,8 +216,26 @@ describe('확정·취소 처리', () => {
     )
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
-    expect(toast.error).toHaveBeenCalledTimes(1)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '확정']]))
+    expect(within(rowOf(recruiting.title)).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('실패한 뒤 다시 읽기도 실패하면 옛 표 대신 불러오지 못했다고 보인다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockResolvedValueOnce(jsonResponse(500, { message: '서버에 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요.' }))
+      .mockResolvedValueOnce(jsonResponse(502, { message: '서버에 연결할 수 없습니다.' }))
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('table')
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
+    )
+
+    expect(await screen.findByText('상품 목록을 불러오지 못했습니다.')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE)
   })
 
   it('출발일이 오늘이거나 지난 모집 중 상품에는 확정 단추를 두지 않는다', async () => {

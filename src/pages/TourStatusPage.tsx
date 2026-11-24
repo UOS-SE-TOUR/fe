@@ -18,8 +18,19 @@ import { ApiClient, ApiError, showError, unknownResult } from '@/modules/ApiClie
 
 const TOURS_PATH = '/api/v1/staff/tours'
 
-// 서울 날짜를 서버의 출발일과 같은 꼴(YYYY-MM-DD)로 만든다
-const seoulDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' })
+const seoulDateParts = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+// 서울 날짜를 서버의 출발일과 같은 꼴(YYYY-MM-DD)로 만든다. 로캘 기본 꼴에 기대지 않고 연·월·일을 뽑아 잇는다
+function seoulToday(): string {
+  const parts = seoulDateParts.formatToParts(new Date())
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
 
 // be의 StaffTourSummary
 interface StaffTour {
@@ -140,16 +151,20 @@ export function TourStatusPage() {
       // 다시 읽은 목록에서 다시 고르게 한다
       setDialogOpen(false)
       showError(error)
-      // 응답이 아예 없었거나 ApiClient가 이미 알린 실패(401·403)면 다시 읽지 않는다(다시 읽기도 실패해 알림이 겹친다)
-      if (error instanceof ApiError && (error.handled || error.status === null)) return
+      // 401·403은 ApiClient가 이미 알리고 로그인 상태를 다시 본다
+      if (error instanceof ApiError && error.handled) return
+      // 처리됐을 수 있다(결과를 모름). 옛 표를 내리고 다시 읽어, 다 읽을 때까지 처리 단추를 보이지 않는다
+      reload()
+      return
     } finally {
       sendingRef.current = false
       setSending(false)
     }
+    // 성공했으면 이미 고친 표를 두고 다시 읽는다
     loadTours(true)
   }
 
-  const today = seoulDate.format(new Date())
+  const today = seoulToday()
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
@@ -163,9 +178,9 @@ export function TourStatusPage() {
           상품 목록
         </h2>
         <p className="text-sm text-muted-foreground">
-          신청이 3명이 안 된 모집 중 상품도 출발일 전이면 직접 확정할 수 있습니다. 확정하면 신청 인원만큼 창고 물품이
-          줄고 신청자에게 확정 문자가 갑니다. 출발했지만 여행이 진행되지 않은 진행 중·완료 상품은 뒤늦게 취소할 수 있고,
-          그때 줄였던 물품이 창고로 돌아갑니다. 출발과 완료는 날짜에 따라 자동으로 바뀝니다.
+          신청이 3명이 안 된 모집 중 상품도 출발일 전이면 직접 확정할 수 있습니다. 확정하면 신청 인원 × 1인당 개수만큼
+          창고 물품이 줄고 신청자에게 확정 문자가 갑니다. 출발했지만 여행이 진행되지 않은 진행 중·완료 상품은 뒤늦게
+          취소할 수 있고, 그때 줄였던 물품이 창고로 돌아갑니다. 출발과 완료는 날짜에 따라 자동으로 바뀝니다.
         </p>
         {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다. 비어 있을 땐 칸 아래 여백이 늘지 않게 사이 간격을 지운다 */}
         <p role="status" className="text-sm empty:-mt-4">

@@ -121,8 +121,8 @@ export function ItemHistoryPage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          창고 물품 수량이 바뀐 기록을 최근 것부터 200개까지 보여 줍니다. 상품이 확정되면 그때까지의 신청 인원만큼,
-          확정된 상품에 더 신청하면 그 인원만큼 줄고, 늦게 취소한 상품은 줄였던 만큼 돌아옵니다.
+          창고 물품 수량이 바뀐 기록을 최근 것부터 200개까지 보여 줍니다. 상품이 확정되면 그때까지의 신청 인원 × 1인당
+          개수만큼, 확정된 상품에 더 신청하면 그 인원 × 1인당 개수만큼 줄고, 늦게 취소한 상품은 줄였던 만큼 돌아옵니다.
         </p>
         {historyState.status === 'loading' && (
           <p className="text-sm text-muted-foreground">기록을 불러오는 중입니다.</p>

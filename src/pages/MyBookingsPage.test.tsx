@@ -114,6 +114,7 @@ describe('신청 목록', () => {
     const detailed: MyBookingResponse = {
       ...confirmed,
       finalPrice: 1_215_000,
+      appliedAt: '2026-11-19T16:00:00Z', // 서울로는 11월 20일 오전 1시
       totalPrice: 1_350_000,
       discount: 135_000,
       options: [
@@ -147,7 +148,7 @@ describe('신청 목록', () => {
       '샴페인(기본 제공), 커피',
       '1,350,000원 − 할인 135,000원 = 1,215,000원',
     ])
-    expect(definitions[0]).toContain('2026년 11월 19일')
+    expect(definitions[0]).toContain('2026년 11월 20일')
     expect(within(second).queryByText('자세히 보기')).not.toBeInTheDocument()
   })
 
@@ -161,7 +162,8 @@ describe('신청 목록', () => {
     }
     const unknownCategory = {
       ...recruiting,
-      ...details,
+      totalPrice: 3_000_000, // 가격 식은 맞고 옵션 종류만 모른다
+      discount: 0,
       options: [{ category: 'INSURANCE', name: '여행자 보험', chosen: true }],
     }
     fetchMock.mockResolvedValueOnce(jsonResponse(200, [badTime, unknownCategory]))

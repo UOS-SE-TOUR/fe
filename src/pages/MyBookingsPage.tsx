@@ -23,6 +23,7 @@ import {
   hasBookingDetails,
   isMyBooking,
   isPriceQuote,
+  optionCategoryLabels,
   type BookingDetails,
   type LevelDetail,
   type MyBookingResponse,
@@ -70,12 +71,7 @@ function hasLevels(value: unknown): value is TourLevelsResponse {
   return typeof value === 'object' && value !== null && Array.isArray((value as Partial<TourLevelsResponse>).levels)
 }
 
-const categoryLabels: [OptionCategory, string][] = [
-  ['HOTEL', '호텔'],
-  ['TRANSPORT', '교통'],
-  ['MEAL', '식사'],
-  ['EXTRA', '추가 옵션'],
-]
+const categoryLabels = Object.entries(optionCategoryLabels) as [OptionCategory, string][]
 
 const appliedTimeFormat = new Intl.DateTimeFormat('ko-KR', {
   timeZone: 'Asia/Seoul',

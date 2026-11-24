@@ -124,13 +124,23 @@ export interface IncludedOption {
 
 export type BookingDetails = MyBookingResponse & { totalPrice: number; discount: number; options: IncludedOption[] }
 
-const optionCategories: readonly unknown[] = ['HOTEL', 'TRANSPORT', 'MEAL', 'EXTRA'] satisfies OptionCategory[]
+// 옵션 종류의 화면 이름. 상세 보기는 이 순서로 그린다. 종류를 더하면 여기 빠진 종류는 타입 오류가 난다
+export const optionCategoryLabels: Record<OptionCategory, string> = {
+  HOTEL: '호텔',
+  TRANSPORT: '교통',
+  MEAL: '식사',
+  EXTRA: '추가 옵션',
+}
 
-// 상세 보기 칸이 다 있는 신청인지. 모르는 옵션 종류가 있으면 그 옵션을 보일 줄이 없어 상세를 그리지 않는다
+const optionCategories: readonly unknown[] = Object.keys(optionCategoryLabels)
+
+// 상세 보기 칸이 다 있고 맞는 신청인지. 모르는 옵션 종류가 있으면 그 옵션을 보일 줄이 없어 상세를 그리지 않는다
 export function hasBookingDetails(booking: MyBookingResponse): booking is BookingDetails {
   return (
     typeof booking.totalPrice === 'number' &&
     typeof booking.discount === 'number' &&
+    // 가격 줄의 식(할인 전 − 할인 = 최종)이 맞지 않으면 틀린 식을 보이지 않게 상세를 그리지 않는다
+    booking.totalPrice - booking.discount === booking.finalPrice &&
     Array.isArray(booking.options) &&
     booking.options.every(
       (option) =>

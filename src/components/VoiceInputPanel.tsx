@@ -429,6 +429,12 @@ export function VoiceInputPanel({
                     {step === 'paused' ? '다시 말하기' : '음성으로 신청하기'}
                   </Button>
                 )}
+                {/* 시스템의 말만 멈추고 대화는 이어 간다(다 읽은 것처럼 다음으로 넘어가 듣는다) */}
+                {step === 'speaking' && (
+                  <Button variant="outline" onClick={() => synthesizer.cancel()}>
+                    말 건너뛰기
+                  </Button>
+                )}
                 {talking && (
                   <Button variant="outline" onClick={stopVoiceInput}>
                     그만두기

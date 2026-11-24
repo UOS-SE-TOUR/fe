@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SpeechSynthesizer, speakTimeoutMs } from '@/modules/SpeechSynthesizer'
+import { SPEAK_RATE, SpeechSynthesizer, speakTimeoutMs } from '@/modules/SpeechSynthesizer'
 
 // 브라우저의 SpeechSynthesisUtterance 대신 쓴다. 테스트가 끝·오류 이벤트를 직접 보낸다
 class FakeUtterance {
   static instances: FakeUtterance[] = []
   lang = ''
+  rate = 1
   onstart: (() => void) | null = null
   onend: (() => void) | null = null
   onerror: (() => void) | null = null
@@ -53,6 +54,7 @@ describe('SpeechSynthesizer', () => {
     expect(speechSynthesis.speak).toHaveBeenCalledWith(latest())
     expect(latest().text).toBe('안녕하세요, 고객님.')
     expect(latest().lang).toBe('ko-KR')
+    expect(latest().rate).toBe(SPEAK_RATE)
     expect(await settled(speaking)).toBe(false)
 
     latest().onend?.()

@@ -3,6 +3,9 @@
 const SPEAK_MIN_MS = 3000
 const SPEAK_MS_PER_CHAR = 200
 
+// 읽는 빠르기(기본 1). 시연에서 듣기에 조금 느려 1.2로 둔다. 빠르게 읽으므로 위 시간은 그대로 넉넉하다
+export const SPEAK_RATE = 1.2
+
 export function speakTimeoutMs(text: string): number {
   return SPEAK_MIN_MS + text.length * SPEAK_MS_PER_CHAR
 }
@@ -43,6 +46,7 @@ export class SpeechSynthesizer {
         }, speakTimeoutMs(text))
       }
       utterance.lang = 'ko-KR'
+      utterance.rate = SPEAK_RATE
       // 목소리를 불러오느라 늦게 시작한 시간은 빼고 센다
       utterance.onstart = wait
       // 오류(권한 없음·멈춤 등)여도 글은 화면에 보이니 끝난 것으로 본다

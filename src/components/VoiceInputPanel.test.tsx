@@ -728,6 +728,21 @@ describe('끝내기와 실패', () => {
     expect(startButton()).toBeEnabled()
   })
 
+  it('읽는 중에 말 건너뛰기를 누르면 읽기만 멈추고 대화는 이어 가 바로 듣는다', async () => {
+    synthesizer.hold = true
+    const user = renderPage()
+    await user.click(startButton()!)
+    expect(panel().getByText('말하는 중입니다.')).toBeInTheDocument()
+
+    await user.click(panel().getByRole('button', { name: '말 건너뛰기' }))
+
+    await waitFor(() => expect(recognizer.started).toBe(1))
+    expect(synthesizer.cancelled).toBeGreaterThan(0)
+    expect(panel().queryByRole('button', { name: '말 건너뛰기' })).not.toBeInTheDocument()
+    expect(panel().getByText('듣고 있습니다. 말씀해 주세요.')).toBeInTheDocument()
+    expect(lines()).toEqual([`시스템: ${GREETING}`])
+  })
+
   it('읽는 중에 그만두면 읽기를 멈추고 듣지 않으며, 다시 시작하면 대화를 새로 한다', async () => {
     synthesizer.hold = true
     const user = renderPage()

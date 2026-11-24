@@ -109,6 +109,36 @@ export interface MyBookingResponse extends PreviousTourResponse {
   headcountToConfirm: number
   // 지금 투어 등급과 옵션을 바꿀 수 있다(출발 전이고 모집 중·확정·마감)
   changeable: boolean
+  // 상세 보기 칸. be가 이 칸을 주기 전에도 목록은 보이도록 없어도 받는다(없으면 상세를 그리지 않는다)
+  totalPrice?: number
+  discount?: number
+  options?: IncludedOption[]
+}
+
+// 신청에 들어가는 옵션 하나. chosen이 false면 고르지 않아 그 등급이 기본으로 주는 옵션이다
+export interface IncludedOption {
+  category: OptionCategory
+  name: string
+  chosen: boolean
+}
+
+export type BookingDetails = MyBookingResponse & { totalPrice: number; discount: number; options: IncludedOption[] }
+
+// 상세 보기 칸이 다 있는 신청인지
+export function hasBookingDetails(booking: MyBookingResponse): booking is BookingDetails {
+  return (
+    typeof booking.totalPrice === 'number' &&
+    typeof booking.discount === 'number' &&
+    Array.isArray(booking.options) &&
+    booking.options.every(
+      (option) =>
+        typeof option === 'object' &&
+        option !== null &&
+        typeof option.category === 'string' &&
+        typeof option.name === 'string' &&
+        typeof option.chosen === 'boolean',
+    )
+  )
 }
 
 export function isPreviousTour(value: unknown): value is PreviousTourResponse {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { MenuLink } from '@/components/MenuLink'
 import { OptionPanel } from '@/components/OptionPanel'
@@ -20,10 +20,13 @@ import { formatDate, formatWon } from '@/lib/format'
 import { tourStatusLabel, type TourLevel } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
 import {
+  hasBookingDetails,
   isMyBooking,
   isPriceQuote,
+  type BookingDetails,
   type LevelDetail,
   type MyBookingResponse,
+  type OptionCategory,
   type PriceQuote,
   type TourLevelsResponse,
 } from '@/lib/tours'
@@ -65,6 +68,53 @@ function send(request: Promise<unknown>): Promise<Outcome> {
 
 function hasLevels(value: unknown): value is TourLevelsResponse {
   return typeof value === 'object' && value !== null && Array.isArray((value as Partial<TourLevelsResponse>).levels)
+}
+
+const categoryLabels: [OptionCategory, string][] = [
+  ['HOTEL', '호텔'],
+  ['TRANSPORT', '교통'],
+  ['MEAL', '식사'],
+  ['EXTRA', '추가 옵션'],
+]
+
+const appliedTimeFormat = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+// 신청 한 줄을 펼쳐 보는 상세 내용. 고르지 않아 등급이 기본으로 주는 옵션은 "(기본 제공)"을 붙인다
+function BookingDetailList({ booking }: { booking: BookingDetails }) {
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-muted-foreground">자세히 보기</summary>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+        <dt className="text-muted-foreground">신청한 때</dt>
+        <dd>{appliedTimeFormat.format(new Date(booking.appliedAt))}</dd>
+        {categoryLabels.map(([category, label]) => {
+          const names = booking.options
+            .filter((option) => option.category === category)
+            .map((option) => (option.chosen ? option.name : `${option.name}(기본 제공)`))
+          if (names.length === 0) return null
+          return (
+            <Fragment key={category}>
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd>{names.join(', ')}</dd>
+            </Fragment>
+          )
+        })}
+        <dt className="text-muted-foreground">가격</dt>
+        <dd>
+          {booking.discount > 0
+            ? `${formatWon(booking.totalPrice)} − 할인 ${formatWon(booking.discount)} = ${formatWon(booking.finalPrice)}`
+            : formatWon(booking.finalPrice)}
+        </dd>
+      </dl>
+    </details>
+  )
 }
 
 // 모집 중일 때만 보인다
@@ -257,6 +307,7 @@ export function MyBookingsPage() {
                       </Badge>
                       {toConfirm && <span className="text-sm text-muted-foreground">{toConfirm}</span>}
                     </p>
+                    {hasBookingDetails(booking) && <BookingDetailList booking={booking} />}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <p className="font-semibold">{formatWon(booking.finalPrice)}</p>

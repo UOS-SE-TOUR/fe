@@ -110,6 +110,44 @@ describe('신청 목록', () => {
     },
   )
 
+  it('상세 칸이 있으면 자세히 보기에 신청한 때·옵션(기본 제공 표시)·할인 전후 가격을 보여 준다', async () => {
+    const detailed: MyBookingResponse = {
+      ...confirmed,
+      finalPrice: 1_215_000,
+      totalPrice: 1_350_000,
+      discount: 135_000,
+      options: [
+        { category: 'HOTEL', name: '5등급 호텔', chosen: false },
+        { category: 'TRANSPORT', name: '비행기 비즈니스석', chosen: true },
+        { category: 'MEAL', name: '고급 레스토랑', chosen: false },
+        { category: 'EXTRA', name: '샴페인', chosen: false },
+        { category: 'EXTRA', name: '커피', chosen: true },
+      ],
+    }
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [detailed, recruiting]))
+    renderAt('/bookings')
+
+    const [first, second] = await screen.findAllByRole('listitem')
+    await userEvent.setup().click(within(first).getByText('자세히 보기'))
+
+    const terms = within(first)
+      .getAllByRole('term')
+      .map((term) => term.textContent)
+    const definitions = within(first)
+      .getAllByRole('definition')
+      .map((definition) => definition.textContent)
+    expect(terms).toEqual(['신청한 때', '호텔', '교통', '식사', '추가 옵션', '가격'])
+    expect(definitions.slice(1)).toEqual([
+      '5등급 호텔(기본 제공)',
+      '비행기 비즈니스석',
+      '고급 레스토랑(기본 제공)',
+      '샴페인(기본 제공), 커피',
+      '1,350,000원 − 할인 135,000원 = 1,215,000원',
+    ])
+    expect(definitions[0]).toContain('2026년 11월 19일')
+    expect(within(second).queryByText('자세히 보기')).not.toBeInTheDocument()
+  })
+
   it('신청이 없으면 없다고 보여 준다', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
     renderAt('/bookings')

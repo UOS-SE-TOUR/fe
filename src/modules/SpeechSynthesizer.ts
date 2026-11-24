@@ -17,7 +17,7 @@ export function speakTimeoutMs(text: string): number {
 // speak는 다 읽거나 멈추면 끝난다. 읽어 주기를 쓸 수 없으면 읽지 않고 바로 끝난다
 export class SpeechSynthesizer {
   // 읽는 중인 문장. Chrome은 문장 객체를 놓치면(가비지 컬렉션) 끝 신호를 주지 않아, 끝날 때까지 여기 붙들어 둔다
-  private current: { utterance: SpeechSynthesisUtterance; finish(): void } | null = null
+  private current: { utterance: SpeechSynthesisUtterance; finish(): void; handedOff: boolean } | null = null
   // 읽던 것을 마지막으로 멈춘 때(performance.now — 시스템 시계를 바꿔도 흔들리지 않는다)
   private cancelledAt = Number.NEGATIVE_INFINITY
 
@@ -34,6 +34,8 @@ export class SpeechSynthesizer {
       let timer: ReturnType<typeof setTimeout> | undefined
       const reading = {
         utterance,
+        // 브라우저에 넘겼는지(멈춘 뒤 기다리는 중이면 아직 안 넘겼다)
+        handedOff: false,
         finish: () => {
           if (this.current !== reading) return
           this.current = null
@@ -47,7 +49,7 @@ export class SpeechSynthesizer {
         timer = setTimeout(() => {
           if (this.current !== reading) return
           window.speechSynthesis.cancel()
-          this.cancelledAt = performance.now()
+          if (reading.handedOff) this.cancelledAt = performance.now()
           reading.finish()
         }, speakTimeoutMs(text))
       }
@@ -63,6 +65,7 @@ export class SpeechSynthesizer {
       const start = () => {
         // 기다리는 사이 멈췄거나 다른 문장을 읽게 했으면 읽지 않는다
         if (this.current !== reading) return
+        reading.handedOff = true
         try {
           window.speechSynthesis.speak(utterance)
         } catch {
@@ -80,8 +83,8 @@ export class SpeechSynthesizer {
     const reading = this.current
     if (this.isSupported()) {
       window.speechSynthesis.cancel()
-      // 읽던 것이 없었으면 기다리지 않는다(시작 단추로 읽게 한 인사가 사용자 동작 밖으로 밀리지 않게)
-      if (reading) this.cancelledAt = performance.now()
+      // 브라우저가 읽던 것이 없었으면 기다리지 않는다(시작 단추로 읽게 한 인사가 사용자 동작 밖으로 밀리지 않게)
+      if (reading?.handedOff) this.cancelledAt = performance.now()
     }
     reading?.finish()
   }

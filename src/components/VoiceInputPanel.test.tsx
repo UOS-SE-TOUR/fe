@@ -800,6 +800,40 @@ describe('끝내기와 실패', () => {
     expect(panel().queryByRole('button', { name: '말 건너뛰기' })).not.toBeInTheDocument()
   })
 
+  it('마지막 말에서 말 건너뛰기를 두 번 눌러도 새 대화를 시작하지 않는다', async () => {
+    const user = renderPage()
+    await start(user)
+    synthesizer.hold = true
+    replyOnce(CHAT, jsonResponse(200, chat('다음에 또 찾아 주세요.', {}, 'STOP')))
+    recognizer.say('그만할게요')
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe('다음에 또 찾아 주세요.'))
+
+    await user.dblClick(panel().getByRole('button', { name: '말 건너뛰기' }))
+
+    expect(await panel().findByRole('button', { name: '음성으로 신청하기' })).toBeEnabled()
+    expect(recognizer.started).toBe(1)
+    expect(synthesizer.spoken.filter((text) => text === GREETING)).toHaveLength(1)
+  })
+
+  it('답에서 말 건너뛰기를 두 번 눌러도 이어 읽을 거부 문구는 건너뛰지 않는다', async () => {
+    const user = renderPage()
+    await start(user)
+    synthesizer.hold = true
+    replyOnce(QUOTE, failWith(400, SEAT_SHORTAGE))
+    replyOnce(CHAT, jsonResponse(200, chat('맞으세요?', golfDraft())))
+    recognizer.say('그랜드로 둘이요')
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe('맞으세요?'))
+
+    await user.dblClick(panel().getByRole('button', { name: '말 건너뛰기' }))
+
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe(SEAT_SHORTAGE))
+    expect(synthesizer.cancelled).toBe(1)
+    expect(recognizer.started).toBe(1)
+    synthesizer.hold = false
+    act(() => synthesizer.cancel())
+    await waitFor(() => expect(recognizer.started).toBe(2))
+  })
+
   it('읽는 중에 그만두면 읽기를 멈추고 듣지 않으며, 다시 시작하면 대화를 새로 한다', async () => {
     synthesizer.hold = true
     const user = renderPage()

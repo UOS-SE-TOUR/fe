@@ -6,6 +6,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { SignUpPage } from '@/pages/SignUpPage'
 import {
   CustomerMainPage,
+  ItemHistoryPage,
   MyBookingsPage,
   StaffMainPage,
   TourPlanPage,
@@ -27,6 +28,7 @@ const pageElements: Record<PageName, ReactNode> = {
   TourPlanPage: <TourPlanPage />,
   WarehousePage: <WarehousePage />,
   TourStatusPage: <TourStatusPage />,
+  ItemHistoryPage: <ItemHistoryPage />,
 }
 
 export const routes: RouteObject[] = [

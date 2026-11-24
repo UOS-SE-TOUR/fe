@@ -26,10 +26,12 @@ function tour(tourId: number, title: string, appliedCount: number, status: strin
   return { tourId, theme: 'GOLF', title, departureDate: '2026-12-01', duration: 5, capacity: 10, appliedCount, status }
 }
 
-const recruiting = tour(1, '골프 챌린지 투어 12/1 출발 5일', 2, 'RECRUITING')
-const confirmed = tour(2, '골프 챌린지 투어 12/2 출발 5일', 3, 'CONFIRMED')
-const inProgress = tour(3, '골프 챌린지 투어 11/20 출발 5일', 4, 'IN_PROGRESS')
-const completed = tour(4, '골프 챌린지 투어 11/1 출발 3일', 3, 'COMPLETED')
+const recruiting = tour(1, '허니문 낭만 투어 12/24 출발 5일', 2, 'RECRUITING')
+const empty = tour(2, '골프 챌린지 투어 12/2 출발 5일', 0, 'RECRUITING')
+const confirmed = tour(3, '골프 챌린지 투어 12/3 출발 5일', 3, 'CONFIRMED')
+const inProgress = tour(4, '골프 챌린지 투어 11/20 출발 5일', 4, 'IN_PROGRESS')
+const completed = tour(5, '골프 챌린지 투어 11/1 출발 3일', 3, 'COMPLETED')
+const cancelled = tour(6, '골프 챌린지 투어 11/2 출발 3일', 1, 'CANCELLED')
 
 function renderPage() {
   const router = createMemoryRouter(routes, { initialEntries: ['/staff', '/staff/tours'], initialIndex: 1 })
@@ -62,20 +64,24 @@ function postPaths() {
 
 describe('상품 목록', () => {
   it('서버가 준 순서대로 상품·신청 인원·상태를 보이고, 할 수 있는 처리 단추만 둔다', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, [recruiting, confirmed, inProgress, completed]))
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [recruiting, empty, confirmed, inProgress, completed, cancelled]))
     renderPage()
 
     expect(await screen.findByRole('table')).toBeInTheDocument()
     expect(rowTexts()).toEqual([
       [recruiting.title, '2/10명', '모집 중'],
+      [empty.title, '0/10명', '모집 중'],
       [confirmed.title, '3/10명', '확정'],
       [inProgress.title, '4/10명', '진행 중'],
       [completed.title, '3/10명', '완료'],
+      [cancelled.title, '1/10명', '취소'],
     ])
-    expect(within(rowOf(recruiting.title)).getByRole('button', { name: '출발 처리' })).toBeInTheDocument()
-    expect(within(rowOf(confirmed.title)).getByRole('button', { name: '출발 처리' })).toBeInTheDocument()
-    expect(within(rowOf(inProgress.title)).getByRole('button', { name: '완료 처리' })).toBeInTheDocument()
-    expect(within(rowOf(completed.title)).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' })).toBeInTheDocument()
+    expect(within(rowOf(empty.title)).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(rowOf(confirmed.title)).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(rowOf(inProgress.title)).getByRole('button', { name: '취소 처리' })).toBeInTheDocument()
+    expect(within(rowOf(completed.title)).getByRole('button', { name: '취소 처리' })).toBeInTheDocument()
+    expect(within(rowOf(cancelled.title)).queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('불러오지 못하면 문구를 알리고 다시 불러올 수 있다', async () => {
@@ -93,64 +99,64 @@ describe('상품 목록', () => {
   })
 })
 
-describe('출발·완료 처리', () => {
-  it('모집 중인 상품은 취소된다고 알리고, 확인하면 출발 처리한 뒤 바뀐 상태를 보인다', async () => {
-    const cancelled = { ...recruiting, status: 'CANCELLED' }
+describe('확정·취소 처리', () => {
+  it('신청이 있는 모집 중 상품을 확정하면 창고·문자 안내 뒤 확정하고 바뀐 상태를 보인다', async () => {
+    const done = { ...recruiting, status: 'CONFIRMED' }
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
-      .mockResolvedValueOnce(jsonResponse(200, cancelled))
-      .mockResolvedValueOnce(jsonResponse(200, [cancelled]))
-    renderPage()
-    const user = userEvent.setup()
-    await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '출발 처리' }))
-
-    const dialog = await screen.findByRole('dialog', { name: '출발 처리' })
-    expect(dialog).toHaveTextContent('지금 상태: 모집 중 → 바뀔 상태: 취소')
-    expect(dialog).toHaveTextContent('신청이 3명 미만이라 출발하지 않고 취소됩니다.')
-    await user.click(within(dialog).getByRole('button', { name: '출발 처리' }))
-
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      `${recruiting.title}을 출발 처리했습니다(지금 상태: 취소)`,
-    )
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(postPaths()).toEqual(['/api/v1/staff/tours/1/depart'])
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
-    expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '취소']])
-    expect(within(rowOf(recruiting.title)).queryByRole('button')).not.toBeInTheDocument()
-  })
-
-  it('진행 중인 상품을 완료 처리한다', async () => {
-    const done = { ...inProgress, status: 'COMPLETED' }
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, [inProgress]))
       .mockResolvedValueOnce(jsonResponse(200, done))
       .mockResolvedValueOnce(jsonResponse(200, [done]))
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(inProgress.title)).getByRole('button', { name: '완료 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
 
-    const dialog = await screen.findByRole('dialog', { name: '완료 처리' })
-    expect(dialog).toHaveTextContent('지금 상태: 진행 중 → 바뀔 상태: 완료')
-    expect(dialog).not.toHaveTextContent('취소됩니다')
-    await user.click(within(dialog).getByRole('button', { name: '완료 처리' }))
+    const dialog = await screen.findByRole('dialog', { name: '확정 처리' })
+    expect(dialog).toHaveTextContent('지금 상태: 모집 중 → 바뀔 상태: 확정')
+    expect(dialog).toHaveTextContent('신청 2명 몫만큼 창고 물품이 줄고, 신청자 모두에게 확정 문자가 갑니다.')
+    await user.click(within(dialog).getByRole('button', { name: '확정 처리' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
-      `${inProgress.title}을 완료 처리했습니다(지금 상태: 완료)`,
+      `${recruiting.title}을 확정 처리했습니다(지금 상태: 확정)`,
     )
-    expect(postPaths()).toEqual(['/api/v1/staff/tours/3/complete'])
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(postPaths()).toEqual(['/api/v1/staff/tours/1/confirm'])
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+    expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '확정']])
+    expect(within(rowOf(recruiting.title)).queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('닫기를 누르면 보내지 않는다', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, [confirmed]))
+  it('완료 상품을 늦게 취소하면 물품을 되돌린다고 알리고 취소한다', async () => {
+    const done = { ...completed, status: 'CANCELLED' }
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [completed]))
+      .mockResolvedValueOnce(jsonResponse(200, done))
+      .mockResolvedValueOnce(jsonResponse(200, [done]))
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(confirmed.title)).getByRole('button', { name: '출발 처리' }))
+    await user.click(within(rowOf(completed.title)).getByRole('button', { name: '취소 처리' }))
 
-    const dialog = await screen.findByRole('dialog', { name: '출발 처리' })
-    expect(dialog).toHaveTextContent('지금 상태: 확정 → 바뀔 상태: 진행 중')
+    const dialog = await screen.findByRole('dialog', { name: '취소 처리' })
+    expect(dialog).toHaveTextContent('지금 상태: 완료 → 바뀔 상태: 취소')
+    expect(dialog).toHaveTextContent('이 상품 때문에 줄였던 창고 물품을 되돌립니다.')
+    await user.click(within(dialog).getByRole('button', { name: '취소 처리' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      `${completed.title}을 취소 처리했습니다(지금 상태: 취소)`,
+    )
+    expect(postPaths()).toEqual(['/api/v1/staff/tours/5/cancel'])
+  })
+
+  it('닫기를 누르면 보내지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, [inProgress]))
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('table')
+    await user.click(within(rowOf(inProgress.title)).getByRole('button', { name: '취소 처리' }))
+
+    const dialog = await screen.findByRole('dialog', { name: '취소 처리' })
+    expect(dialog).toHaveTextContent('지금 상태: 진행 중 → 바뀔 상태: 취소')
     await user.click(within(dialog).getByRole('button', { name: '닫기' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -158,25 +164,23 @@ describe('출발·완료 처리', () => {
   })
 
   it('그사이 상태가 바뀌어 409면 문구를 창에 보이고 목록을 다시 읽는다', async () => {
-    const alreadyGone = { ...confirmed, status: 'IN_PROGRESS' }
+    const alreadyConfirmed = { ...recruiting, appliedCount: 3, status: 'CONFIRMED' }
     fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, [confirmed]))
-      .mockResolvedValueOnce(jsonResponse(409, { message: '모집 중·확정·마감인 상품만 출발 처리할 수 있습니다.' }))
-      .mockResolvedValueOnce(jsonResponse(200, [alreadyGone]))
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockResolvedValueOnce(jsonResponse(409, { message: '신청이 있는 모집 중 상품만 확정할 수 있습니다.' }))
+      .mockResolvedValueOnce(jsonResponse(200, [alreadyConfirmed]))
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(confirmed.title)).getByRole('button', { name: '출발 처리' }))
-    const dialog = await screen.findByRole('dialog', { name: '출발 처리' })
-    await user.click(within(dialog).getByRole('button', { name: '출발 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    const dialog = await screen.findByRole('dialog', { name: '확정 처리' })
+    await user.click(within(dialog).getByRole('button', { name: '확정 처리' }))
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      '모집 중·확정·마감인 상품만 출발 처리할 수 있습니다.',
-    )
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('신청이 있는 모집 중 상품만 확정할 수 있습니다.')
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
     await user.click(within(dialog).getByRole('button', { name: '닫기' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(rowTexts()).toEqual([[confirmed.title, '3/10명', '진행 중']])
+    expect(rowTexts()).toEqual([[recruiting.title, '3/10명', '확정']])
     expect(toast.error).not.toHaveBeenCalled()
   })
 })

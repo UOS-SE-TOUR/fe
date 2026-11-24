@@ -312,7 +312,10 @@ export function WarehousePage() {
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold tracking-tight">창고</h1>
-        <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={leavingBlocked} />
+        <div className="flex flex-wrap justify-end gap-2">
+          <MenuLink to={pagePaths.ItemHistoryPage} label="입출고 기록" disabled={leavingBlocked} />
+          <MenuLink to={pagePaths.StaffMainPage} label="직원 메뉴" disabled={leavingBlocked} />
+        </div>
       </header>
 
       <section className="panel flex flex-col gap-4" aria-labelledby="register-item-heading">

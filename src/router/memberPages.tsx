@@ -6,6 +6,7 @@ export const StaffMainPage = lazyPage(() => import('@/pages/StaffMainPage').then
 export const TourPlanPage = lazyPage(() => import('@/pages/TourPlanPage').then((m) => m.TourPlanPage))
 export const WarehousePage = lazyPage(() => import('@/pages/WarehousePage').then((m) => m.WarehousePage))
 export const TourStatusPage = lazyPage(() => import('@/pages/TourStatusPage').then((m) => m.TourStatusPage))
+export const ItemHistoryPage = lazyPage(() => import('@/pages/ItemHistoryPage').then((m) => m.ItemHistoryPage))
 export const MyBookingsPage = lazyPage(() => import('@/pages/MyBookingsPage').then((m) => m.MyBookingsPage))
 // 상품 선택 화면은 음성 입력 부품과 함께 받는다
 export const TourSelectPage = lazyPage(() =>

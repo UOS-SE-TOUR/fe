@@ -15,7 +15,7 @@ const menus = [
   {
     to: pagePaths.TourStatusPage,
     title: '상품 현황',
-    description: '상품 상태를 보고, 출발일이나 여행 종료일을 기다리지 않고 출발·완료 처리합니다.',
+    description: '상품 상태를 보고, 직접 확정하거나 진행되지 않은 여행을 뒤늦게 취소합니다.',
     icon: ListChecks,
   },
 ]

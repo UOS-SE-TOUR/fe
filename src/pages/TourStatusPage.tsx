@@ -28,9 +28,9 @@ interface StaffTour {
 
 type ToursState = { status: 'loading' } | { status: 'failed' } | { status: 'loaded'; tours: StaffTour[] }
 
-type Action = 'depart' | 'complete'
+type Action = 'confirm' | 'cancel'
 
-const actionLabels: Record<Action, string> = { depart: '출발 처리', complete: '완료 처리' }
+const actionLabels: Record<Action, string> = { confirm: '확정 처리', cancel: '취소 처리' }
 
 function isStaffTour(value: unknown): value is StaffTour {
   if (typeof value !== 'object' || value === null) return false
@@ -44,18 +44,14 @@ function isStaffTour(value: unknown): value is StaffTour {
   )
 }
 
-// 그 상태에서 할 수 있는 처리(be의 Tour.canDepart·canComplete와 같다)
-function actionOf(status: string): Action | null {
-  if (status === 'RECRUITING' || status === 'CONFIRMED' || status === 'FULL') return 'depart'
-  if (status === 'IN_PROGRESS') return 'complete'
+// 그 상품에 할 수 있는 처리(be의 Tour.confirmByStaff·cancelByStaff와 같다)
+function actionOf(tour: StaffTour): Action | null {
+  if (tour.status === 'RECRUITING' && tour.appliedCount > 0) return 'confirm'
+  if (tour.status === 'IN_PROGRESS' || tour.status === 'COMPLETED') return 'cancel'
   return null
 }
 
-// 처리하면 바뀔 상태(be의 Tour.depart·complete와 같다)
-function nextStatus(tour: StaffTour, action: Action): string {
-  if (action === 'complete') return 'COMPLETED'
-  return tour.status === 'RECRUITING' ? 'CANCELLED' : 'IN_PROGRESS'
-}
+const nextStatus: Record<Action, string> = { confirm: 'CONFIRMED', cancel: 'CANCELLED' }
 
 export function TourStatusPage() {
   const [toursState, setToursState] = useState<ToursState>({ status: 'loading' })
@@ -117,7 +113,7 @@ export function TourStatusPage() {
     setResult(null)
     try {
       const changed = await ApiClient.post<unknown>(`${TOURS_PATH}/${tour.tourId}/${action}`)
-      if (!isStaffTour(changed)) throw new Error('출발·완료 처리 응답이 상품이 아니다')
+      if (!isStaffTour(changed)) throw new Error('확정·취소 처리 응답이 상품이 아니다')
       setDialogOpen(false)
       setResult(`${changed.title}을 ${actionLabels[action]}했습니다(지금 상태: ${tourStatusLabel(changed.status)})`)
       setToursState((prev) =>
@@ -151,8 +147,9 @@ export function TourStatusPage() {
           상품 목록
         </h2>
         <p className="text-sm text-muted-foreground">
-          출발일이나 여행 종료일을 기다리지 않고 상태를 바꿉니다. 출발 처리하면 모집 중(신청 3명 미만)인 상품은
-          취소되고, 확정·마감인 상품은 진행 중이 됩니다. 진행 중인 상품은 완료 처리할 수 있습니다.
+          신청이 3명이 안 된 모집 중 상품도 직접 확정할 수 있습니다. 확정하면 신청 인원만큼 창고 물품이 줄고 신청자에게
+          확정 문자가 갑니다. 출발했지만 여행이 진행되지 않은 진행 중·완료 상품은 뒤늦게 취소할 수 있고, 그때 줄였던
+          물품이 창고로 돌아갑니다. 출발과 완료는 날짜에 따라 자동으로 바뀝니다.
         </p>
         {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다. 비어 있을 땐 칸 아래 여백이 늘지 않게 사이 간격을 지운다 */}
         <p role="status" className="text-sm empty:-mt-4">
@@ -186,7 +183,7 @@ export function TourStatusPage() {
             </TableHeader>
             <TableBody>
               {toursState.tours.map((tour) => {
-                const action = actionOf(tour.status)
+                const action = actionOf(tour)
                 return (
                   <TableRow key={tour.tourId}>
                     <TableCell className="whitespace-normal">{tour.title}</TableCell>
@@ -222,11 +219,15 @@ export function TourStatusPage() {
               <div className="flex flex-col gap-2 text-sm">
                 <p>
                   지금 상태: {tourStatusLabel(dialog.tour.status)} → 바뀔 상태:{' '}
-                  <span className="font-semibold">{tourStatusLabel(nextStatus(dialog.tour, dialog.action))}</span>
+                  <span className="font-semibold">{tourStatusLabel(nextStatus[dialog.action])}</span>
                 </p>
                 <p>되돌릴 수 없습니다.</p>
-                {dialog.action === 'depart' && dialog.tour.status === 'RECRUITING' && (
-                  <p className="text-destructive">신청이 3명 미만이라 출발하지 않고 취소됩니다.</p>
+                {dialog.action === 'confirm' ? (
+                  <p>신청 {dialog.tour.appliedCount}명 몫만큼 창고 물품이 줄고, 신청자 모두에게 확정 문자가 갑니다.</p>
+                ) : (
+                  <p className="text-destructive">
+                    여행이 진행되지 않았을 때만 취소해 주세요. 이 상품 때문에 줄였던 창고 물품을 되돌립니다.
+                  </p>
                 )}
                 {dialogError && (
                   <p role="alert" className="text-destructive">

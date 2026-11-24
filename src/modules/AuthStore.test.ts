@@ -145,7 +145,7 @@ describe('AuthStore.canOpen', () => {
   it('직원은 직원 화면만 열 수 있다', () => {
     AuthStore.setMember('STAFF', '김직원')
 
-    expect(openable()).toEqual(['StaffMainPage', 'TourPlanPage', 'WarehousePage', 'TourStatusPage'])
+    expect(openable()).toEqual(['StaffMainPage', 'TourPlanPage', 'WarehousePage', 'TourStatusPage', 'ItemHistoryPage'])
   })
 
   it('clear하면 다시 로그인하지 않은 상태가 된다', () => {

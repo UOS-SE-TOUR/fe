@@ -749,6 +749,25 @@ describe('끝내기와 실패', () => {
     expect(lines()).toEqual([`시스템: ${GREETING}`])
   })
 
+  it('건너뛴 뒤 듣기가 실패해 다시 말하기가 돼도 그만두기는 같은 둘째 자리에 있다', async () => {
+    synthesizer.hold = true
+    const user = renderPage()
+    await user.click(startButton()!)
+    const buttonNames = () =>
+      panel()
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    expect(buttonNames()).toEqual(['말 건너뛰기', '그만두기'])
+
+    await user.click(panel().getByRole('button', { name: '말 건너뛰기' }))
+    await waitFor(() => expect(recognizer.started).toBe(1))
+    expect(buttonNames()).toEqual(['말 건너뛰기', '그만두기'])
+
+    recognizer.fail('other')
+    expect(await panel().findByRole('button', { name: '다시 말하기' })).toBeInTheDocument()
+    expect(buttonNames()).toEqual(['다시 말하기', '그만두기'])
+  })
+
   it('답 뒤에 이어 읽을 말이 있으면 답을 건너뛰어도 그 말은 읽는다', async () => {
     const user = renderPage()
     await start(user)

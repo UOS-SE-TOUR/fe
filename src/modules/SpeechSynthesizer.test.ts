@@ -142,6 +142,27 @@ describe('SpeechSynthesizer', () => {
     expect(await settled(third)).toBe(true)
   })
 
+  it('시간이 다 돼 멈춘 직후에 읽게 한 문장도 조금 지나서 읽는다', async () => {
+    vi.useFakeTimers()
+    const synthesizer = new SpeechSynthesizer()
+    void synthesizer.speak('첫 문장')
+    vi.advanceTimersByTime(speakTimeoutMs('첫 문장'))
+    expect(speechSynthesis.cancel).toHaveBeenCalledTimes(1)
+
+    void synthesizer.speak('둘째 문장')
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(SPEAK_AFTER_CANCEL_MS)
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(2)
+  })
+
+  it('읽던 것이 없을 때 멈추면 기다리지 않고 바로 읽는다(시작 단추로 읽게 한 인사가 밀리지 않게)', () => {
+    const synthesizer = new SpeechSynthesizer()
+    synthesizer.cancel()
+
+    void synthesizer.speak('안녕하세요')
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(1)
+  })
+
   it('앞 문장을 다 읽었으면 멈추지 않고 바로 읽는다', async () => {
     const synthesizer = new SpeechSynthesizer()
     const first = synthesizer.speak('첫 문장')

@@ -3,6 +3,9 @@
 const SPEAK_MIN_MS = 3000
 const SPEAK_MS_PER_CHAR = 200
 
+// 멈추자마자 읽게 한 문장을 버리는 브라우저(Chrome)가 있어, 멈춘 뒤 이만큼 지나서 읽는다
+export const SPEAK_AFTER_CANCEL_MS = 100
+
 // 읽는 빠르기(기본 1). 시연에서 듣기에 조금 느려 1.2로 둔다. 빠르게 읽으므로 위 시간은 그대로 넉넉하다
 export const SPEAK_RATE = 1.2
 
@@ -15,6 +18,8 @@ export function speakTimeoutMs(text: string): number {
 export class SpeechSynthesizer {
   // 읽는 중인 문장. Chrome은 문장 객체를 놓치면(가비지 컬렉션) 끝 신호를 주지 않아, 끝날 때까지 여기 붙들어 둔다
   private current: { utterance: SpeechSynthesisUtterance; finish(): void } | null = null
+  // 마지막으로 읽기를 멈춘 때(Date.now)
+  private cancelledAt = Number.NEGATIVE_INFINITY
 
   isSupported(): boolean {
     return typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance === 'function'
@@ -54,18 +59,28 @@ export class SpeechSynthesizer {
       utterance.onerror = reading.finish
       this.current = reading
       wait()
-      try {
-        window.speechSynthesis.speak(utterance)
-      } catch {
-        reading.finish()
+      const start = () => {
+        // 기다리는 사이 멈췄거나 다른 문장을 읽게 했으면 읽지 않는다
+        if (this.current !== reading) return
+        try {
+          window.speechSynthesis.speak(utterance)
+        } catch {
+          reading.finish()
+        }
       }
+      const delay = this.cancelledAt + SPEAK_AFTER_CANCEL_MS - Date.now()
+      if (delay > 0) setTimeout(start, delay)
+      else start()
     })
   }
 
   // 읽던 것을 멈추고, 기다리던 speak를 끝낸다
   cancel() {
     const reading = this.current
-    if (this.isSupported()) window.speechSynthesis.cancel()
+    if (this.isSupported()) {
+      window.speechSynthesis.cancel()
+      this.cancelledAt = Date.now()
+    }
     reading?.finish()
   }
 }

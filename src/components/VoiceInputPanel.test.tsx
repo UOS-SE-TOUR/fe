@@ -728,19 +728,57 @@ describe('끝내기와 실패', () => {
     expect(startButton()).toBeEnabled()
   })
 
-  it('읽는 중에 말 건너뛰기를 누르면 읽기만 멈추고 대화는 이어 가 바로 듣는다', async () => {
+  it('읽는 중에 말 건너뛰기를 누르면 읽기만 멈추고 대화는 이어 가 바로 듣고, 또 눌러도 대화는 끝나지 않는다', async () => {
     synthesizer.hold = true
     const user = renderPage()
     await user.click(startButton()!)
     expect(panel().getByText('말하는 중입니다.')).toBeInTheDocument()
+    const skip = panel().getByRole('button', { name: '말 건너뛰기' })
+    expect(skip).toHaveAttribute('aria-disabled', 'false')
+
+    await user.click(skip)
+    await waitFor(() => expect(recognizer.started).toBe(1))
+    expect(synthesizer.cancelled).toBe(1)
+    expect(panel().getByText('듣고 있습니다. 말씀해 주세요.')).toBeInTheDocument()
+    expect(skip).toHaveAttribute('aria-disabled', 'true')
+
+    await user.click(skip)
+    expect(synthesizer.cancelled).toBe(1)
+    expect(panel().getByText('듣고 있습니다. 말씀해 주세요.')).toBeInTheDocument()
+    expect(panel().queryByText(STOPPED)).not.toBeInTheDocument()
+    expect(lines()).toEqual([`시스템: ${GREETING}`])
+  })
+
+  it('답 뒤에 이어 읽을 말이 있으면 답을 건너뛰어도 그 말은 읽는다', async () => {
+    const user = renderPage()
+    await start(user)
+    synthesizer.hold = true
+    replyOnce(QUOTE, failWith(400, SEAT_SHORTAGE))
+    replyOnce(CHAT, jsonResponse(200, chat('맞으세요?', golfDraft())))
+    recognizer.say('그랜드로 둘이요')
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe('맞으세요?'))
 
     await user.click(panel().getByRole('button', { name: '말 건너뛰기' }))
 
-    await waitFor(() => expect(recognizer.started).toBe(1))
-    expect(synthesizer.cancelled).toBeGreaterThan(0)
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe(SEAT_SHORTAGE))
+    synthesizer.hold = false
+    act(() => synthesizer.cancel())
+    await waitFor(() => expect(recognizer.started).toBe(2))
+  })
+
+  it('마지막 말을 건너뛰면 듣지 않고 대화를 끝낸다', async () => {
+    const user = renderPage()
+    await start(user)
+    synthesizer.hold = true
+    replyOnce(CHAT, jsonResponse(200, chat('다음에 또 찾아 주세요.', {}, 'STOP')))
+    recognizer.say('그만할게요')
+    await waitFor(() => expect(synthesizer.spoken.at(-1)).toBe('다음에 또 찾아 주세요.'))
+
+    await user.click(panel().getByRole('button', { name: '말 건너뛰기' }))
+
+    expect(await panel().findByRole('button', { name: '음성으로 신청하기' })).toBeEnabled()
+    expect(recognizer.started).toBe(1)
     expect(panel().queryByRole('button', { name: '말 건너뛰기' })).not.toBeInTheDocument()
-    expect(panel().getByText('듣고 있습니다. 말씀해 주세요.')).toBeInTheDocument()
-    expect(lines()).toEqual([`시스템: ${GREETING}`])
   })
 
   it('읽는 중에 그만두면 읽기를 멈추고 듣지 않으며, 다시 시작하면 대화를 새로 한다', async () => {

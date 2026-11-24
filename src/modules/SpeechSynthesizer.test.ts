@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SPEAK_RATE, SpeechSynthesizer, speakTimeoutMs } from '@/modules/SpeechSynthesizer'
+import { SPEAK_AFTER_CANCEL_MS, SPEAK_RATE, SpeechSynthesizer, speakTimeoutMs } from '@/modules/SpeechSynthesizer'
 
 // 브라우저의 SpeechSynthesisUtterance 대신 쓴다. 테스트가 끝·오류 이벤트를 직접 보낸다
 class FakeUtterance {
@@ -120,6 +120,26 @@ describe('SpeechSynthesizer', () => {
     expect(speechSynthesis.cancel).toHaveBeenCalledTimes(1)
     expect(await settled(first)).toBe(true)
     expect(await settled(second)).toBe(false)
+  })
+
+  it('멈춘 직후에 읽게 한 문장은 조금 지나서 읽고, 그사이 멈추면 읽지 않는다', async () => {
+    vi.useFakeTimers()
+    const synthesizer = new SpeechSynthesizer()
+    void synthesizer.speak('첫 문장')
+    synthesizer.cancel()
+
+    void synthesizer.speak('둘째 문장')
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(SPEAK_AFTER_CANCEL_MS)
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(2)
+    expect(speechSynthesis.speak).toHaveBeenLastCalledWith(latest())
+
+    synthesizer.cancel()
+    const third = synthesizer.speak('셋째 문장')
+    synthesizer.cancel()
+    vi.advanceTimersByTime(SPEAK_AFTER_CANCEL_MS)
+    expect(speechSynthesis.speak).toHaveBeenCalledTimes(2)
+    expect(await settled(third)).toBe(true)
   })
 
   it('앞 문장을 다 읽었으면 멈추지 않고 바로 읽는다', async () => {

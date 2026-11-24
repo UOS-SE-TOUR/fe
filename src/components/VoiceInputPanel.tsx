@@ -429,15 +429,24 @@ export function VoiceInputPanel({
                     {step === 'paused' ? '다시 말하기' : '음성으로 신청하기'}
                   </Button>
                 )}
-                {/* 시스템의 말만 멈추고 대화는 이어 간다(다 읽은 것처럼 다음으로 넘어가 듣는다) */}
-                {step === 'speaking' && (
-                  <Button variant="outline" onClick={() => synthesizer.cancel()}>
-                    말 건너뛰기
-                  </Button>
-                )}
                 {talking && (
                   <Button variant="outline" onClick={stopVoiceInput}>
                     그만두기
+                  </Button>
+                )}
+                {/* 시스템의 말만 멈추고, 다 읽은 것처럼 다음 차례로 넘어간다(보통은 듣기, 마지막 말이면 끝, 신청하라는 답이면 신청).
+                    대화 중에는 자리를 지켜, 건너뛴 뒤 같은 자리를 또 눌러도 "그만두기"가 눌리지 않고 키보드 포커스도 남는다.
+                    말하는 중이 아니면 눌러도 아무 일도 하지 않는다 */}
+                {talking && step !== 'paused' && (
+                  <Button
+                    variant="outline"
+                    aria-disabled={step !== 'speaking'}
+                    className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    onClick={() => {
+                      if (step === 'speaking') synthesizer.cancel()
+                    }}
+                  >
+                    말 건너뛰기
                   </Button>
                 )}
               </div>

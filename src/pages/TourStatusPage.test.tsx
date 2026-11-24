@@ -77,11 +77,17 @@ describe('상품 목록', () => {
       [completed.title, '3/10명', '완료'],
       [cancelled.title, '1/10명', '취소'],
     ])
-    expect(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' })).toBeInTheDocument()
+    expect(
+      within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }),
+    ).toBeInTheDocument()
     expect(within(rowOf(empty.title)).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rowOf(confirmed.title)).queryByRole('button')).not.toBeInTheDocument()
-    expect(within(rowOf(inProgress.title)).getByRole('button', { name: '취소 처리' })).toBeInTheDocument()
-    expect(within(rowOf(completed.title)).getByRole('button', { name: '취소 처리' })).toBeInTheDocument()
+    expect(
+      within(rowOf(inProgress.title)).getByRole('button', { name: `${inProgress.title} 취소 처리` }),
+    ).toBeInTheDocument()
+    expect(
+      within(rowOf(completed.title)).getByRole('button', { name: `${completed.title} 취소 처리` }),
+    ).toBeInTheDocument()
     expect(within(rowOf(cancelled.title)).queryByRole('button')).not.toBeInTheDocument()
   })
 
@@ -110,7 +116,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
 
     const dialog = await screen.findByRole('dialog', { name: '확정 처리' })
     expect(dialog).toHaveTextContent('지금 상태: 모집 중 → 바뀔 상태: 확정')
@@ -138,12 +144,12 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(completed.title)).getByRole('button', { name: '취소 처리' }))
+    await user.click(within(rowOf(completed.title)).getByRole('button', { name: `${completed.title} 취소 처리` }))
 
     const dialog = await screen.findByRole('dialog', { name: '취소 처리' })
     expect(dialog).toHaveTextContent('지금 상태: 완료 → 바뀔 상태: 취소')
     expect(dialog).toHaveTextContent('이 상품 때문에 줄였던 창고 물품을 입출고 기록대로 되돌립니다.')
-    expect(dialog).toHaveTextContent('기록이 생기기 전에 확정한 상품은 물품이 돌아오지 않습니다.')
+    expect(dialog).toHaveTextContent('기록이 생기기 전에 줄인 물품은 돌아오지 않습니다.')
     await user.click(within(dialog).getByRole('button', { name: '취소 처리' }))
 
     expect(await screen.findByRole('status')).toHaveTextContent(
@@ -157,7 +163,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(inProgress.title)).getByRole('button', { name: '취소 처리' }))
+    await user.click(within(rowOf(inProgress.title)).getByRole('button', { name: `${inProgress.title} 취소 처리` }))
 
     const dialog = await screen.findByRole('dialog', { name: '취소 처리' })
     expect(dialog).toHaveTextContent('지금 상태: 진행 중 → 바뀔 상태: 취소')
@@ -176,7 +182,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
     const dialog = await screen.findByRole('dialog', { name: '확정 처리' })
     await user.click(within(dialog).getByRole('button', { name: '확정 처리' }))
 
@@ -195,7 +201,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
     await user.click(
       within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
     )
@@ -213,7 +219,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
     await user.click(
       within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
     )
@@ -231,7 +237,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
     await user.click(
       within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
     )
@@ -239,30 +245,6 @@ describe('확정·취소 처리', () => {
     expect(await screen.findByText('상품 목록을 불러오지 못했습니다.')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE)
-  })
-
-  it('화면을 연 채 자정을 넘겨 출발일이 된 상품의 확정 단추를 누르면 창을 열지 않고 알린 뒤 다시 읽는다', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    try {
-      vi.setSystemTime(new Date('2030-01-01T23:50:00+09:00'))
-      const tomorrow = { ...recruiting, departureDate: '2030-01-02' }
-      fetchMock
-        .mockResolvedValueOnce(jsonResponse(200, [tomorrow]))
-        .mockResolvedValueOnce(jsonResponse(200, [tomorrow]))
-      renderPage()
-      const user = userEvent.setup()
-      await screen.findByRole('table')
-
-      vi.setSystemTime(new Date('2030-01-02T00:05:00+09:00'))
-      await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
-
-      expect(toast.error).toHaveBeenCalledWith('출발일이 오늘이거나 지난 상품은 확정할 수 없습니다.')
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
-      expect(postPaths()).toEqual([])
-    } finally {
-      vi.useRealTimers()
-    }
   })
 
   it('새로 고침 단추로 목록을 다시 읽는다', async () => {
@@ -295,7 +277,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
     await user.click(
       within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
     )
@@ -314,7 +296,7 @@ describe('확정·취소 처리', () => {
     renderPage()
     const user = userEvent.setup()
     await screen.findByRole('table')
-    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: `${recruiting.title} 확정 처리` }))
     await user.click(
       within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
     )

@@ -117,12 +117,6 @@ export function TourStatusPage() {
   }, [loadTours])
 
   function openDialog(action: Action, tour: StaffTour) {
-    // 화면을 연 채 자정을 넘겼으면 단추가 남아 있을 수 있다. 서버가 막을 확정은 창을 열지 않고 목록을 다시 읽는다
-    if (action === 'confirm' && tour.departureDate <= seoulToday()) {
-      showError(new ApiError('출발일이 오늘이거나 지난 상품은 확정할 수 없습니다.', null))
-      reload()
-      return
-    }
     setDialog({ action, tour })
     setDialogOpen(true)
   }
@@ -189,10 +183,10 @@ export function TourStatusPage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          신청이 3명이 안 된 모집 중 상품도 출발일 전이면 직접 확정할 수 있습니다. 확정하면 신청 인원 × 1인당 개수만큼
-          창고 물품이 줄고 신청자에게 확정 문자가 갑니다. 출발했지만 여행이 진행되지 않은 진행 중·완료 상품은 뒤늦게
-          취소할 수 있고, 그때 줄였던 물품이 입출고 기록대로 창고로 돌아갑니다(기록이 생기기 전에 확정한 상품은 물품이
-          돌아오지 않습니다). 출발과 완료는 날짜에 따라 자동으로 바뀝니다.
+          신청이 1명 이상인 모집 중 상품은 3명이 안 돼도 출발일 전이면 직접 확정할 수 있습니다. 확정하면 신청 인원 ×
+          1인당 개수만큼 창고 물품이 줄고 신청자에게 확정 문자가 갑니다. 출발했지만 여행이 진행되지 않은 진행 중·완료
+          상품은 뒤늦게 취소할 수 있고, 그때 줄였던 물품이 입출고 기록대로 창고로 돌아갑니다(기록이 생기기 전에 줄인
+          물품은 돌아오지 않습니다). 출발과 완료는 날짜에 따라 자동으로 바뀝니다.
         </p>
         {/* 화면 읽기 프로그램이 바뀐 글을 읽게 영역은 늘 둔다. 비어 있을 땐 칸 아래 여백이 늘지 않게 사이 간격을 지운다 */}
         <p role="status" className="text-sm empty:-mt-4">
@@ -236,7 +230,13 @@ export function TourStatusPage() {
                     <TableCell>{tourStatusLabel(tour.status)}</TableCell>
                     <TableCell className="text-right">
                       {action && (
-                        <Button variant="outline" size="sm" disabled={sending} onClick={() => openDialog(action, tour)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={sending}
+                          aria-label={`${tour.title} ${actionLabels[action]}`}
+                          onClick={() => openDialog(action, tour)}
+                        >
                           {actionLabels[action]}
                         </Button>
                       )}
@@ -273,7 +273,7 @@ export function TourStatusPage() {
                 ) : (
                   <p className="text-destructive">
                     여행이 진행되지 않았을 때만 취소해 주세요. 이 상품 때문에 줄였던 창고 물품을 입출고 기록대로
-                    되돌립니다. 기록이 생기기 전에 확정한 상품은 물품이 돌아오지 않습니다.
+                    되돌립니다. 기록이 생기기 전에 줄인 물품은 돌아오지 않습니다.
                   </p>
                 )}
               </div>

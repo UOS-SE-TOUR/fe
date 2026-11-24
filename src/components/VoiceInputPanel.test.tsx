@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter } from 'react-router'
 import { RouterProvider } from 'react-router/dom'
@@ -742,7 +742,8 @@ describe('끝내기와 실패', () => {
     expect(panel().getByText('듣고 있습니다. 말씀해 주세요.')).toBeInTheDocument()
     expect(skip).toHaveAttribute('aria-disabled', 'true')
 
-    await user.click(skip)
+    // 두 번 누르기가 아닌 낱개 클릭이어도 듣는 중에는 아무 일도 하지 않는다
+    fireEvent.click(skip, { detail: 1 })
     expect(synthesizer.cancelled).toBe(1)
     expect(panel().getByText('듣고 있습니다. 말씀해 주세요.')).toBeInTheDocument()
     expect(panel().queryByText(STOPPED)).not.toBeInTheDocument()
@@ -802,6 +803,18 @@ describe('끝내기와 실패', () => {
     expect(await panel().findByRole('button', { name: '음성으로 신청하기' })).toBeEnabled()
     expect(recognizer.started).toBe(1)
     expect(panel().queryByRole('button', { name: '말 건너뛰기' })).not.toBeInTheDocument()
+  })
+
+  it('시작 단추를 두 번 눌러도 인사를 건너뛰지 않는다', async () => {
+    synthesizer.hold = true
+    const user = renderPage()
+
+    await user.dblClick(startButton()!)
+
+    expect(panel().getByText('말하는 중입니다.')).toBeInTheDocument()
+    expect(synthesizer.spoken).toEqual([GREETING])
+    expect(synthesizer.cancelled).toBe(0)
+    expect(recognizer.started).toBe(0)
   })
 
   it('마지막 말에서 말 건너뛰기를 두 번 눌러도 새 대화를 시작하지 않는다', async () => {

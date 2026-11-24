@@ -52,7 +52,7 @@ export class SpeechSynthesizer {
         timer = setTimeout(() => {
           if (this.current !== reading) return
           window.speechSynthesis.cancel()
-          if (reading.handedOff) this.cancelledAt = performance.now()
+          this.cancelledAt = performance.now()
           reading.finish()
         }, speakTimeoutMs(text))
       }

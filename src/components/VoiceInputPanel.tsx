@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
 import { Mic } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -27,8 +27,6 @@ const VOICE_UNAVAILABLE_MESSAGE = '지금은 음성으로 고를 수 없습니�
 const NO_SPEECH_MESSAGE = '말소리를 듣지 못했습니다. 다시 말해 주세요.'
 const DISABLED_MESSAGE = '신청 결과를 확인하기 전에는 음성으로 고를 수 없습니다.'
 const INTRO_MESSAGE = '묻는 말에 답하면 여행을 고르고 신청까지 해 드립니다.'
-// 말 건너뛰기 뒤 이 시간 안에 첫 단추를 또 누르면 두 번 누른 것으로 보고 버린다
-const SKIP_REPEAT_GUARD_MS = 500
 const STOPPED_MESSAGE = '음성 대화를 끝냈습니다. 화면에서 직접 고르거나 다시 시작해 주세요.'
 // 확인받지 않은 내용으로 APPLY가 왔을 때, 신청하지 않고 칸을 채운 뒤 읽는 말(가격이 나왔을 때만 읽는다)
 const CONFIRM_AGAIN_MESSAGE =
@@ -119,7 +117,6 @@ export function VoiceInputPanel({
   const [notice, setNotice] = useState<string | null>(null)
   // 대화를 시작하거나 끝내면 올린다. 그 전에 시작한 듣기·읽기·서버 응답·화면 반영의 뒤처리는 버린다
   const session = useRef(0)
-  const lastSkipAt = useRef(Number.NEGATIVE_INFINITY)
   // 대화와 고른 내용의 최신 값(응답을 기다린 뒤에는 여기서 읽는다)
   const messagesRef = useRef<VoiceMessage[]>([])
   const draftRef = useRef<VoiceDraft>(EMPTY_VOICE_DRAFT)
@@ -368,21 +365,14 @@ export function VoiceInputPanel({
   }
 
   const talking = step !== 'idle'
-  // 대화 중(멈춤 제외)에는 첫 단추가 "말 건너뛰기"다. 말하는 중이 아니면 눌러도 아무 일도 하지 않는다
+  // 대화 중(멈춤 제외)에는 첫 단추가 "말 건너뛰기"다
   const skipping = talking && step !== 'paused'
 
-  // 건너뛰면 시스템의 말만 멈추고, 다 읽은 것처럼 다음 차례로 넘어간다(보통은 듣기, 마지막 말이면 끝, 신청하라는 답이면 신청).
-  // 건너뛴 직후 또 누른 것(두 번 누르기)은 버린다. 그사이 이 단추가 시작 단추가 됐거나 다음 말을 읽기 시작했어도 그렇다.
-  // 듣기가 실패해 "다시 말하기"가 됐으면 버리지 않는다(다시 듣기는 대화를 끝내거나 말을 건너뛰지 않는다)
-  function handleFirstButton() {
-    if (step !== 'paused' && performance.now() - lastSkipAt.current < SKIP_REPEAT_GUARD_MS) return
-    if (!skipping) {
-      startVoiceInput()
-      return
-    }
-    if (step !== 'speaking') return
-    lastSkipAt.current = performance.now()
-    synthesizer.cancel()
+  // 건너뛰면 다 읽은 것처럼 다음 차례로 넘어간다. 첫 클릭에 이 단추의 이름과 동작이 바뀌므로 두 번 누르기의 둘째 클릭은 버린다
+  function handleFirstButton(event: MouseEvent<HTMLButtonElement>) {
+    if (event.detail > 1) return
+    if (!skipping) startVoiceInput()
+    else if (step === 'speaking') synthesizer.cancel()
   }
   // 대화도 알림도 없는 처음 상태면 카드를 줄인다(패널이 넓게 놓이면 설명 옆에 시작 단추, 오른쪽 칸처럼 좁으면 설명 아래)
   const compact = supported && !disabled && !notice && !talking && messages.length === 0
@@ -438,7 +428,7 @@ export function VoiceInputPanel({
               )}
               {talking && step !== 'paused' && <p className="text-sm text-muted-foreground">{STEP_MESSAGES[step]}</p>}
               <div className="flex flex-wrap gap-2">
-                {/* 첫 자리는 단추 하나로 두고 이름과 동작만 바꾼다(포커스가 남고, 그만두기는 늘 둘째 자리) */}
+                {/* 이름과 동작만 바꾸는 단추 하나라 포커스가 남고, 그만두기는 늘 둘째 자리다 */}
                 <Button
                   variant={step === 'idle' ? 'default' : 'outline'}
                   className={cn(

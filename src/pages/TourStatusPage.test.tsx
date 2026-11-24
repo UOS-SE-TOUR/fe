@@ -164,7 +164,7 @@ describe('확정·취소 처리', () => {
     expect(postPaths()).toEqual([])
   })
 
-  it('그사이 상태가 바뀌어 409면 문구를 창에 보이고 목록을 다시 읽는다', async () => {
+  it('그사이 상태가 바뀌어 409면 창을 닫고 서버 문구를 알린 뒤 목록을 다시 읽는다', async () => {
     const alreadyConfirmed = { ...recruiting, appliedCount: 3, status: 'CONFIRMED' }
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
@@ -177,13 +177,45 @@ describe('확정·취소 처리', () => {
     const dialog = await screen.findByRole('dialog', { name: '확정 처리' })
     await user.click(within(dialog).getByRole('button', { name: '확정 처리' }))
 
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('신청이 있는 모집 중 상품만 확정할 수 있습니다.')
-    expect(within(dialog).getByRole('button', { name: '확정 처리' })).toBeDisabled()
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
-    await user.click(within(dialog).getByRole('button', { name: '닫기' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('신청이 있는 모집 중 상품만 확정할 수 있습니다.'))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(rowTexts()).toEqual([[recruiting.title, '3/10명', '확정']])
-    expect(toast.error).not.toHaveBeenCalled()
+    await waitFor(() => expect(rowTexts()).toEqual([[recruiting.title, '3/10명', '확정']]))
+    expect(within(rowOf(recruiting.title)).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('성공 응답이 상품 모양이 아니면 처리됐는지 알 수 없다고 알리고 목록을 다시 읽는다', async () => {
+    const done = { ...recruiting, status: 'CONFIRMED' }
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockResolvedValueOnce(jsonResponse(200, { tourId: 1 }))
+      .mockResolvedValueOnce(jsonResponse(200, [done]))
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('table')
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
+    )
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
+    await waitFor(() => expect(rowTexts()).toEqual([[recruiting.title, '2/10명', '확정']]))
+  })
+
+  it('응답 없이 연결이 끊기면 처리됐는지 알 수 없다고 한 번만 알리고 다시 읽지 않는다', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, [recruiting]))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    renderPage()
+    const user = userEvent.setup()
+    await screen.findByRole('table')
+    await user.click(within(rowOf(recruiting.title)).getByRole('button', { name: '확정 처리' }))
+    await user.click(
+      within(await screen.findByRole('dialog', { name: '확정 처리' })).getByRole('button', { name: '확정 처리' }),
+    )
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(UNKNOWN_RESULT_MESSAGE))
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('출발일이 오늘이거나 지난 모집 중 상품에는 확정 단추를 두지 않는다', async () => {

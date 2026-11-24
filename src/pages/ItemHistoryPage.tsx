@@ -34,6 +34,7 @@ const reasonLabels: Record<string, string> = {
 
 const timeFormat = new Intl.DateTimeFormat('ko-KR', {
   timeZone: 'Asia/Seoul',
+  year: 'numeric',
   month: 'numeric',
   day: 'numeric',
   hour: '2-digit',

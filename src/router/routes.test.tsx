@@ -65,16 +65,22 @@ describe('ApiClient가 받은 401·403 뒤', () => {
 })
 
 describe('로그인하지 않았을 때', () => {
-  it.each(['/', '/tours', '/bookings', '/staff', '/staff/tours/new', '/staff/items'])(
-    '%s는 로그인 화면으로 보낸다',
-    async (path) => {
-      const router = renderAt(path)
+  it.each([
+    '/',
+    '/tours',
+    '/bookings',
+    '/staff',
+    '/staff/tours/new',
+    '/staff/items',
+    '/staff/tours',
+    '/staff/items/history',
+  ])('%s는 로그인 화면으로 보낸다', async (path) => {
+    const router = renderAt(path)
 
-      expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
-      expect(router.state.location.pathname).toBe('/login')
-      expect(toast.error).not.toHaveBeenCalled()
-    },
-  )
+    expect(await screen.findByRole('heading', { name: '로그인' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/login')
+    expect(toast.error).not.toHaveBeenCalled()
+  })
 
   it.each([
     ['/login', '로그인'],

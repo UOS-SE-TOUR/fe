@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { tourStatusLabel } from '@/lib/labels'
 import { pagePaths } from '@/lib/pages'
 import { useBlockLeaving } from '@/lib/useBlockLeaving'
-import { ApiClient, hasStatus, showError } from '@/modules/ApiClient'
+import { ApiClient, ApiError, showError, unknownResult } from '@/modules/ApiClient'
 
 const TOURS_PATH = '/api/v1/staff/tours'
 
@@ -67,7 +67,6 @@ export function TourStatusPage() {
   // 닫을 때 내용이 먼저 사라지지 않게, 연 상품은 닫아도 남겨 둔다
   const [dialog, setDialog] = useState<{ action: Action; tour: StaffTour } | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [dialogError, setDialogError] = useState<string | null>(null)
   const sendingRef = useRef(false)
   const loadSeq = useRef(0)
   // 확정은 창고 물품을 줄이고 문자를 보내므로, 결과를 받기 전에 떠나지 못하게 한다
@@ -108,7 +107,6 @@ export function TourStatusPage() {
 
   function openDialog(action: Action, tour: StaffTour) {
     setDialog({ action, tour })
-    setDialogError(null)
     setDialogOpen(true)
   }
 
@@ -128,7 +126,8 @@ export function TourStatusPage() {
       const changed = await ApiClient.post<unknown>(`${TOURS_PATH}/${tour.tourId}/${action}`, undefined, {
         unsafeToRetry: true,
       })
-      if (!isStaffTour(changed)) throw new Error('확정·취소 처리 응답이 상품이 아니다')
+      // 성공 응답인데 상품 모양이 아니면 처리됐는지 알 수 없다(이미 확정돼 물품이 줄고 문자가 나갔을 수 있다)
+      if (!isStaffTour(changed)) throw unknownResult(200)
       setDialogOpen(false)
       setResult(`${changed.title}을 ${actionLabels[action]}했습니다(지금 상태: ${tourStatusLabel(changed.status)})`)
       setToursState((prev) =>
@@ -137,12 +136,12 @@ export function TourStatusPage() {
           : prev,
       )
     } catch (error) {
-      // 다른 사람이 먼저 바꿨거나 상품이 없어졌다. 단추는 막고, 다시 읽은 목록에서 다시 고르게 한다
-      if (hasStatus(error, 404) || hasStatus(error, 409)) setDialogError(error.message)
-      else {
-        setDialogOpen(false)
-        showError(error)
-      }
+      // 409·404(다른 사람이 먼저 바꿨거나 상품이 없어짐)도 창을 닫고 알린다. 창에 처음 연 때의 상태가 남지 않게,
+      // 다시 읽은 목록에서 다시 고르게 한다
+      setDialogOpen(false)
+      showError(error)
+      // 응답이 아예 없었거나 ApiClient가 이미 알린 실패(401·403)면 다시 읽지 않는다(다시 읽기도 실패해 알림이 겹친다)
+      if (error instanceof ApiError && (error.handled || error.status === null)) return
     } finally {
       sendingRef.current = false
       setSending(false)
@@ -246,11 +245,6 @@ export function TourStatusPage() {
                     여행이 진행되지 않았을 때만 취소해 주세요. 이 상품 때문에 줄였던 창고 물품을 되돌립니다.
                   </p>
                 )}
-                {dialogError && (
-                  <p role="alert" className="text-destructive">
-                    {dialogError}
-                  </p>
-                )}
               </div>
               <DialogFooter>
                 <DialogClose asChild>
@@ -258,7 +252,7 @@ export function TourStatusPage() {
                     닫기
                   </Button>
                 </DialogClose>
-                <Button type="button" disabled={sending || dialogError !== null} onClick={() => void runAction()}>
+                <Button type="button" disabled={sending} onClick={() => void runAction()}>
                   {sending ? '처리하는 중' : actionLabels[dialog.action]}
                 </Button>
               </DialogFooter>

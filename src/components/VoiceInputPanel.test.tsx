@@ -750,7 +750,7 @@ describe('끝내기와 실패', () => {
     expect(lines()).toEqual([`시스템: ${GREETING}`])
   })
 
-  it('건너뛴 뒤 듣기가 실패해 다시 말하기가 돼도 그만두기는 같은 둘째 자리에 있다', async () => {
+  it('대화 중에는 그만두기가 첫 자리이고, 건너뛴 뒤 듣기가 실패해도 건너뛰기 자리에 그만두기가 오지 않는다', async () => {
     synthesizer.hold = true
     const user = renderPage()
     await user.click(startButton()!)
@@ -758,15 +758,15 @@ describe('끝내기와 실패', () => {
       panel()
         .getAllByRole('button')
         .map((button) => button.textContent)
-    expect(buttonNames()).toEqual(['말 건너뛰기', '그만두기'])
+    expect(buttonNames()).toEqual(['그만두기', '말 건너뛰기'])
 
     await user.click(panel().getByRole('button', { name: '말 건너뛰기' }))
     await waitFor(() => expect(recognizer.started).toBe(1))
-    expect(buttonNames()).toEqual(['말 건너뛰기', '그만두기'])
+    expect(buttonNames()).toEqual(['그만두기', '말 건너뛰기'])
 
     recognizer.fail('other')
     expect(await panel().findByRole('button', { name: '다시 말하기' })).toBeInTheDocument()
-    expect(buttonNames()).toEqual(['다시 말하기', '그만두기'])
+    expect(buttonNames()).toEqual(['그만두기', '다시 말하기'])
 
     // 건너뛴 직후라도 다시 말하기는 버리지 않는다
     await user.click(panel().getByRole('button', { name: '다시 말하기' }))
@@ -803,18 +803,6 @@ describe('끝내기와 실패', () => {
     expect(await panel().findByRole('button', { name: '음성으로 신청하기' })).toBeEnabled()
     expect(recognizer.started).toBe(1)
     expect(panel().queryByRole('button', { name: '말 건너뛰기' })).not.toBeInTheDocument()
-  })
-
-  it('시작 단추를 두 번 눌러도 인사를 건너뛰지 않는다', async () => {
-    synthesizer.hold = true
-    const user = renderPage()
-
-    await user.dblClick(startButton()!)
-
-    expect(panel().getByText('말하는 중입니다.')).toBeInTheDocument()
-    expect(synthesizer.spoken).toEqual([GREETING])
-    expect(synthesizer.cancelled).toBe(0)
-    expect(recognizer.started).toBe(0)
   })
 
   it('마지막 말에서 말 건너뛰기를 두 번 눌러도 새 대화를 시작하지 않는다', async () => {

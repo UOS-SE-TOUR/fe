@@ -365,14 +365,10 @@ export function VoiceInputPanel({
   }
 
   const talking = step !== 'idle'
-  // 대화 중(멈춤 제외)에는 첫 단추가 "말 건너뛰기"다
-  const skipping = talking && step !== 'paused'
-
-  // 건너뛰면 다 읽은 것처럼 다음 차례로 넘어간다. 첫 클릭에 이 단추의 이름과 동작이 바뀌므로 두 번 누르기의 둘째 클릭은 버린다
-  function handleFirstButton(event: MouseEvent<HTMLButtonElement>) {
-    if (event.detail > 1) return
-    if (!skipping) startVoiceInput()
-    else if (step === 'speaking') synthesizer.cancel()
+  // 건너뛰면 다 읽은 것처럼 다음 차례로 넘어간다. 두 번 누르기의 둘째 클릭은 버린다(뒤이어 읽는 말까지 건너뛰지 않게)
+  function skipSpeech(event: MouseEvent<HTMLButtonElement>) {
+    if (event.detail > 1 || step !== 'speaking') return
+    synthesizer.cancel()
   }
   // 대화도 알림도 없는 처음 상태면 카드를 줄인다(패널이 넓게 놓이면 설명 옆에 시작 단추, 오른쪽 칸처럼 좁으면 설명 아래)
   const compact = supported && !disabled && !notice && !talking && messages.length === 0
@@ -428,22 +424,34 @@ export function VoiceInputPanel({
               )}
               {talking && step !== 'paused' && <p className="text-sm text-muted-foreground">{STEP_MESSAGES[step]}</p>}
               <div className="flex flex-wrap gap-2">
-                {/* 이름과 동작만 바꾸는 단추 하나라 포커스가 남고, 그만두기는 늘 둘째 자리다 */}
-                <Button
-                  variant={step === 'idle' ? 'default' : 'outline'}
-                  className={cn(
-                    'aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
-                    compact && 'w-full @md:min-w-28',
-                  )}
-                  onClick={handleFirstButton}
-                  disabled={!skipping && disabled}
-                  aria-disabled={skipping && step !== 'speaking'}
-                >
-                  {step === 'idle' ? '음성으로 신청하기' : step === 'paused' ? '다시 말하기' : '말 건너뛰기'}
-                </Button>
+                {step === 'idle' && (
+                  <Button
+                    className={compact ? 'w-full @md:min-w-28' : undefined}
+                    onClick={startVoiceInput}
+                    disabled={disabled}
+                  >
+                    음성으로 신청하기
+                  </Button>
+                )}
+                {/* 대화 중에는 그만두기를 늘 첫 자리에 둔다. 둘째 자리는 말 건너뛰기나 다시 말하기라, 건너뛴 자리를 또 눌러도 대화가 끝나지 않는다 */}
                 {talking && (
                   <Button variant="outline" onClick={stopVoiceInput}>
                     그만두기
+                  </Button>
+                )}
+                {step === 'paused' && (
+                  <Button variant="outline" onClick={startVoiceInput} disabled={disabled}>
+                    다시 말하기
+                  </Button>
+                )}
+                {talking && step !== 'paused' && (
+                  <Button
+                    variant="outline"
+                    aria-disabled={step !== 'speaking'}
+                    className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    onClick={skipSpeech}
+                  >
+                    말 건너뛰기
                   </Button>
                 )}
               </div>
